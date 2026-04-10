@@ -30,6 +30,7 @@ dependencies {
     implementation 'com.google.apis:google-api-services-calendar:v3-rev20240111-2.0.0'
     implementation 'com.google.http-client:google-http-client-jackson2:1.44.1'
     implementation 'com.google.oauth-client:google-oauth-client-jetty:1.36.0'
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
@@ -39,4 +40,8 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+bootRun {
+    systemProperty 'spring.profiles.active', 'local'
 }

@@ -9,6 +9,7 @@ import com.school.repository.AttendanceRepository;
 import com.school.repository.StudentRepository;
 import com.school.repository.TeacherRepository;
 import com.school.service.CalendarSyncService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,17 +32,20 @@ public class AttendanceController {
     private final StudentRepository studentRepository;
     private final TeacherRepository teacherRepository;
     private final MeetClient meetClient;
+    private final String principalEmail;
 
     public AttendanceController(CalendarSyncService calendarSyncService,
                                 AttendanceRepository attendanceRepository,
                                 StudentRepository studentRepository,
                                 TeacherRepository teacherRepository,
-                                MeetClient meetClient) {
+                                MeetClient meetClient,
+                                @Value("${app.principal.email}") String principalEmail) {
         this.calendarSyncService = calendarSyncService;
         this.attendanceRepository = attendanceRepository;
         this.studentRepository = studentRepository;
         this.teacherRepository = teacherRepository;
         this.meetClient = meetClient;
+        this.principalEmail = principalEmail;
     }
 
     @GetMapping("/today")
@@ -67,6 +71,7 @@ public class AttendanceController {
 
             if (event.getAttendeeEmails() != null) {
                 for (String email : event.getAttendeeEmails()) {
+                    if (email.equalsIgnoreCase(principalEmail)) continue;
                     var studentOpt = studentRepository.findByMeetEmail(email);
                     if (studentOpt.isPresent()) {
                         var student = studentOpt.get();
@@ -110,6 +115,10 @@ public class AttendanceController {
                     entries
             ));
         }
+
+        summaries.sort(java.util.Comparator
+                .comparing(AttendanceSummaryResponse::startTime)
+                .thenComparing(AttendanceSummaryResponse::eventTitle));
 
         return ResponseEntity.ok(summaries);
     }

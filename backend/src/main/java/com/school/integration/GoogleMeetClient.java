@@ -40,7 +40,7 @@ public class GoogleMeetClient implements MeetClient {
     public boolean isMeetingActive(String spaceCode) throws IOException, InterruptedException {
         String token = getValidAccessToken();
         String url = "https://meet.googleapis.com/v2/spaces/" + spaceCode
-                + "/participants?filter=latestEndTime+is+null&pageSize=1";
+                + "/participants?filter=latestEndTime%20%3D%20null&pageSize=1";
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -58,7 +58,7 @@ public class GoogleMeetClient implements MeetClient {
     public List<String> getActiveParticipantEmails(String spaceCode) throws IOException, InterruptedException {
         String token = getValidAccessToken();
         String url = "https://meet.googleapis.com/v2/spaces/" + spaceCode
-                + "/participants?filter=latestEndTime+is+null";
+                + "/participants?filter=latestEndTime%20%3D%20null";
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
