@@ -12,15 +12,19 @@ public record AttendanceSummaryResponse(
         LocalDate date,
         LocalTime startTime,
         LocalTime endTime,
+        Boolean meetingActive,
         int totalExpected,
         int present,
         int late,
         int absent,
-        List<StudentAttendanceEntry> students
+        List<AttendanceEntry> students
 ) {
-    public record StudentAttendanceEntry(
-            Long studentId,
+    public record AttendanceEntry(
+            Long personId,
+            String personType,
             String name,
-            AttendanceStatus status
+            String email,
+            AttendanceStatus status,
+            boolean registered
     ) {}
 }

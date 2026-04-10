@@ -48,6 +48,7 @@ class NotificationServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(notificationService, "principalEmail", PRINCIPAL);
+        ReflectionTestUtils.setField(notificationService, "notificationsEnabled", true);
 
         event = new CalendarEvent("evt-1", "Math Class", "https://meet.google.com/abc",
                 "abc", LocalDateTime.now(), LocalDateTime.now().plusHours(1), List.of());

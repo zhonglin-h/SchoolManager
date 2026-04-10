@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar'
 import TopBar from './components/TopBar'
 import Dashboard from './pages/Dashboard'
 import Students from './pages/Students'
+import Teachers from './pages/Teachers'
 import Notifications from './pages/Notifications'
 
 export default function App() {
@@ -16,6 +17,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/students" element={<Students />} />
+              <Route path="/teachers" element={<Teachers />} />
               <Route path="/notifications" element={<Notifications />} />
             </Routes>
           </main>

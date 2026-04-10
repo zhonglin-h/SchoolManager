@@ -24,10 +24,29 @@ export interface StudentResponse {
   active: boolean
 }
 
-export interface StudentAttendanceEntry {
-  studentId: number
+export interface TeacherRequest {
   name: string
+  meetEmail: string
+  phone: string
+  hourlyRate: number | null
+}
+
+export interface TeacherResponse {
+  id: number
+  name: string
+  meetEmail: string
+  phone: string
+  hourlyRate: number | null
+  active: boolean
+}
+
+export interface AttendanceEntry {
+  personId: number | null
+  personType: 'STUDENT' | 'TEACHER' | null
+  name: string
+  email: string
   status: string | null
+  registered: boolean
 }
 
 export interface AttendanceSummaryResponse {
@@ -36,14 +55,15 @@ export interface AttendanceSummaryResponse {
   date: string
   startTime: string
   endTime: string
+  meetingActive: boolean | null
   totalExpected: number
   present: number
   late: number
   absent: number
-  students: StudentAttendanceEntry[]
+  students: AttendanceEntry[]
 }
 
-export interface AttendanceEntry {
+export interface AttendanceEntry2 {
   calendarEventId: string
   date: string
   status: string
@@ -58,6 +78,17 @@ export interface NotificationLogResponse {
   message: string
   sentAt: string
   channel: string
+}
+
+export interface AppSettings {
+  notificationsEnabled: boolean
+}
+
+export interface ScheduledCheck {
+  eventId: string
+  eventTitle: string
+  checkType: string
+  scheduledAt: string
 }
 
 // ── Students ───────────────────────────────────────────────────────────────
@@ -86,6 +117,27 @@ export async function deleteStudent(id: number): Promise<void> {
   await api.delete(`/students/${id}`)
 }
 
+// ── Teachers ───────────────────────────────────────────────────────────────
+
+export async function getTeachers(): Promise<TeacherResponse[]> {
+  const { data } = await api.get<TeacherResponse[]>('/teachers')
+  return data
+}
+
+export async function createTeacher(payload: TeacherRequest): Promise<TeacherResponse> {
+  const { data } = await api.post<TeacherResponse>('/teachers', payload)
+  return data
+}
+
+export async function updateTeacher(id: number, payload: TeacherRequest): Promise<TeacherResponse> {
+  const { data } = await api.put<TeacherResponse>(`/teachers/${id}`, payload)
+  return data
+}
+
+export async function deleteTeacher(id: number): Promise<void> {
+  await api.delete(`/teachers/${id}`)
+}
+
 // ── Attendance ─────────────────────────────────────────────────────────────
 
 export async function getAttendanceToday(): Promise<AttendanceSummaryResponse[]> {
@@ -93,8 +145,8 @@ export async function getAttendanceToday(): Promise<AttendanceSummaryResponse[]>
   return data
 }
 
-export async function getStudentAttendance(id: number): Promise<AttendanceEntry[]> {
-  const { data } = await api.get<AttendanceEntry[]>(`/students/${id}/attendance`)
+export async function getStudentAttendance(id: number): Promise<AttendanceEntry2[]> {
+  const { data } = await api.get<AttendanceEntry2[]>(`/attendance/student/${id}`)
   return data
 }
 
@@ -107,10 +159,6 @@ export async function getNotifications(): Promise<NotificationLogResponse[]> {
 
 // ── Settings ───────────────────────────────────────────────────────────────
 
-export interface AppSettings {
-  notificationsEnabled: boolean
-}
-
 export async function getSettings(): Promise<AppSettings> {
   const { data } = await api.get<AppSettings>('/settings')
   return data
@@ -120,4 +168,9 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function syncCalendar(): Promise<void> {
   await api.post('/calendar/sync')
+}
+
+export async function getScheduledChecks(): Promise<ScheduledCheck[]> {
+  const { data } = await api.get<ScheduledCheck[]>('/calendar/scheduled-checks')
+  return data
 }

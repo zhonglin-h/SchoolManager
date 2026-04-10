@@ -3,12 +3,13 @@ package com.school.controller;
 import com.school.dto.AttendanceSummaryResponse;
 import com.school.entity.Attendance;
 import com.school.entity.AttendanceStatus;
+import com.school.integration.MeetClient;
 import com.school.model.CalendarEvent;
 import com.school.repository.AttendanceRepository;
 import com.school.repository.StudentRepository;
+import com.school.repository.TeacherRepository;
 import com.school.service.CalendarSyncService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,19 +24,24 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/attendance")
-@CrossOrigin(origins = "http://localhost:3000")
 public class AttendanceController {
 
     private final CalendarSyncService calendarSyncService;
     private final AttendanceRepository attendanceRepository;
     private final StudentRepository studentRepository;
+    private final TeacherRepository teacherRepository;
+    private final MeetClient meetClient;
 
     public AttendanceController(CalendarSyncService calendarSyncService,
-                                 AttendanceRepository attendanceRepository,
-                                 StudentRepository studentRepository) {
+                                AttendanceRepository attendanceRepository,
+                                StudentRepository studentRepository,
+                                TeacherRepository teacherRepository,
+                                MeetClient meetClient) {
         this.calendarSyncService = calendarSyncService;
         this.attendanceRepository = attendanceRepository;
         this.studentRepository = studentRepository;
+        this.teacherRepository = teacherRepository;
+        this.meetClient = meetClient;
     }
 
     @GetMapping("/today")
@@ -51,25 +57,44 @@ public class AttendanceController {
             Map<Long, Attendance> byStudentId = records.stream()
                     .collect(Collectors.toMap(a -> a.getStudent().getId(), Function.identity()));
 
-            List<AttendanceSummaryResponse.StudentAttendanceEntry> entries = new ArrayList<>();
+            Boolean meetingActive = null;
+            try {
+                meetingActive = meetClient.isMeetingActive(event.getSpaceCode());
+            } catch (Exception ignored) {}
+
+            List<AttendanceSummaryResponse.AttendanceEntry> entries = new ArrayList<>();
             int present = 0, late = 0, absent = 0;
 
             if (event.getAttendeeEmails() != null) {
                 for (String email : event.getAttendeeEmails()) {
-                    studentRepository.findByMeetEmail(email).ifPresent(student -> {
+                    var studentOpt = studentRepository.findByMeetEmail(email);
+                    if (studentOpt.isPresent()) {
+                        var student = studentOpt.get();
                         Attendance att = byStudentId.get(student.getId());
                         AttendanceStatus status = att != null ? att.getStatus() : null;
-                        entries.add(new AttendanceSummaryResponse.StudentAttendanceEntry(
-                                student.getId(), student.getName(), status));
-                    });
+                        entries.add(new AttendanceSummaryResponse.AttendanceEntry(
+                                student.getId(), "STUDENT", student.getName(), email, status, true));
+                    } else {
+                        var teacherOpt = teacherRepository.findByMeetEmail(email);
+                        if (teacherOpt.isPresent()) {
+                            var teacher = teacherOpt.get();
+                            entries.add(new AttendanceSummaryResponse.AttendanceEntry(
+                                    teacher.getId(), "TEACHER", teacher.getName(), email, null, true));
+                        } else {
+                            entries.add(new AttendanceSummaryResponse.AttendanceEntry(
+                                    null, null, email, email, null, false));
+                        }
+                    }
                 }
             }
 
-            for (AttendanceSummaryResponse.StudentAttendanceEntry entry : entries) {
+            for (AttendanceSummaryResponse.AttendanceEntry entry : entries) {
                 if (entry.status() == AttendanceStatus.PRESENT) present++;
                 else if (entry.status() == AttendanceStatus.LATE) late++;
                 else if (entry.status() == AttendanceStatus.ABSENT) absent++;
             }
+
+            int totalExpected = (int) entries.stream().filter(e -> "STUDENT".equals(e.personType())).count();
 
             summaries.add(new AttendanceSummaryResponse(
                     event.getId(),
@@ -77,7 +102,8 @@ public class AttendanceController {
                     today,
                     event.getStartTime().toLocalTime(),
                     event.getEndTime().toLocalTime(),
-                    entries.size(),
+                    meetingActive,
+                    totalExpected,
                     present,
                     late,
                     absent,

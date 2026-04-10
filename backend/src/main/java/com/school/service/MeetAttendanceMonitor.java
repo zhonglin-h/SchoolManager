@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledFuture;
 
 @Service
@@ -40,6 +41,9 @@ public class MeetAttendanceMonitor {
     private int endBufferMinutes;
 
     private final Map<String, ScheduledFuture<?>> pollingFutures = new ConcurrentHashMap<>();
+    private final List<ScheduledCheck> upcomingChecks = new CopyOnWriteArrayList<>();
+
+    public record ScheduledCheck(String eventId, String eventTitle, String checkType, Instant scheduledAt) {}
 
     public MeetAttendanceMonitor(CalendarSyncService calendarSyncService,
                                   StudentRepository studentRepository,
@@ -53,6 +57,14 @@ public class MeetAttendanceMonitor {
         this.notificationService = notificationService;
         this.googleMeetClient = googleMeetClient;
         this.taskScheduler = taskScheduler;
+    }
+
+    public List<ScheduledCheck> getUpcomingChecks() {
+        Instant now = Instant.now();
+        return upcomingChecks.stream()
+                .filter(c -> c.scheduledAt().isAfter(now))
+                .sorted((a, b) -> a.scheduledAt().compareTo(b.scheduledAt()))
+                .toList();
     }
 
     @Scheduled(cron = "0 0 0 * * *")
@@ -73,6 +85,7 @@ public class MeetAttendanceMonitor {
             return;
         }
 
+        upcomingChecks.clear();
         Instant now = Instant.now();
 
         for (CalendarEvent event : events) {
@@ -86,28 +99,32 @@ public class MeetAttendanceMonitor {
                     .atZone(ZoneId.systemDefault()).toInstant();
 
             if (minus15.isAfter(now)) {
-                taskScheduler.schedule(
-                        () -> checkMeetingStarted(event, "MEETING_NOT_STARTED_15"),
-                        minus15
-                );
+                upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "MEETING_NOT_STARTED_15", minus15));
+                taskScheduler.schedule(() -> {
+                    upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("MEETING_NOT_STARTED_15"));
+                    checkMeetingStarted(event, "MEETING_NOT_STARTED_15");
+                }, minus15);
             }
             if (minus3.isAfter(now)) {
-                taskScheduler.schedule(
-                        () -> checkPreClassJoins(event),
-                        minus3
-                );
+                upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "PRE_CLASS_JOINS", minus3));
+                taskScheduler.schedule(() -> {
+                    upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("PRE_CLASS_JOINS"));
+                    checkPreClassJoins(event);
+                }, minus3);
             }
             if (start.isAfter(now)) {
-                taskScheduler.schedule(
-                        () -> startSessionPolling(event),
-                        start
-                );
+                upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "SESSION_START", start));
+                taskScheduler.schedule(() -> {
+                    upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("SESSION_START"));
+                    startSessionPolling(event);
+                }, start);
             }
             if (endWithBuffer.isAfter(now)) {
-                taskScheduler.schedule(
-                        () -> finalizeSession(event),
-                        endWithBuffer
-                );
+                upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "SESSION_FINALIZE", endWithBuffer));
+                taskScheduler.schedule(() -> {
+                    upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("SESSION_FINALIZE"));
+                    finalizeSession(event);
+                }, endWithBuffer);
             }
         }
     }

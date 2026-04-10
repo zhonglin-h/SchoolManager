@@ -275,6 +275,50 @@ class MeetAttendanceMonitorTest {
         verify(notificationService).notifyAbsent(event, bob);
     }
 
+    // --- getUpcomingChecks ---
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_addsUpcomingChecksForFutureEvents() throws Exception {
+        CalendarEvent future = new CalendarEvent("evt-future", "Future Class",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of("alice@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(future));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.scheduleEventsForToday();
+
+        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
+        assertThat(checks).isNotEmpty();
+        assertThat(checks).allMatch(c -> c.eventId().equals("evt-future"));
+        assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
+                .contains("MEETING_NOT_STARTED_15", "PRE_CLASS_JOINS", "SESSION_START", "SESSION_FINALIZE");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_clearsOldChecksOnRefresh() throws Exception {
+        CalendarEvent future = new CalendarEvent("evt-a", "Class A",
+                "https://meet.google.com/aaa", "aaa",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of());
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(future));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.scheduleEventsForToday();
+        int firstCount = monitor.getUpcomingChecks().size();
+
+        // Second call with empty events clears previous checks
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of());
+        monitor.scheduleEventsForToday();
+
+        assertThat(firstCount).isGreaterThan(0);
+        assertThat(monitor.getUpcomingChecks()).isEmpty();
+    }
+
     // --- helper ---
 
     private static <T> T argThat(org.mockito.ArgumentMatcher<T> matcher) {
