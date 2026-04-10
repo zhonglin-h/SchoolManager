@@ -141,6 +141,7 @@ class MeetAttendanceMonitorTest {
     // --- startSessionPolling (initial snapshot) ---
 
     @Test
+    @SuppressWarnings("unchecked")
     void startSessionPolling_recordsPresentForStudentsAlreadyInMeeting() throws Exception {
         when(meetClient.getActiveParticipantEmails("abc-def"))
                 .thenReturn(List.of("alice@meet.com", "bob@meet.com"));
@@ -148,6 +149,8 @@ class MeetAttendanceMonitorTest {
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
+        when(taskScheduler.scheduleAtFixedRate(any(Runnable.class), any(Duration.class)))
+                .thenReturn(mock(ScheduledFuture.class));
 
         monitor.startSessionPolling(event);
 
@@ -158,6 +161,7 @@ class MeetAttendanceMonitorTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void startSessionPolling_doesNotDuplicateAttendanceIfAlreadyRecorded() throws Exception {
         when(meetClient.getActiveParticipantEmails("abc-def")).thenReturn(List.of("alice@meet.com"));
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
@@ -167,6 +171,8 @@ class MeetAttendanceMonitorTest {
                 .thenReturn(Optional.of(Attendance.builder().student(alice)
                         .calendarEventId("evt-1").date(LocalDate.now())
                         .status(AttendanceStatus.PRESENT).build()));
+        when(taskScheduler.scheduleAtFixedRate(any(Runnable.class), any(Duration.class)))
+                .thenReturn(mock(ScheduledFuture.class));
 
         monitor.startSessionPolling(event);
 
