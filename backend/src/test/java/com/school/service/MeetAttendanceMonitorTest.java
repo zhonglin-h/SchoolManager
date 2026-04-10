@@ -8,6 +8,7 @@ import com.school.integration.MeetParticipant;
 import com.school.model.CalendarEvent;
 import com.school.repository.AttendanceRepository;
 import com.school.repository.StudentRepository;
+import com.school.repository.TeacherRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +41,7 @@ class MeetAttendanceMonitorTest {
 
     @Mock CalendarSyncService calendarSyncService;
     @Mock StudentRepository studentRepository;
+    @Mock TeacherRepository teacherRepository;
     @Mock AttendanceRepository attendanceRepository;
     @Mock NotificationService notificationService;
     @Mock MeetClient meetClient;

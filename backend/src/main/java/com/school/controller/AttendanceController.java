@@ -59,7 +59,12 @@ public class AttendanceController {
                     .findByCalendarEventIdAndDate(event.getId(), today);
 
             Map<Long, Attendance> byStudentId = records.stream()
+                    .filter(a -> a.getStudent() != null)
                     .collect(Collectors.toMap(a -> a.getStudent().getId(), Function.identity()));
+
+            Map<Long, Attendance> byTeacherId = records.stream()
+                    .filter(a -> a.getTeacher() != null)
+                    .collect(Collectors.toMap(a -> a.getTeacher().getId(), Function.identity()));
 
             Boolean meetingActive = null;
             try {
@@ -83,8 +88,10 @@ public class AttendanceController {
                         var teacherOpt = teacherRepository.findByMeetEmail(email);
                         if (teacherOpt.isPresent()) {
                             var teacher = teacherOpt.get();
+                            Attendance att = byTeacherId.get(teacher.getId());
+                            AttendanceStatus status = att != null ? att.getStatus() : null;
                             entries.add(new AttendanceSummaryResponse.AttendanceEntry(
-                                    teacher.getId(), "TEACHER", teacher.getName(), email, null, true));
+                                    teacher.getId(), "TEACHER", teacher.getName(), email, status, true));
                         } else {
                             entries.add(new AttendanceSummaryResponse.AttendanceEntry(
                                     null, null, email, email, null, false));
@@ -94,12 +101,11 @@ public class AttendanceController {
             }
 
             for (AttendanceSummaryResponse.AttendanceEntry entry : entries) {
-                if (entry.status() == AttendanceStatus.PRESENT) present++;
-                else if (entry.status() == AttendanceStatus.LATE) late++;
+                if (entry.status() == AttendanceStatus.PRESENT || entry.status() == AttendanceStatus.LATE) present++;
                 else if (entry.status() == AttendanceStatus.ABSENT) absent++;
             }
 
-            int totalExpected = (int) entries.stream().filter(e -> "STUDENT".equals(e.personType())).count();
+            int totalExpected = entries.size();
 
             summaries.add(new AttendanceSummaryResponse(
                     event.getId(),

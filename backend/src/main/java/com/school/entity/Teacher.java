@@ -26,6 +26,12 @@ public class Teacher {
 
     private String meetEmail;
 
+    /** Populated automatically when the teacher joins a Google Meet session. */
+    private String googleUserId;
+
+    /** Display name used in Google Meet (may differ from real name). Auto-learned on first join. */
+    private String meetDisplayName;
+
     private String phone;
 
     private BigDecimal hourlyRate;

@@ -33,6 +33,9 @@ public class Student {
     /** Populated automatically when a student joins a Google Meet session. */
     private String googleUserId;
 
+    /** Display name used in Google Meet (may differ from real name). Auto-learned on first join. */
+    private String meetDisplayName;
+
     @Builder.Default
     private boolean active = true;
 }

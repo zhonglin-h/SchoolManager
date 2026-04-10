@@ -3,11 +3,13 @@ package com.school.service;
 import com.school.entity.Attendance;
 import com.school.entity.AttendanceStatus;
 import com.school.entity.Student;
+import com.school.entity.Teacher;
 import com.school.integration.MeetClient;
 import com.school.integration.MeetParticipant;
 import com.school.model.CalendarEvent;
 import com.school.repository.AttendanceRepository;
 import com.school.repository.StudentRepository;
+import com.school.repository.TeacherRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -35,6 +37,7 @@ public class MeetAttendanceMonitor {
 
     private final CalendarSyncService calendarSyncService;
     private final StudentRepository studentRepository;
+    private final TeacherRepository teacherRepository;
     private final AttendanceRepository attendanceRepository;
     private final NotificationService notificationService;
     private final MeetClient googleMeetClient;
@@ -48,14 +51,19 @@ public class MeetAttendanceMonitor {
 
     public record ScheduledCheck(String eventId, String eventTitle, String checkType, Instant scheduledAt) {}
 
+    /** A resolved participant — either a student or a teacher. */
+    private record PersonRef(Long id, String type) {}
+
     public MeetAttendanceMonitor(CalendarSyncService calendarSyncService,
                                   StudentRepository studentRepository,
+                                  TeacherRepository teacherRepository,
                                   AttendanceRepository attendanceRepository,
                                   NotificationService notificationService,
                                   MeetClient googleMeetClient,
                                   ThreadPoolTaskScheduler taskScheduler) {
         this.calendarSyncService = calendarSyncService;
         this.studentRepository = studentRepository;
+        this.teacherRepository = teacherRepository;
         this.attendanceRepository = attendanceRepository;
         this.notificationService = notificationService;
         this.googleMeetClient = googleMeetClient;
@@ -147,9 +155,9 @@ public class MeetAttendanceMonitor {
         try {
             List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
             List<Student> expectedStudents = getExpectedStudents(event);
-            Set<Long> presentIds = resolveAndAutoLearn(participants);
+            Set<Long> presentStudentIds = resolveStudentIds(resolveAndAutoLearn(participants));
             for (Student student : expectedStudents) {
-                if (!presentIds.contains(student.getId())) {
+                if (!presentStudentIds.contains(student.getId())) {
                     notificationService.notifyNotYetJoined(event, student);
                 }
             }
@@ -160,15 +168,27 @@ public class MeetAttendanceMonitor {
 
     public void startSessionPolling(CalendarEvent event) {
         List<Student> expectedStudents = getExpectedStudents(event);
+        List<Teacher> expectedTeachers = getExpectedTeachers(event);
+        int totalExpected = expectedStudents.size() + expectedTeachers.size();
         Set<Long> seenStudentIds = new HashSet<>();
+        Set<Long> seenTeacherIds = new HashSet<>();
 
         try {
             List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-            Set<Long> presentIds = resolveAndAutoLearn(participants);
+            Set<PersonRef> presentRefs = resolveAndAutoLearn(participants);
+            Set<Long> presentStudentIds = resolveStudentIds(presentRefs);
+            Set<Long> presentTeacherIds = resolveTeacherIds(presentRefs);
+
             for (Student student : expectedStudents) {
-                if (presentIds.contains(student.getId())) {
+                if (presentStudentIds.contains(student.getId())) {
                     seenStudentIds.add(student.getId());
-                    recordAttendance(student, event, AttendanceStatus.PRESENT);
+                    recordStudentAttendance(student, event, AttendanceStatus.PRESENT);
+                }
+            }
+            for (Teacher teacher : expectedTeachers) {
+                if (presentTeacherIds.contains(teacher.getId())) {
+                    seenTeacherIds.add(teacher.getId());
+                    recordTeacherAttendance(teacher, event, AttendanceStatus.PRESENT);
                 }
             }
         } catch (Exception e) {
@@ -179,16 +199,25 @@ public class MeetAttendanceMonitor {
         futureHolder[0] = taskScheduler.scheduleAtFixedRate(() -> {
             try {
                 List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-                Set<Long> presentIds = resolveAndAutoLearn(participants);
+                Set<PersonRef> presentRefs = resolveAndAutoLearn(participants);
+                Set<Long> presentStudentIds = resolveStudentIds(presentRefs);
+                Set<Long> presentTeacherIds = resolveTeacherIds(presentRefs);
+
                 for (Student student : expectedStudents) {
-                    if (!seenStudentIds.contains(student.getId()) && presentIds.contains(student.getId())) {
+                    if (!seenStudentIds.contains(student.getId()) && presentStudentIds.contains(student.getId())) {
                         seenStudentIds.add(student.getId());
-                        recordAttendance(student, event, AttendanceStatus.LATE);
+                        recordStudentAttendance(student, event, AttendanceStatus.LATE);
                         notificationService.notifyArrival(event, student);
                         notificationService.notifyLate(event, student);
                     }
                 }
-                if (seenStudentIds.size() >= expectedStudents.size() && !expectedStudents.isEmpty()) {
+                for (Teacher teacher : expectedTeachers) {
+                    if (!seenTeacherIds.contains(teacher.getId()) && presentTeacherIds.contains(teacher.getId())) {
+                        seenTeacherIds.add(teacher.getId());
+                        recordTeacherAttendance(teacher, event, AttendanceStatus.LATE);
+                    }
+                }
+                if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {
                     notificationService.notifyAllPresent(event);
                     ScheduledFuture<?> future = pollingFutures.remove(event.getId());
                     if (future != null) future.cancel(false);
@@ -205,50 +234,112 @@ public class MeetAttendanceMonitor {
         ScheduledFuture<?> future = pollingFutures.remove(event.getId());
         if (future != null) future.cancel(false);
 
-        List<Student> expectedStudents = getExpectedStudents(event);
         LocalDate today = LocalDate.now();
 
-        for (Student student : expectedStudents) {
+        for (Student student : getExpectedStudents(event)) {
             Optional<Attendance> existing = attendanceRepository
                     .findByStudentIdAndCalendarEventIdAndDate(student.getId(), event.getId(), today);
             if (existing.isEmpty()) {
-                recordAttendance(student, event, AttendanceStatus.ABSENT);
+                recordStudentAttendance(student, event, AttendanceStatus.ABSENT);
                 notificationService.notifyAbsent(event, student);
+            }
+        }
+        for (Teacher teacher : getExpectedTeachers(event)) {
+            Optional<Attendance> existing = attendanceRepository
+                    .findByTeacherIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), today);
+            if (existing.isEmpty()) {
+                recordTeacherAttendance(teacher, event, AttendanceStatus.ABSENT);
             }
         }
     }
 
     /**
-     * Resolves a list of Meet participants to student IDs.
-     * Matching priority: googleUserId → displayName (case-insensitive).
-     * When a match is made via displayName and the student has no googleUserId yet, it is saved automatically.
-     *
-     * @return set of matched student IDs
+     * Resolves Meet participants to student/teacher IDs.
+     * Matching priority (per person type): googleUserId → meetDisplayName → name.
+     * Auto-learns googleUserId and meetDisplayName on first match.
      */
-    private Set<Long> resolveAndAutoLearn(List<MeetParticipant> participants) {
-        Set<Long> matched = new HashSet<>();
+    private Set<PersonRef> resolveAndAutoLearn(List<MeetParticipant> participants) {
+        Set<PersonRef> matched = new HashSet<>();
         for (MeetParticipant participant : participants) {
             Optional<Student> student = Optional.empty();
 
             if (participant.googleUserId() != null) {
                 student = studentRepository.findByGoogleUserId(participant.googleUserId());
             }
-
             if (student.isEmpty() && participant.displayName() != null) {
-                student = studentRepository.findByNameIgnoreCase(participant.displayName());
-                // Auto-learn: persist the googleUserId so future lookups skip the name match
-                if (student.isPresent() && participant.googleUserId() != null
-                        && student.get().getGoogleUserId() == null) {
-                    student.get().setGoogleUserId(participant.googleUserId());
-                    studentRepository.save(student.get());
-                    log.info("Linked googleUserId {} to student '{}'",
-                            participant.googleUserId(), student.get().getName());
-                }
+                student = studentRepository.findByMeetDisplayNameIgnoreCase(participant.displayName())
+                        .or(() -> studentRepository.findByNameIgnoreCase(participant.displayName()));
+            }
+            if (student.isPresent()) {
+                autoLearnStudent(student.get(), participant);
+                matched.add(new PersonRef(student.get().getId(), "STUDENT"));
+                continue;
             }
 
-            student.ifPresent(s -> matched.add(s.getId()));
+            Optional<Teacher> teacher = Optional.empty();
+            if (participant.googleUserId() != null) {
+                teacher = teacherRepository.findByGoogleUserId(participant.googleUserId());
+            }
+            if (teacher.isEmpty() && participant.displayName() != null) {
+                teacher = teacherRepository.findByMeetDisplayNameIgnoreCase(participant.displayName())
+                        .or(() -> teacherRepository.findByNameIgnoreCase(participant.displayName()));
+            }
+            if (teacher.isPresent()) {
+                autoLearnTeacher(teacher.get(), participant);
+                matched.add(new PersonRef(teacher.get().getId(), "TEACHER"));
+            }
         }
         return matched;
+    }
+
+    private void autoLearnStudent(Student student, MeetParticipant participant) {
+        boolean changed = false;
+        if (participant.googleUserId() != null && student.getGoogleUserId() == null) {
+            student.setGoogleUserId(participant.googleUserId());
+            changed = true;
+        }
+        if (participant.displayName() != null && student.getMeetDisplayName() == null) {
+            student.setMeetDisplayName(participant.displayName());
+            changed = true;
+        }
+        if (changed) {
+            studentRepository.save(student);
+            log.info("Auto-learned Meet identity for student '{}': userId={}, displayName={}",
+                    student.getName(), student.getGoogleUserId(), student.getMeetDisplayName());
+        }
+    }
+
+    private void autoLearnTeacher(Teacher teacher, MeetParticipant participant) {
+        boolean changed = false;
+        if (participant.googleUserId() != null && teacher.getGoogleUserId() == null) {
+            teacher.setGoogleUserId(participant.googleUserId());
+            changed = true;
+        }
+        if (participant.displayName() != null && teacher.getMeetDisplayName() == null) {
+            teacher.setMeetDisplayName(participant.displayName());
+            changed = true;
+        }
+        if (changed) {
+            teacherRepository.save(teacher);
+            log.info("Auto-learned Meet identity for teacher '{}': userId={}, displayName={}",
+                    teacher.getName(), teacher.getGoogleUserId(), teacher.getMeetDisplayName());
+        }
+    }
+
+    private static Set<Long> resolveStudentIds(Set<PersonRef> refs) {
+        Set<Long> ids = new HashSet<>();
+        for (PersonRef ref : refs) {
+            if ("STUDENT".equals(ref.type())) ids.add(ref.id());
+        }
+        return ids;
+    }
+
+    private static Set<Long> resolveTeacherIds(Set<PersonRef> refs) {
+        Set<Long> ids = new HashSet<>();
+        for (PersonRef ref : refs) {
+            if ("TEACHER".equals(ref.type())) ids.add(ref.id());
+        }
+        return ids;
     }
 
     private List<Student> getExpectedStudents(CalendarEvent event) {
@@ -260,18 +351,40 @@ public class MeetAttendanceMonitor {
         return students;
     }
 
-    private void recordAttendance(Student student, CalendarEvent event, AttendanceStatus status) {
+    private List<Teacher> getExpectedTeachers(CalendarEvent event) {
+        List<Teacher> teachers = new ArrayList<>();
+        if (event.getAttendeeEmails() == null) return teachers;
+        for (String email : event.getAttendeeEmails()) {
+            teacherRepository.findByMeetEmail(email).ifPresent(teachers::add);
+        }
+        return teachers;
+    }
+
+    private void recordStudentAttendance(Student student, CalendarEvent event, AttendanceStatus status) {
         LocalDate today = LocalDate.now();
         Optional<Attendance> existing = attendanceRepository
                 .findByStudentIdAndCalendarEventIdAndDate(student.getId(), event.getId(), today);
         if (existing.isEmpty()) {
-            Attendance attendance = Attendance.builder()
+            attendanceRepository.save(Attendance.builder()
                     .student(student)
                     .calendarEventId(event.getId())
                     .date(today)
                     .status(status)
-                    .build();
-            attendanceRepository.save(attendance);
+                    .build());
+        }
+    }
+
+    private void recordTeacherAttendance(Teacher teacher, CalendarEvent event, AttendanceStatus status) {
+        LocalDate today = LocalDate.now();
+        Optional<Attendance> existing = attendanceRepository
+                .findByTeacherIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), today);
+        if (existing.isEmpty()) {
+            attendanceRepository.save(Attendance.builder()
+                    .teacher(teacher)
+                    .calendarEventId(event.getId())
+                    .date(today)
+                    .status(status)
+                    .build());
         }
     }
 }

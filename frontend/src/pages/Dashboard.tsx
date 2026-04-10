@@ -24,10 +24,10 @@ function formatRelativeTime(scheduledAt: string): string {
 
 function statusBadge(status: string | null, personType: string | null, registered: boolean) {
   if (!registered) return <span className="text-gray-400 italic text-xs">Not registered</span>
-  if (personType === 'TEACHER') return <span className="text-blue-500 text-xs">Teacher</span>
   if (status === 'PRESENT') return <span className="text-green-600 font-medium">Present</span>
   if (status === 'LATE') return <span className="text-amber-500 font-medium">Late</span>
   if (status === 'ABSENT') return <span className="text-red-600 font-medium">Absent</span>
+  if (personType === 'TEACHER') return <span className="text-gray-400 text-xs">Teacher · not recorded</span>
   return <span className="text-gray-400">Not recorded</span>
 }
 
@@ -63,9 +63,15 @@ function AttendanceCard({ event }: { event: AttendanceSummaryResponse }) {
             <p className="text-xs text-gray-400 mb-0.5">
               {event.date} &nbsp;·&nbsp; {event.startTime} – {event.endTime}
             </p>
-            <span className="text-sm font-medium text-gray-700">
-              {event.present} / {event.totalExpected} present
-            </span>
+            {event.totalExpected > 0 && event.present >= event.totalExpected ? (
+              <span className="text-sm font-semibold text-green-600">
+                All {event.totalExpected} present
+              </span>
+            ) : (
+              <span className="text-sm font-medium text-gray-700">
+                {event.present} / {event.totalExpected} present
+              </span>
+            )}
             <span className="ml-3 text-gray-400 text-sm">{expanded ? '▲' : '▼'}</span>
           </div>
         </div>
