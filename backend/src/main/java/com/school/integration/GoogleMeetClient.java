@@ -2,8 +2,7 @@ package com.school.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.auth.oauth2.GoogleCredentials;
-import com.google.auth.oauth2.AccessToken;
+import com.google.api.client.auth.oauth2.Credential;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -19,45 +18,51 @@ import java.util.List;
 @ConditionalOnProperty(name = "app.meet.mock", havingValue = "false", matchIfMissing = true)
 public class GoogleMeetClient implements MeetClient {
 
-    private final GoogleCredentials googleCredentials;
+    private final Credential credential;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
-    public GoogleMeetClient(GoogleCredentials googleCredentials) {
-        this.googleCredentials = googleCredentials;
+    public GoogleMeetClient(Credential credential) {
+        this.credential = credential;
         this.httpClient = HttpClient.newHttpClient();
         this.objectMapper = new ObjectMapper();
     }
 
-    public boolean isMeetingActive(String spaceCode) throws IOException, InterruptedException {
-        googleCredentials.refreshIfExpired();
-        AccessToken token = googleCredentials.getAccessToken();
+    private String getValidAccessToken() throws IOException {
+        Long expiresIn = credential.getExpiresInSeconds();
+        if (expiresIn == null || expiresIn <= 60) {
+            credential.refreshToken();
+        }
+        return credential.getAccessToken();
+    }
 
+    @Override
+    public boolean isMeetingActive(String spaceCode) throws IOException, InterruptedException {
+        String token = getValidAccessToken();
         String url = "https://meet.googleapis.com/v2/spaces/" + spaceCode
                 + "/participants?filter=latestEndTime+is+null&pageSize=1";
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("Authorization", "Bearer " + token.getTokenValue())
+                .header("Authorization", "Bearer " + token)
                 .GET()
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         JsonNode root = objectMapper.readTree(response.body());
         JsonNode participants = root.get("participants");
-        return participants != null && participants.isArray() && participants.size() > 0;
+        return participants != null && participants.isArray() && !participants.isEmpty();
     }
 
+    @Override
     public List<String> getActiveParticipantEmails(String spaceCode) throws IOException, InterruptedException {
-        googleCredentials.refreshIfExpired();
-        AccessToken token = googleCredentials.getAccessToken();
-
+        String token = getValidAccessToken();
         String url = "https://meet.googleapis.com/v2/spaces/" + spaceCode
                 + "/participants?filter=latestEndTime+is+null";
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("Authorization", "Bearer " + token.getTokenValue())
+                .header("Authorization", "Bearer " + token)
                 .GET()
                 .build();
 

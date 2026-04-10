@@ -1,5 +1,7 @@
 # Credentials — never commit
 service-account.json
+client_secret.json
+backend/client_secret.json
 *.env
 .env.local
 .env.*.local
