@@ -33,6 +33,7 @@ public class TeacherService {
         Teacher teacher = Teacher.builder()
                 .name(req.name())
                 .meetEmail(req.meetEmail())
+                .meetDisplayName(req.meetDisplayName())
                 .phone(req.phone())
                 .hourlyRate(req.hourlyRate())
                 .build();
@@ -44,6 +45,7 @@ public class TeacherService {
                 .orElseThrow(() -> new RuntimeException("Teacher not found: " + id));
         teacher.setName(req.name());
         teacher.setMeetEmail(req.meetEmail());
+        teacher.setMeetDisplayName(req.meetDisplayName());
         teacher.setPhone(req.phone());
         teacher.setHourlyRate(req.hourlyRate());
         return TeacherResponse.from(teacherRepository.save(teacher));

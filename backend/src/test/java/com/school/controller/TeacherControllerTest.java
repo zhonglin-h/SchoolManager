@@ -85,7 +85,7 @@ class TeacherControllerTest {
 
     @Test
     void create_returnsCreatedTeacher() throws Exception {
-        TeacherRequest req = new TeacherRequest("Carol", "carol@meet.com", "555-2222", new BigDecimal("50.00"));
+        TeacherRequest req = new TeacherRequest("Carol", "carol@meet.com", null, "555-2222", new BigDecimal("50.00"));
         when(teacherService.create(any(TeacherRequest.class))).thenReturn(response(3L, "Carol"));
 
         mockMvc.perform(post("/teachers")
@@ -102,7 +102,7 @@ class TeacherControllerTest {
 
     @Test
     void update_returnsUpdatedTeacher() throws Exception {
-        TeacherRequest req = new TeacherRequest("Alice Updated", "alice@meet.com", "555-1111", new BigDecimal("55.00"));
+        TeacherRequest req = new TeacherRequest("Alice Updated", "alice@meet.com", null, "555-1111", new BigDecimal("55.00"));
         when(teacherService.update(eq(1L), any(TeacherRequest.class)))
                 .thenReturn(response(1L, "Alice Updated"));
 
@@ -121,7 +121,7 @@ class TeacherControllerTest {
         assertThatThrownBy(() -> mockMvc.perform(put("/teachers/99")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new TeacherRequest("X", "x@x.com", "000", null)))))
+                                new TeacherRequest("X", "x@x.com", null, "000", null)))))
                 .hasRootCauseInstanceOf(RuntimeException.class)
                 .hasRootCauseMessage("Teacher not found: 99");
     }
@@ -152,6 +152,6 @@ class TeacherControllerTest {
     private TeacherResponse response(Long id, String name) {
         return new TeacherResponse(id, name,
                 name.toLowerCase().replace(" ", "") + "@meet.com",
-                "555-0000", new BigDecimal("45.00"), true);
+                null, "555-0000", new BigDecimal("45.00"), true);
     }
 }

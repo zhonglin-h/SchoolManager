@@ -16,6 +16,7 @@ import type { StudentResponse, StudentRequest } from '../services/api'
 const EMPTY_FORM: StudentRequest = {
   name: '',
   meetEmail: '',
+  meetDisplayName: '',
   classroomEmail: '',
   parentEmail: '',
   parentPhone: '',
@@ -48,6 +49,7 @@ export default function Students() {
     setForm({
       name: student.name,
       meetEmail: student.meetEmail,
+      meetDisplayName: student.meetDisplayName ?? '',
       classroomEmail: student.classroomEmail,
       parentEmail: student.parentEmail,
       parentPhone: student.parentPhone,
@@ -150,20 +152,23 @@ export default function Students() {
           <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3">
             {(
               [
-                { name: 'name', label: 'Name' },
-                { name: 'meetEmail', label: 'Meet Email' },
-                { name: 'classroomEmail', label: 'Classroom Email' },
-                { name: 'parentEmail', label: 'Parent Email' },
-                { name: 'parentPhone', label: 'Parent Phone' },
-              ] as { name: keyof StudentRequest; label: string }[]
-            ).map(({ name, label }) => (
+                { name: 'name', label: 'Name', required: true },
+                { name: 'meetEmail', label: 'Meet Email', required: true },
+                { name: 'meetDisplayName', label: 'Meet Display Name', required: false },
+                { name: 'classroomEmail', label: 'Classroom Email', required: true },
+                { name: 'parentEmail', label: 'Parent Email', required: true },
+                { name: 'parentPhone', label: 'Parent Phone', required: true },
+              ] as { name: keyof StudentRequest; label: string; required: boolean }[]
+            ).map(({ name, label, required }) => (
               <div key={name} className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500">{label}</label>
+                <label className="text-xs text-gray-500">
+                  {label}{!required && <span className="text-gray-400"> (optional)</span>}
+                </label>
                 <input
                   name={name}
                   value={form[name]}
                   onChange={handleChange}
-                  required
+                  required={required}
                   className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
                 />
               </div>

@@ -8,6 +8,7 @@ public record TeacherResponse(
         Long id,
         String name,
         String meetEmail,
+        String meetDisplayName,
         String phone,
         BigDecimal hourlyRate,
         boolean active
@@ -17,6 +18,7 @@ public record TeacherResponse(
                 t.getId(),
                 t.getName(),
                 t.getMeetEmail(),
+                t.getMeetDisplayName(),
                 t.getPhone(),
                 t.getHourlyRate(),
                 t.isActive()

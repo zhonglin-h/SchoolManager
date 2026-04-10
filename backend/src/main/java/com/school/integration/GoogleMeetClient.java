@@ -77,8 +77,8 @@ public class GoogleMeetClient implements MeetClient {
         if (conferenceRecord == null) return List.of();
 
         String token = getValidAccessToken();
-        // latestEndTime is absent for participants still in the meeting
-        String url = MEET_API + "/" + conferenceRecord + "/participants?filter=latestEndTime%20%3D%20null";
+        // No server-side filter — latestEndTime absent means still in the meeting; filter client-side
+        String url = MEET_API + "/" + conferenceRecord + "/participants";
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -87,7 +87,7 @@ public class GoogleMeetClient implements MeetClient {
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        log.debug("GET participants -> HTTP {}", response.statusCode());
+        log.info("GET participants ({}) -> HTTP {} body: {}", spaceCode, response.statusCode(), response.body());
 
         JsonNode root = objectMapper.readTree(response.body());
         JsonNode participants = root.get("participants");
@@ -95,6 +95,9 @@ public class GoogleMeetClient implements MeetClient {
         List<MeetParticipant> result = new ArrayList<>();
         if (participants != null && participants.isArray()) {
             for (JsonNode participant : participants) {
+                // Skip participants who have already left (latestEndTime present)
+                if (participant.has("latestEndTime")) continue;
+                log.info("  participant node keys: {}", participant.fieldNames());
                 JsonNode signedinUser = participant.get("signedinUser");
                 if (signedinUser != null) {
                     String displayName = signedinUser.path("displayName").asText(null);
@@ -103,7 +106,17 @@ public class GoogleMeetClient implements MeetClient {
                     String googleUserId = userResource != null && userResource.startsWith("users/")
                             ? userResource.substring("users/".length())
                             : userResource;
+                    log.info("  signedinUser -> googleUserId={} displayName={}", googleUserId, displayName);
                     result.add(new MeetParticipant(googleUserId, displayName));
+                } else {
+                    JsonNode anonymousUser = participant.get("anonymousUser");
+                    if (anonymousUser != null) {
+                        String displayName = anonymousUser.path("displayName").asText(null);
+                        log.info("  anonymousUser -> displayName={}", displayName);
+                        result.add(new MeetParticipant(null, displayName));
+                    } else {
+                        log.info("  unknown participant structure: {}", participant);
+                    }
                 }
             }
         }

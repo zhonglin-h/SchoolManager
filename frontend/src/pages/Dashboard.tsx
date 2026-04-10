@@ -22,11 +22,12 @@ function formatRelativeTime(scheduledAt: string): string {
   return `in ${s}s`
 }
 
-function statusBadge(status: string | null, personType: string | null, registered: boolean) {
+function statusBadge(status: string | null, personType: string | null, registered: boolean, inMeetNow: boolean) {
   if (!registered) return <span className="text-gray-400 italic text-xs">Not registered</span>
   if (status === 'PRESENT') return <span className="text-green-600 font-medium">Present</span>
   if (status === 'LATE') return <span className="text-amber-500 font-medium">Late</span>
   if (status === 'ABSENT') return <span className="text-red-600 font-medium">Absent</span>
+  if (inMeetNow) return <span className="text-green-600 font-medium">In meeting</span>
   if (personType === 'TEACHER') return <span className="text-gray-400 text-xs">Teacher · not recorded</span>
   return <span className="text-gray-400">Not recorded</span>
 }
@@ -98,7 +99,7 @@ function AttendanceCard({ event }: { event: AttendanceSummaryResponse }) {
                     )}
                   </td>
                   <td className="py-1 pr-6">
-                    {statusBadge(entry.status, entry.personType, entry.registered)}
+                    {statusBadge(entry.status, entry.personType, entry.registered, entry.inMeetNow)}
                   </td>
                   <td className="py-1">
                     {!entry.registered && (

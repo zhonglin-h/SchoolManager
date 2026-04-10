@@ -76,7 +76,7 @@ class TeacherServiceTest {
 
     @Test
     void create_savesAndReturnsNewTeacher() {
-        TeacherRequest req = new TeacherRequest("Carol", "carol@meet.com", "555-1234", new BigDecimal("50.00"));
+        TeacherRequest req = new TeacherRequest("Carol", "carol@meet.com", null, "555-1234", new BigDecimal("50.00"));
         Teacher saved = Teacher.builder()
                 .id(5L).name("Carol").meetEmail("carol@meet.com")
                 .phone("555-1234").hourlyRate(new BigDecimal("50.00")).build();
@@ -101,7 +101,7 @@ class TeacherServiceTest {
         when(teacherRepository.findById(2L)).thenReturn(Optional.of(existing));
         when(teacherRepository.save(any(Teacher.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TeacherRequest req = new TeacherRequest("David", "david@meet.com", "555-9999", new BigDecimal("60.00"));
+        TeacherRequest req = new TeacherRequest("David", "david@meet.com", null, "555-9999", new BigDecimal("60.00"));
         TeacherResponse result = teacherService.update(2L, req);
 
         assertThat(result.name()).isEqualTo("David");
@@ -114,7 +114,7 @@ class TeacherServiceTest {
         when(teacherRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> teacherService.update(99L,
-                new TeacherRequest("X", "x@x.com", "000", null)))
+                new TeacherRequest("X", "x@x.com", null, "000", null)))
                 .isInstanceOf(RuntimeException.class);
     }
 

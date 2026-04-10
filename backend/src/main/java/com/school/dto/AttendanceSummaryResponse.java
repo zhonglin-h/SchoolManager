@@ -8,6 +8,7 @@ import java.util.List;
 
 public record AttendanceSummaryResponse(
         String calendarEventId,
+        String spaceCode,
         String eventTitle,
         LocalDate date,
         LocalTime startTime,
@@ -25,6 +26,7 @@ public record AttendanceSummaryResponse(
             String name,
             String email,
             AttendanceStatus status,
-            boolean registered
+            boolean registered,
+            boolean inMeetNow
     ) {}
 }

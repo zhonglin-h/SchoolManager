@@ -75,7 +75,7 @@ class StudentServiceTest {
 
     @Test
     void create_savesAndReturnsNewStudent() {
-        StudentRequest req = new StudentRequest("Carol", "carol@meet.com", "carol@classroom.com",
+        StudentRequest req = new StudentRequest("Carol", "carol@meet.com", null, "carol@classroom.com",
                 "parent@test.com", "555-1234");
         Student saved = Student.builder()
                 .id(5L).name("Carol").meetEmail("carol@meet.com")
@@ -102,7 +102,7 @@ class StudentServiceTest {
         when(studentRepository.findById(2L)).thenReturn(Optional.of(existing));
         when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        StudentRequest req = new StudentRequest("David", "david@meet.com", "david@class.com",
+        StudentRequest req = new StudentRequest("David", "david@meet.com", null, "david@class.com",
                 "dp@test.com", "555-9999");
         StudentResponse result = studentService.update(2L, req);
 
@@ -115,7 +115,7 @@ class StudentServiceTest {
         when(studentRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> studentService.update(99L,
-                new StudentRequest("X", "x@x.com", "x@x.com", "x@x.com", "000")))
+                new StudentRequest("X", "x@x.com", null, "x@x.com", "x@x.com", "000")))
                 .isInstanceOf(RuntimeException.class);
     }
 

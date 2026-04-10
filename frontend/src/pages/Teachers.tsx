@@ -16,6 +16,7 @@ import type { TeacherResponse, TeacherRequest } from '../services/api'
 const EMPTY_FORM: TeacherRequest = {
   name: '',
   meetEmail: '',
+  meetDisplayName: '',
   phone: '',
   hourlyRate: null,
 }
@@ -47,6 +48,7 @@ export default function Teachers() {
     setForm({
       name: teacher.name,
       meetEmail: teacher.meetEmail,
+      meetDisplayName: teacher.meetDisplayName ?? '',
       phone: teacher.phone,
       hourlyRate: teacher.hourlyRate,
     })
@@ -174,6 +176,15 @@ export default function Teachers() {
                 value={form.meetEmail}
                 onChange={handleChange}
                 required
+                className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Meet Display Name <span className="text-gray-400">(optional)</span></label>
+              <input
+                name="meetDisplayName"
+                value={form.meetDisplayName}
+                onChange={handleChange}
                 className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
               />
             </div>

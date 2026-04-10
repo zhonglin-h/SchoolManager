@@ -84,7 +84,7 @@ class StudentControllerTest {
 
     @Test
     void create_returnsCreatedStudent() throws Exception {
-        StudentRequest req = new StudentRequest("Carol", "carol@meet.com", "carol@class.com",
+        StudentRequest req = new StudentRequest("Carol", "carol@meet.com", null, "carol@class.com",
                 "carol-p@test.com", "555-2222");
         when(studentService.create(any(StudentRequest.class))).thenReturn(response(3L, "Carol"));
 
@@ -102,7 +102,7 @@ class StudentControllerTest {
 
     @Test
     void update_returnsUpdatedStudent() throws Exception {
-        StudentRequest req = new StudentRequest("Alice Updated", "alice@meet.com", "alice@class.com",
+        StudentRequest req = new StudentRequest("Alice Updated", "alice@meet.com", null, "alice@class.com",
                 "alice-p@test.com", "555-1111");
         when(studentService.update(eq(1L), any(StudentRequest.class)))
                 .thenReturn(response(1L, "Alice Updated"));
@@ -122,7 +122,7 @@ class StudentControllerTest {
         assertThatThrownBy(() -> mockMvc.perform(put("/students/99")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StudentRequest("X", "x@x.com", "x@x.com", "x@x.com", "000")))))
+                                new StudentRequest("X", "x@x.com", null, "x@x.com", "x@x.com", "000")))))
                 .hasRootCauseInstanceOf(RuntimeException.class)
                 .hasRootCauseMessage("Student not found: 99");
     }
@@ -153,6 +153,7 @@ class StudentControllerTest {
     private StudentResponse response(Long id, String name) {
         return new StudentResponse(id, name,
                 name.toLowerCase().replace(" ", "") + "@meet.com",
+                null,
                 name.toLowerCase().replace(" ", "") + "@class.com",
                 name.toLowerCase().replace(" ", "") + "-p@test.com",
                 "555-0000", true);

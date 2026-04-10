@@ -9,6 +9,7 @@ const api = axios.create({
 export interface StudentRequest {
   name: string
   meetEmail: string
+  meetDisplayName: string
   classroomEmail: string
   parentEmail: string
   parentPhone: string
@@ -18,6 +19,7 @@ export interface StudentResponse {
   id: number
   name: string
   meetEmail: string
+  meetDisplayName: string | null
   classroomEmail: string
   parentEmail: string
   parentPhone: string
@@ -27,6 +29,7 @@ export interface StudentResponse {
 export interface TeacherRequest {
   name: string
   meetEmail: string
+  meetDisplayName: string
   phone: string
   hourlyRate: number | null
 }
@@ -35,6 +38,7 @@ export interface TeacherResponse {
   id: number
   name: string
   meetEmail: string
+  meetDisplayName: string | null
   phone: string
   hourlyRate: number | null
   active: boolean
@@ -47,6 +51,7 @@ export interface AttendanceEntry {
   email: string
   status: string | null
   registered: boolean
+  inMeetNow: boolean
 }
 
 export interface AttendanceSummaryResponse {

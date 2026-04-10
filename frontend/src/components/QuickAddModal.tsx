@@ -11,6 +11,7 @@ interface Props {
 export default function QuickAddModal({ email, mode, onClose }: Props) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
+  const [meetDisplayName, setMeetDisplayName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -23,13 +24,14 @@ export default function QuickAddModal({ email, mode, onClose }: Props) {
         await createStudent({
           name,
           meetEmail: email,
+          meetDisplayName,
           classroomEmail: '',
           parentEmail: '',
           parentPhone: '',
         })
         queryClient.invalidateQueries({ queryKey: ['students'] })
       } else {
-        await createTeacher({ name, meetEmail: email, phone: '', hourlyRate: null })
+        await createTeacher({ name, meetEmail: email, meetDisplayName, phone: '', hourlyRate: null })
         queryClient.invalidateQueries({ queryKey: ['teachers'] })
       }
       queryClient.invalidateQueries({ queryKey: ['attendance', 'today'] })
@@ -56,6 +58,14 @@ export default function QuickAddModal({ email, mode, onClose }: Props) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
+              className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">Meet Display Name <span className="text-gray-400">(optional)</span></label>
+            <input
+              value={meetDisplayName}
+              onChange={(e) => setMeetDisplayName(e.target.value)}
               className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
             />
           </div>

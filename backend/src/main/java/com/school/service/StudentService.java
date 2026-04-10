@@ -33,6 +33,7 @@ public class StudentService {
         Student student = Student.builder()
                 .name(req.name())
                 .meetEmail(req.meetEmail())
+                .meetDisplayName(req.meetDisplayName())
                 .classroomEmail(req.classroomEmail())
                 .parentEmail(req.parentEmail())
                 .parentPhone(req.parentPhone())
@@ -45,6 +46,7 @@ public class StudentService {
                 .orElseThrow(() -> new RuntimeException("Student not found: " + id));
         student.setName(req.name());
         student.setMeetEmail(req.meetEmail());
+        student.setMeetDisplayName(req.meetDisplayName());
         student.setClassroomEmail(req.classroomEmail());
         student.setParentEmail(req.parentEmail());
         student.setParentPhone(req.parentPhone());
