@@ -95,17 +95,12 @@ frontend/src/
 
 ### Google API Integration
 - Uses a **Service Account** (credentials at `./service-account.json`, never committed)
-- **Google Classroom**: provision courses on class creation, sync enrollments, pull assignments/submissions
-- **Google Calendar**: create recurring events and generate Google Meet links stored on the Class record
+- **Google Classroom**: Phase 1 read-only (sync enrollments, pull assignments/submissions); Phase 2 adds course provisioning
+- **Google Meet**: live attendance monitor via Meet REST API — `@Scheduled` poller queries `spaces/{spaceId}/participants` during active sessions
+- **Google Calendar**: Phase 2 — create recurring events and generate Meet links stored on the Class record
 
 ### Notification Triggers
-Six automated notifications (all logged to `NotificationLog`):
-1. Invoice overdue → principal + parent (email + SMS)
-2. Payment received → principal (email)
-3. Teacher homework not posted on time → principal (email)
-4. Student missed submission → principal + parent (email)
-5. Teacher payroll due → principal (email)
-6. Student absent → parent (SMS)
+Automated notifications are logged to `NotificationLog`. See `High Level Design.md` for the full trigger table and phase breakdown.
 
 ### Runtime Directories
 - `./data/` — H2 database files (created at runtime, not committed)
@@ -133,8 +128,8 @@ Credential files (`service-account.json`, `.env.local`) must never be committed.
 
 ## Development Phases
 
-1. **Phase 1** — Core CRUD: entities, JPA repos, REST endpoints, basic React UI
-2. **Phase 2** — Attendance, Google Classroom/Meet sync, assignment tracking
+1. **Phase 1** — Core CRUD + Classroom read-only sync + live Meet attendance monitor + absent/late email notifications
+2. **Phase 2** — Dashboard UI, manual attendance marking, Google Calendar/Meet link generation, Classroom course provisioning
 3. **Phase 3** — Payments and payroll
-4. **Phase 4** — Email/SMS notifications
+4. **Phase 4** — Remaining notifications (SMS via Twilio, invoice/payroll/submission triggers)
 5. **Phase 5** — XLSX exports, desktop launcher scripts, polish

@@ -44,6 +44,7 @@ Required Google API scopes:
 - `https://www.googleapis.com/auth/classroom.rosters`
 - `https://www.googleapis.com/auth/classroom.coursework.students`
 - `https://www.googleapis.com/auth/calendar`
+- `https://www.googleapis.com/auth/meetings.space.readonly`  ← Meet participant data
 
 ---
 
@@ -122,9 +123,9 @@ PUT    /terms/{id}
 
 # Classes
 GET    /classes
-POST   /classes                # auto-creates Meet link + Classroom course
+POST   /classes                # Phase 1: stores googleClassroomId manually; Phase 2: also auto-creates Meet link + Classroom course
 PUT    /classes/{id}
-POST   /classes/{id}/roster-sync   # sync students from Classroom
+POST   /classes/{id}/roster-sync       # sync students from Classroom
 
 # Attendance
 POST   /attendance                  # bulk mark for a session
@@ -161,17 +162,27 @@ GET    /export/full                 # multi-sheet workbook (also auto-saves to /
 
 ### Google Integrations
 
-#### Google Meet (via Calendar API)
+#### Google Meet (via Calendar API) — Phase 2
 - `POST /classes` creates a Calendar event with a Meet link via `conferenceData`
 - Recurring classes use `RRULE` recurrence on the Calendar event
 - Meet link is stored on the `Class` record
 
-#### Google Classroom (via Classroom API)
-- `POST /classes` provisions a Classroom course and assigns the teacher
-- `POST /classes/{id}/roster-sync` pulls enrolled students via `courses.students.list`
-- `POST /assignments/sync/{classId}` pulls coursework and submissions:
-  - `teacherPostedOnTime` — coursework `creationTime` within 2 days of class date
-  - `submittedOnTime` — derived from Classroom's native `late` field on `studentSubmissions`
+#### Live Meet Attendance Monitor (via Meet REST API) — Phase 1
+- A Spring `@Scheduled` task runs every ~60 seconds
+- Each tick identifies classes currently within their scheduled session window
+- For each active session, calls `spaces/{spaceId}/participants` (filtered by `latestEndTime IS NULL`) on the Meet REST API to list participants currently in the call
+- Each participant is matched to an enrolled student by Google account email
+- `PRESENT` is written when a student's first join event is seen; `LATE` if their `earliestStartTime` is beyond the configured grace period past class start
+- At session end (class end time + a short buffer), any enrolled student still without an `Attendance` row is written as `ABSENT`
+- Notifications fire once per student per session — deduplication prevents repeat emails across poller ticks
+
+#### Google Classroom — Read (Phase 1) / Provision (Phase 2)
+- **Phase 1 (read-only):** `googleClassroomId` is set manually on the Class record; the app never creates or modifies Classroom courses
+  - `POST /classes/{id}/roster-sync` pulls enrolled students via `courses.students.list`
+  - `POST /assignments/sync/{classId}` pulls coursework and submissions:
+    - `teacherPostedOnTime` — coursework `creationTime` within 2 days of class date
+    - `submittedOnTime` — derived from Classroom's native `late` field on `studentSubmissions`
+- **Phase 2 (publish):** `POST /classes` additionally provisions a Classroom course and assigns the teacher
 
 ---
 
@@ -179,14 +190,15 @@ GET    /export/full                 # multi-sheet workbook (also auto-saves to /
 
 #### Email & SMS Triggers
 
-| Trigger | Recipient | Channel |
-|---|---|---|
-| Invoice overdue | Principal + Parent | Email + SMS |
-| Payment received | Principal | Email |
-| Teacher didn't post homework on time | Principal | Email |
-| Student missed submission deadline | Principal + Parent | Email |
-| Teacher payroll due | Principal | Email |
-| Student absent | Parent | SMS |
+| Trigger | Recipient | Channel | Phase |
+|---|---|---|---|
+| Student absent (detected by live monitor at session end) | Parent | Email | 1 |
+| Student late (detected by live monitor on delayed join) | Parent + Principal | Email | 1 |
+| Invoice overdue | Principal + Parent | Email + SMS | 4 |
+| Payment received | Principal | Email | 4 |
+| Teacher didn't post homework on time | Principal | Email | 4 |
+| Student missed submission deadline | Principal + Parent | Email | 4 |
+| Teacher payroll due | Principal | Email | 4 |
 
 All sent notifications are recorded in `NotificationLog`.
 
@@ -301,29 +313,31 @@ The principal double-clicks the shortcut and the app is ready. No installation b
 
 ## Build Phases
 
-### Phase 1 — Core Data & Basic UI
-- Spring Boot project setup, H2, JPA entities (Student, Teacher, Class, Enrollment, Term)
+### Phase 1 — Core Data, Classroom Sync & Attendance Notifications
+- Spring Boot project setup, H2, JPA entities (all 11 entities including `NotificationLog`)
 - Basic CRUD endpoints for all core entities
 - Soft delete on students
 - React app + sidebar layout + routing
-- Students, Teachers, Classes pages (read/create/edit)
+- Students, Teachers, Classes pages (read/create/edit); Class form includes manual `googleClassroomId` field
+- **Google Classroom (read-only):** roster sync + assignment/submission pull with `teacherPostedOnTime` / `submittedOnTime` flags
+- **Live Meet attendance monitor:** `@Scheduled` poller queries Admin Reports API during active sessions; writes `PRESENT`/`LATE` during the session and `ABSENT` at session end
+- **Spring Mail setup:** email notifications fired by the monitor — absent → parent; late → parent + principal (once per student per session)
+- NotificationLog viewer in frontend
 
-### Phase 2 — Attendance & Submissions
-- Attendance tracking + mark attendance from dashboard
-- Google Classroom + Meet integration (course creation, Meet link generation)
-- Assignment sync + `teacherPostedOnTime` / `submittedOnTime` flags
-- Dashboard: ongoing classes + today's attendance view
+### Phase 2 — Dashboard & Google Publishing
+- Dashboard: ongoing classes, today's attendance view, alerts panel
+- Attendance manual mark UI
+- Google Calendar/Meet link generation on class creation
+- Google Classroom course provisioning on class creation (publish side)
 
 ### Phase 3 — Payments & Payroll
 - Invoice creation, payment recording, overdue status
 - Teacher session logging + payroll calculation
 - Payments and Payroll pages in frontend
-- Dashboard alerts panel
 
-### Phase 4 — Notifications
-- Spring Mail + Twilio setup
-- Notification triggers (overdue invoices, absences, missed submissions, payroll due)
-- NotificationLog entity + log viewer in frontend
+### Phase 4 — Remaining Notifications
+- Twilio SMS setup
+- Remaining notification triggers: invoice overdue (email + SMS), payment received, teacher late homework, missed submission, payroll due
 
 ### Phase 5 — Export & Polish
 - Apache POI XLSX export for all entities
