@@ -12,8 +12,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -37,18 +35,16 @@ class NotificationServiceTest {
     @Mock
     EmailClient emailClient;
 
-    @InjectMocks
-    NotificationService notificationService;
-
     private static final String PRINCIPAL = "principal@test.com";
+
+    NotificationService notificationService;
 
     private CalendarEvent event;
     private Student student;
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(notificationService, "principalEmail", PRINCIPAL);
-        ReflectionTestUtils.setField(notificationService, "notificationsEnabled", true);
+        notificationService = new NotificationService(notificationLogRepository, emailClient, PRINCIPAL, true);
 
         event = new CalendarEvent("evt-1", "Math Class", "https://meet.google.com/abc",
                 "abc", LocalDateTime.now(), LocalDateTime.now().plusHours(1), List.of());

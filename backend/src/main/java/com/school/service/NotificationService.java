@@ -18,15 +18,17 @@ public class NotificationService {
     private final NotificationLogRepository notificationLogRepository;
     private final EmailClient emailClient;
 
-    @Value("${app.principal.email}")
-    private String principalEmail;
+    private final String principalEmail;
+    private final boolean notificationsEnabled;
 
-    @Value("${app.notifications.enabled:true}")
-    private boolean notificationsEnabled;
-
-    public NotificationService(NotificationLogRepository notificationLogRepository, EmailClient emailClient) {
+    public NotificationService(NotificationLogRepository notificationLogRepository,
+                               EmailClient emailClient,
+                               @Value("${app.principal.email}") String principalEmail,
+                               @Value("${app.notifications.enabled:true}") boolean notificationsEnabled) {
         this.notificationLogRepository = notificationLogRepository;
         this.emailClient = emailClient;
+        this.principalEmail = principalEmail;
+        this.notificationsEnabled = notificationsEnabled;
     }
 
     public boolean isNotificationsEnabled() {
