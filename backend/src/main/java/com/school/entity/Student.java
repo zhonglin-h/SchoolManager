@@ -30,6 +30,9 @@ public class Student {
 
     private String parentPhone;
 
+    /** Populated automatically when a student joins a Google Meet session. */
+    private String googleUserId;
+
     @Builder.Default
     private boolean active = true;
 }

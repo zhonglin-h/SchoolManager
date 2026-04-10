@@ -4,6 +4,7 @@ import com.school.entity.Attendance;
 import com.school.entity.AttendanceStatus;
 import com.school.entity.Student;
 import com.school.integration.MeetClient;
+import com.school.integration.MeetParticipant;
 import com.school.model.CalendarEvent;
 import com.school.repository.AttendanceRepository;
 import com.school.repository.StudentRepository;
@@ -51,8 +52,10 @@ class MeetAttendanceMonitorTest {
     private Student alice;
     private Student bob;
 
+    private static final MeetParticipant ALICE_PARTICIPANT = new MeetParticipant("uid-alice", "Alice");
+    private static final MeetParticipant BOB_PARTICIPANT   = new MeetParticipant("uid-bob",   "Bob");
+
     @BeforeEach
-    @SuppressWarnings("unchecked")
     void setUp() {
         ReflectionTestUtils.setField(monitor, "endBufferMinutes", 5);
 
@@ -91,34 +94,64 @@ class MeetAttendanceMonitorTest {
     void checkMeetingStarted_swallowsExceptionGracefully() throws Exception {
         when(meetClient.isMeetingActive(anyString())).thenThrow(new RuntimeException("API error"));
 
-        // should not throw
         monitor.checkMeetingStarted(event, "MEETING_NOT_STARTED_15");
 
         verify(notificationService, never()).notifyMeetingNotStarted(any(), anyString());
     }
 
-    // --- checkPreClassJoins ---
+    // --- resolveAndAutoLearn (via checkPreClassJoins) ---
 
     @Test
-    void checkPreClassJoins_notifiesForStudentsNotYetJoined() throws Exception {
-        when(meetClient.getActiveParticipantEmails("abc-def")).thenReturn(List.of("alice@meet.com"));
+    void checkPreClassJoins_matchesByGoogleUserId() throws Exception {
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT));
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.of(alice));
 
         monitor.checkPreClassJoins(event);
 
-        // Alice is present — no notification for her
         verify(notificationService, never()).notifyNotYetJoined(event, alice);
-        // Bob is missing — notify
         verify(notificationService).notifyNotYetJoined(event, bob);
     }
 
     @Test
-    void checkPreClassJoins_doesNotNotifyWhenAllPresent() throws Exception {
-        when(meetClient.getActiveParticipantEmails("abc-def"))
-                .thenReturn(List.of("alice@meet.com", "bob@meet.com"));
+    void checkPreClassJoins_fallsBackToDisplayNameWhenNoGoogleUserId() throws Exception {
+        MeetParticipant noId = new MeetParticipant(null, "Alice");
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(noId));
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByNameIgnoreCase("Alice")).thenReturn(Optional.of(alice));
+
+        monitor.checkPreClassJoins(event);
+
+        verify(notificationService, never()).notifyNotYetJoined(event, alice);
+        verify(notificationService).notifyNotYetJoined(event, bob);
+    }
+
+    @Test
+    void checkPreClassJoins_autoSavesGoogleUserIdOnNameMatch() throws Exception {
+        // Alice has no googleUserId stored yet; participant arrives with one
+        MeetParticipant newParticipant = new MeetParticipant("uid-alice", "Alice");
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(newParticipant));
+        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.empty());
+        when(studentRepository.findByNameIgnoreCase("Alice")).thenReturn(Optional.of(alice));
+
+        monitor.checkPreClassJoins(event);
+
+        ArgumentCaptor<Student> captor = ArgumentCaptor.forClass(Student.class);
+        verify(studentRepository).save(captor.capture());
+        assertThat(captor.getValue().getGoogleUserId()).isEqualTo("uid-alice");
+    }
+
+    @Test
+    void checkPreClassJoins_doesNotNotifyWhenAllPresent() throws Exception {
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
+        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByGoogleUserId("uid-bob")).thenReturn(Optional.of(bob));
 
         monitor.checkPreClassJoins(event);
 
@@ -127,8 +160,7 @@ class MeetAttendanceMonitorTest {
 
     @Test
     void checkPreClassJoins_skipsAttendeesNotInStudentRegistry() throws Exception {
-        when(meetClient.getActiveParticipantEmails("abc-def")).thenReturn(List.of());
-        // alice@meet.com is an attendee but not registered
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of());
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.empty());
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
 
@@ -143,10 +175,11 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void startSessionPolling_recordsPresentForStudentsAlreadyInMeeting() throws Exception {
-        when(meetClient.getActiveParticipantEmails("abc-def"))
-                .thenReturn(List.of("alice@meet.com", "bob@meet.com"));
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByGoogleUserId("uid-bob")).thenReturn(Optional.of(bob));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
         when(taskScheduler.scheduleAtFixedRate(any(Runnable.class), any(Duration.class)))
@@ -155,7 +188,6 @@ class MeetAttendanceMonitorTest {
         monitor.startSessionPolling(event);
 
         ArgumentCaptor<Attendance> captor = ArgumentCaptor.forClass(Attendance.class);
-        // should save PRESENT for both students
         verify(attendanceRepository, org.mockito.Mockito.times(2)).save(captor.capture());
         assertThat(captor.getAllValues()).allMatch(a -> a.getStatus() == AttendanceStatus.PRESENT);
     }
@@ -163,10 +195,10 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void startSessionPolling_doesNotDuplicateAttendanceIfAlreadyRecorded() throws Exception {
-        when(meetClient.getActiveParticipantEmails("abc-def")).thenReturn(List.of("alice@meet.com"));
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT));
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
-        // Alice already has an attendance record
+        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.of(alice));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(eq(1L), anyString(), any()))
                 .thenReturn(Optional.of(Attendance.builder().student(alice)
                         .calendarEventId("evt-1").date(LocalDate.now())
@@ -176,8 +208,6 @@ class MeetAttendanceMonitorTest {
 
         monitor.startSessionPolling(event);
 
-        // Only one save (for bob, who would have been absent if present — but bob isn't active here)
-        // Alice's duplicate is suppressed
         verify(attendanceRepository, never()).save(argThat(a -> a.getStudent().equals(alice)));
     }
 
@@ -186,26 +216,22 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void pollingTick_marksLateAndNotifiesForDelayedJoiner() throws Exception {
-        // Nobody present at T+0
-        when(meetClient.getActiveParticipantEmails("abc-def"))
-                .thenReturn(List.of())                          // initial snapshot: empty
-                .thenReturn(List.of("alice@meet.com"));         // first poll: Alice joins
+        when(meetClient.getActiveParticipants("abc-def"))
+                .thenReturn(List.of())                                   // initial snapshot: empty
+                .thenReturn(List.of(ALICE_PARTICIPANT));                  // first poll: Alice joins
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.of(alice));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
 
-        // Capture the polling runnable so we can invoke it manually
         ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
         when(taskScheduler.scheduleAtFixedRate(runnableCaptor.capture(), any(Duration.class)))
                 .thenReturn(mock(ScheduledFuture.class));
 
         monitor.startSessionPolling(event);
-
-        // Simulate one poll tick
         runnableCaptor.getValue().run();
 
-        // Alice joined late
         ArgumentCaptor<Attendance> attendanceCaptor = ArgumentCaptor.forClass(Attendance.class);
         verify(attendanceRepository, org.mockito.Mockito.atLeastOnce()).save(attendanceCaptor.capture());
         assertThat(attendanceCaptor.getAllValues())
@@ -217,11 +243,12 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void pollingTick_notifiesAllPresentWhenEveryoneAccountedFor() throws Exception {
-        // Both present at T+0
-        when(meetClient.getActiveParticipantEmails("abc-def"))
-                .thenReturn(List.of("alice@meet.com", "bob@meet.com"));
+        when(meetClient.getActiveParticipants("abc-def"))
+                .thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByGoogleUserId("uid-bob")).thenReturn(Optional.of(bob));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
 
@@ -230,8 +257,6 @@ class MeetAttendanceMonitorTest {
                 .thenReturn(mock(ScheduledFuture.class));
 
         monitor.startSessionPolling(event);
-
-        // Trigger poll — both already in seenIds, so notifyAllPresent fires
         runnableCaptor.getValue().run();
 
         verify(notificationService).notifyAllPresent(event);
@@ -243,7 +268,6 @@ class MeetAttendanceMonitorTest {
     void finalizeSession_marksAbsentAndNotifiesForMissingStudents() {
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
-        // No attendance record exists for either student
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
 
@@ -260,12 +284,10 @@ class MeetAttendanceMonitorTest {
     void finalizeSession_doesNotMarkAbsentIfAttendanceAlreadyRecorded() {
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
-        // Alice already marked present
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(eq(1L), anyString(), any()))
                 .thenReturn(Optional.of(Attendance.builder().student(alice)
                         .calendarEventId("evt-1").date(LocalDate.now())
                         .status(AttendanceStatus.PRESENT).build()));
-        // Bob has no record
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(eq(2L), anyString(), any()))
                 .thenReturn(Optional.empty());
 
@@ -311,7 +333,6 @@ class MeetAttendanceMonitorTest {
         monitor.scheduleEventsForToday();
         int firstCount = monitor.getUpcomingChecks().size();
 
-        // Second call with empty events clears previous checks
         when(calendarSyncService.getTodaysEvents()).thenReturn(List.of());
         monitor.scheduleEventsForToday();
 

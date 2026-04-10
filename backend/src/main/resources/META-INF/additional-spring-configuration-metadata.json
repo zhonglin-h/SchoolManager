@@ -1,0 +1,49 @@
+{
+  "properties": [
+    {
+      "name": "app.principal.email",
+      "type": "java.lang.String",
+      "description": "Email address of the school principal, used for notifications and attendance filtering."
+    },
+    {
+      "name": "app.notifications.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether automated email notifications are enabled.",
+      "defaultValue": true
+    },
+    {
+      "name": "app.attendance.end-buffer-minutes",
+      "type": "java.lang.Integer",
+      "description": "Minutes after a class ends before attendance is finalized.",
+      "defaultValue": 5
+    },
+    {
+      "name": "app.meet.mock",
+      "type": "java.lang.Boolean",
+      "description": "Use the mock Meet client instead of the real Google Meet API.",
+      "defaultValue": false
+    },
+    {
+      "name": "app.meet.mock.active-names",
+      "type": "java.lang.String",
+      "description": "Comma-separated list of display names treated as active participants in mock mode."
+    },
+    {
+      "name": "google.calendar.id",
+      "type": "java.lang.String",
+      "description": "Google Calendar ID to sync events from."
+    },
+    {
+      "name": "google.client-secret.path",
+      "type": "java.lang.String",
+      "description": "Path to the OAuth client secret JSON file.",
+      "defaultValue": "./client_secret.json"
+    },
+    {
+      "name": "google.tokens.dir",
+      "type": "java.lang.String",
+      "description": "Directory where OAuth tokens are stored.",
+      "defaultValue": "./data/tokens"
+    }
+  ]
+}

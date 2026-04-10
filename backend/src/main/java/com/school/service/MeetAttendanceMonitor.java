@@ -4,9 +4,11 @@ import com.school.entity.Attendance;
 import com.school.entity.AttendanceStatus;
 import com.school.entity.Student;
 import com.school.integration.MeetClient;
+import com.school.integration.MeetParticipant;
 import com.school.model.CalendarEvent;
 import com.school.repository.AttendanceRepository;
 import com.school.repository.StudentRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -27,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledFuture;
 
+@Slf4j
 @Service
 public class MeetAttendanceMonitor {
 
@@ -136,19 +139,22 @@ public class MeetAttendanceMonitor {
                 notificationService.notifyMeetingNotStarted(event, type);
             }
         } catch (Exception e) {
+            log.warn("Failed to check meeting started for {}: {}", event.getId(), e.getMessage());
         }
     }
 
     public void checkPreClassJoins(CalendarEvent event) {
         try {
-            List<String> activeEmails = googleMeetClient.getActiveParticipantEmails(event.getSpaceCode());
+            List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
             List<Student> expectedStudents = getExpectedStudents(event);
+            Set<Long> presentIds = resolveAndAutoLearn(participants);
             for (Student student : expectedStudents) {
-                if (!activeEmails.contains(student.getMeetEmail())) {
+                if (!presentIds.contains(student.getId())) {
                     notificationService.notifyNotYetJoined(event, student);
                 }
             }
         } catch (Exception e) {
+            log.warn("Failed pre-class join check for {}: {}", event.getId(), e.getMessage());
         }
     }
 
@@ -157,23 +163,25 @@ public class MeetAttendanceMonitor {
         Set<Long> seenStudentIds = new HashSet<>();
 
         try {
-            List<String> activeEmails = googleMeetClient.getActiveParticipantEmails(event.getSpaceCode());
+            List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
+            Set<Long> presentIds = resolveAndAutoLearn(participants);
             for (Student student : expectedStudents) {
-                if (activeEmails.contains(student.getMeetEmail())) {
+                if (presentIds.contains(student.getId())) {
                     seenStudentIds.add(student.getId());
                     recordAttendance(student, event, AttendanceStatus.PRESENT);
                 }
             }
         } catch (Exception e) {
+            log.warn("Failed session start poll for {}: {}", event.getId(), e.getMessage());
         }
 
         ScheduledFuture<?>[] futureHolder = new ScheduledFuture<?>[1];
         futureHolder[0] = taskScheduler.scheduleAtFixedRate(() -> {
             try {
-                List<String> activeEmails = googleMeetClient.getActiveParticipantEmails(event.getSpaceCode());
+                List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
+                Set<Long> presentIds = resolveAndAutoLearn(participants);
                 for (Student student : expectedStudents) {
-                    if (!seenStudentIds.contains(student.getId())
-                            && activeEmails.contains(student.getMeetEmail())) {
+                    if (!seenStudentIds.contains(student.getId()) && presentIds.contains(student.getId())) {
                         seenStudentIds.add(student.getId());
                         recordAttendance(student, event, AttendanceStatus.LATE);
                         notificationService.notifyArrival(event, student);
@@ -183,11 +191,10 @@ public class MeetAttendanceMonitor {
                 if (seenStudentIds.size() >= expectedStudents.size() && !expectedStudents.isEmpty()) {
                     notificationService.notifyAllPresent(event);
                     ScheduledFuture<?> future = pollingFutures.remove(event.getId());
-                    if (future != null) {
-                        future.cancel(false);
-                    }
+                    if (future != null) future.cancel(false);
                 }
             } catch (Exception e) {
+                log.warn("Failed polling for {}: {}", event.getId(), e.getMessage());
             }
         }, java.time.Duration.ofSeconds(60));
 
@@ -196,9 +203,7 @@ public class MeetAttendanceMonitor {
 
     public void finalizeSession(CalendarEvent event) {
         ScheduledFuture<?> future = pollingFutures.remove(event.getId());
-        if (future != null) {
-            future.cancel(false);
-        }
+        if (future != null) future.cancel(false);
 
         List<Student> expectedStudents = getExpectedStudents(event);
         LocalDate today = LocalDate.now();
@@ -213,11 +218,42 @@ public class MeetAttendanceMonitor {
         }
     }
 
+    /**
+     * Resolves a list of Meet participants to student IDs.
+     * Matching priority: googleUserId → displayName (case-insensitive).
+     * When a match is made via displayName and the student has no googleUserId yet, it is saved automatically.
+     *
+     * @return set of matched student IDs
+     */
+    private Set<Long> resolveAndAutoLearn(List<MeetParticipant> participants) {
+        Set<Long> matched = new HashSet<>();
+        for (MeetParticipant participant : participants) {
+            Optional<Student> student = Optional.empty();
+
+            if (participant.googleUserId() != null) {
+                student = studentRepository.findByGoogleUserId(participant.googleUserId());
+            }
+
+            if (student.isEmpty() && participant.displayName() != null) {
+                student = studentRepository.findByNameIgnoreCase(participant.displayName());
+                // Auto-learn: persist the googleUserId so future lookups skip the name match
+                if (student.isPresent() && participant.googleUserId() != null
+                        && student.get().getGoogleUserId() == null) {
+                    student.get().setGoogleUserId(participant.googleUserId());
+                    studentRepository.save(student.get());
+                    log.info("Linked googleUserId {} to student '{}'",
+                            participant.googleUserId(), student.get().getName());
+                }
+            }
+
+            student.ifPresent(s -> matched.add(s.getId()));
+        }
+        return matched;
+    }
+
     private List<Student> getExpectedStudents(CalendarEvent event) {
         List<Student> students = new ArrayList<>();
-        if (event.getAttendeeEmails() == null) {
-            return students;
-        }
+        if (event.getAttendeeEmails() == null) return students;
         for (String email : event.getAttendeeEmails()) {
             studentRepository.findByMeetEmail(email).ifPresent(students::add);
         }

@@ -7,5 +7,5 @@ public interface MeetClient {
 
     boolean isMeetingActive(String spaceCode) throws IOException, InterruptedException;
 
-    List<String> getActiveParticipantEmails(String spaceCode) throws IOException, InterruptedException;
+    List<MeetParticipant> getActiveParticipants(String spaceCode) throws IOException, InterruptedException;
 }

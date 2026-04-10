@@ -8,38 +8,39 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Stub Meet client for local development without a Google Workspace domain.
+ * Stub Meet client for local development.
  * Enable with app.meet.mock=true in application.properties.
  *
- * Set app.meet.mock.active-emails to a comma-separated list of emails that
- * should be treated as currently active in the meeting.
- * Leave empty to simulate an empty meeting (tests absent/not-joined paths).
+ * Set app.meet.mock.active-names to a comma-separated list of display names
+ * that should be treated as currently active in the meeting.
+ * Leave empty to simulate an empty meeting.
  */
 @Component
 @ConditionalOnProperty(name = "app.meet.mock", havingValue = "true")
 public class MockMeetClient implements MeetClient {
 
-    private final List<String> activeEmails;
+    private final List<MeetParticipant> activeParticipants;
 
     public MockMeetClient(
-            @Value("${app.meet.mock.active-emails:}") String activeEmailsCsv) {
-        if (activeEmailsCsv == null || activeEmailsCsv.isBlank()) {
-            this.activeEmails = List.of();
+            @Value("${app.meet.mock.active-names:}") String activeNamesCsv) {
+        if (activeNamesCsv == null || activeNamesCsv.isBlank()) {
+            this.activeParticipants = List.of();
         } else {
-            this.activeEmails = Arrays.stream(activeEmailsCsv.split(","))
+            this.activeParticipants = Arrays.stream(activeNamesCsv.split(","))
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())
+                    .map(name -> new MeetParticipant(null, name))
                     .toList();
         }
     }
 
     @Override
     public boolean isMeetingActive(String spaceCode) {
-        return !activeEmails.isEmpty();
+        return !activeParticipants.isEmpty();
     }
 
     @Override
-    public List<String> getActiveParticipantEmails(String spaceCode) {
-        return activeEmails;
+    public List<MeetParticipant> getActiveParticipants(String spaceCode) {
+        return activeParticipants;
     }
 }

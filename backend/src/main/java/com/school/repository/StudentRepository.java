@@ -9,4 +9,6 @@ import java.util.Optional;
 public interface StudentRepository extends JpaRepository<Student, Long> {
     List<Student> findByActiveTrue();
     Optional<Student> findByMeetEmail(String meetEmail);
+    Optional<Student> findByGoogleUserId(String googleUserId);
+    Optional<Student> findByNameIgnoreCase(String name);
 }
