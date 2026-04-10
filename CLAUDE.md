@@ -74,19 +74,20 @@ frontend/src/
   hooks/           # Custom React hooks (TanStack Query wrappers)
 ```
 
-### Data Model (11 entities)
+### Data Model (13 entities)
+- **Student** — `meetEmail` for Meet matching, `classroomEmail` for Classroom matching; soft-deleted via `active` flag
 - **Term** — academic periods
-- **Student** — soft-deleted via `active` flag
 - **Teacher** — includes `hourlyRate`
-- **Class** — links to Teacher and Term; holds `googleMeetLink` and `googleClassroomId`
+- **Class** — links to Teacher and Term; holds `calendarEventId`, `googleMeetLink`, `googleClassroomId`, and local schedule fields
+- **ClassCancellation** — individual cancelled sessions synced from Google Calendar
 - **Enrollment** — many-to-many Student ↔ Class
 - **Attendance** — per student per class session (`PRESENT` / `ABSENT` / `LATE`)
-- **Assignment** — synced from Google Classroom; has `teacherPostedOnTime` flag (within 2 days of class date)
+- **Assignment** — synced from Google Classroom; has `teacherPostedOnTime` flag
 - **StudentSubmission** — synced from Classroom; has `submittedOnTime` flag
 - **Invoice** — student billing (`UNPAID` / `PAID` / `OVERDUE`)
 - **Payment** — records individual payments against invoices
 - **SessionLog** — teacher work sessions for payroll (duration in minutes)
-- **NotificationLog** — immutable audit trail of every notification sent
+- **NotificationLog** — immutable audit trail of every notification sent; deduplication key is `(studentId, classId, date, type)`
 
 ### API Design
 - Backend exposes a REST API at `http://localhost:8080`
@@ -95,12 +96,12 @@ frontend/src/
 
 ### Google API Integration
 - Uses a **Service Account** (credentials at `./service-account.json`, never committed)
-- **Google Classroom**: Phase 1 read-only (sync enrollments, pull assignments/submissions); Phase 2 adds course provisioning
-- **Google Meet**: live attendance monitor via Meet REST API — `@Scheduled` poller queries `spaces/{spaceId}/participants` during active sessions
-- **Google Calendar**: Phase 2 — create recurring events and generate Meet links stored on the Class record
+- **Google Calendar**: source of truth for class schedules; app reads RRULE + attendees + Meet link from events; nightly exception sync populates `ClassCancellation`
+- **Google Meet**: live attendance monitor via Spring `TaskScheduler` — schedules per-class polling tasks at T−15min, T−5min, class start, and class end; queries `spaces/{spaceId}/participants`
+- **Google Classroom**: roster sync and assignment/submission pull; matched by `classroomEmail`
 
 ### Notification Triggers
-Automated notifications are logged to `NotificationLog`. See `High Level Design.md` for the full trigger table and phase breakdown.
+Automated notifications are logged to `NotificationLog`. See `High Level Design.md` for the full trigger table.
 
 ### Runtime Directories
 - `./data/` — H2 database files (created at runtime, not committed)
@@ -128,8 +129,11 @@ Credential files (`service-account.json`, `.env.local`) must never be committed.
 
 ## Development Phases
 
-1. **Phase 1** — Core CRUD + Classroom read-only sync + live Meet attendance monitor + absent/late email notifications
-2. **Phase 2** — Dashboard UI, manual attendance marking, Google Calendar/Meet link generation, Classroom course provisioning
-3. **Phase 3** — Payments and payroll
-4. **Phase 4** — Remaining notifications (SMS via Twilio, invoice/payroll/submission triggers)
-5. **Phase 5** — XLSX exports, desktop launcher scripts, polish
+See `Build Phases.md` for the full incremental delivery plan. Summary:
+
+1. **Phase 1** — Student registry + Calendar-driven Meet attendance monitor + email notifications
+2. **Phase 2** — Local class management + full Calendar integration + dashboard
+3. **Phase 3** — Google Classroom roster and assignment sync
+4. **Phase 4** — Payments and payroll
+5. **Phase 5** — Remaining notifications (SMS via Twilio + additional triggers)
+6. **Phase 6** — XLSX exports, desktop launcher scripts, polish

@@ -12,14 +12,14 @@ A local, single-user school management tool for the principal. No authentication
 
 | Layer | Choice |
 |---|---|
-| Framework | Spring Boot (Java/Kotlin) |
+| Framework | Spring Boot (Java) |
 | Database | H2 (embedded, file-persisted) |
 | ORM | Spring Data JPA / Hibernate |
 | Authentication | None |
 | XLSX Export | Apache POI |
 | Email | Spring Mail (Gmail SMTP) |
 | SMS | Twilio API |
-| Build | Maven or Gradle |
+| Build | Maven |
 
 ### Google Integration Setup
 
@@ -29,6 +29,8 @@ Uses a **Google Service Account** — configured once, no OAuth prompts.
 # application.properties
 google.credentials.path=./service-account.json
 google.calendar.id=principal@school.com
+
+app.principal.email=principal@school.com
 
 spring.mail.host=smtp.gmail.com
 spring.mail.username=school@gmail.com
@@ -40,32 +42,45 @@ twilio.from-number=+1...
 ```
 
 Required Google API scopes:
-- `https://www.googleapis.com/auth/classroom.courses`
-- `https://www.googleapis.com/auth/classroom.rosters`
-- `https://www.googleapis.com/auth/classroom.coursework.students`
-- `https://www.googleapis.com/auth/calendar`
-- `https://www.googleapis.com/auth/meetings.space.readonly`  ← Meet participant data
+
+| Scope | Purpose |
+|---|---|
+| `calendar.readonly` | Read today's events, attendees, Meet links |
+| `calendar` (full) | Create recurring events + Meet links |
+| `meetings.space.readonly` | Meet participant data |
+| `classroom.courses` | Classroom course access |
+| `classroom.rosters` | Enrollment sync |
+| `classroom.coursework.students` | Assignment/submission sync |
 
 ---
 
 ### Data Model
 
 ```
+Student
+  id, name, meetEmail, classroomEmail, parentEmail, parentPhone
+  active (soft delete)
+  ← meetEmail: matched against Calendar attendees + Meet participants
+  ← classroomEmail: matched against Classroom roster; may differ from meetEmail
+
 Term
   id, name, startDate, endDate
 
-Student
-  id, name, email, phone, parentEmail, parentPhone
-  enrolledDate, active (soft delete)
-
 Teacher
-  id, name, email, hourlyRate
+  id, name, email, meetEmail, hourlyRate
+  ← meetEmail: Google account used to join Meet; matched against Calendar attendees + Meet participants
 
 Class
   id, name, teacherId, termId
-  schedule (day/time)
+  scheduleDays       ← e.g. "MON,WED" — read from Calendar RRULE BYDAY
+  startTime          ← from Calendar event start
+  endTime            ← from Calendar event end
+  calendarEventId    ← base recurring event ID; used for exception sync
   googleMeetLink
   googleClassroomId
+
+ClassCancellation
+  id, classId, date  ← populated nightly by Calendar sync; poller skips these dates
 
 Enrollment
   studentId → classId (many-to-many)
@@ -73,11 +88,12 @@ Enrollment
 Attendance
   id, studentId, classId, date
   status (PRESENT | ABSENT | LATE)
+  ← date identifies which session within the recurring class
 
 Assignment
-  id, classId, sessionId
+  id, classId, classDate
   googleCourseWorkId
-  teacherPostedOnTime  (boolean — posted within 2 days of class date)
+  teacherPostedOnTime  (boolean — creationTime within 2 days of classDate)
   dueDate
 
 StudentSubmission
@@ -95,7 +111,9 @@ SessionLog
   id, teacherId, classId, date, durationMinutes
 
 NotificationLog
-  id, recipientEmail, recipientPhone, type, message, sentAt, channel (EMAIL | SMS)
+  id, studentId, classId, date, type, message, sentAt, channel (EMAIL | SMS)
+  ← (studentId, classId, date, type) is the deduplication key
+  ← studentId nullable for principal-only notifications (e.g. meeting not started)
 ```
 
 ---
@@ -108,7 +126,7 @@ GET    /students
 POST   /students
 GET    /students/{id}
 PUT    /students/{id}
-DELETE /students/{id}          # soft delete (sets active = false)
+DELETE /students/{id}                  # soft delete (sets active = false)
 
 # Teachers
 GET    /teachers
@@ -123,31 +141,35 @@ PUT    /terms/{id}
 
 # Classes
 GET    /classes
-POST   /classes                # Phase 1: stores googleClassroomId manually; Phase 2: also auto-creates Meet link + Classroom course
+POST   /classes                        # links to existing Calendar event; reads schedule + Meet link from it
 PUT    /classes/{id}
-POST   /classes/{id}/roster-sync       # sync students from Classroom
+POST   /classes/{id}/calendar-sync     # on-demand exception sync for this class
+POST   /classes/{id}/roster-sync       # sync enrolled students from Classroom
 
 # Attendance
-POST   /attendance                  # bulk mark for a session
-GET    /attendance/student/{id}     # full history
+GET    /attendance/today               # today's sessions with per-session attendance summary
+GET    /attendance/student/{id}        # student's full attendance history
 
 # Assignments & Submissions
-POST   /assignments/sync/{classId}  # pull from Classroom, set compliance flags
-GET    /assignments/class/{classId} # teacher posting compliance view
-GET    /submissions/student/{id}    # student submission compliance view
+POST   /assignments/sync/{classId}     # pull from Classroom, compute compliance flags
+GET    /assignments/class/{classId}    # teacher posting compliance view
+GET    /submissions/student/{id}       # student submission compliance view
 
 # Payments
-GET    /payments/outstanding        # all unpaid invoices, sorted by due date
-POST   /payments/invoice            # create invoice for a student
-POST   /payments/{invoiceId}/pay    # record a payment
+GET    /payments/outstanding           # all unpaid invoices, sorted by due date
+POST   /payments/invoice              # create invoice for a student
+POST   /payments/{invoiceId}/pay      # record a payment
 
 # Payroll
-GET    /payroll                     # all teachers + amount currently owed
-POST   /payroll/session             # log a session for a teacher
-POST   /payroll/{teacherId}/pay     # mark pay period as settled
+GET    /payroll                        # all teachers + amount currently owed
+POST   /payroll/session               # log a session for a teacher
+POST   /payroll/{teacherId}/pay       # mark pay period as settled
 
 # Notifications
-GET    /notifications               # view notification log
+GET    /notifications                  # notification log
+
+# Calendar
+POST   /calendar/sync                  # manually re-fetch today's events
 
 # Export (XLSX)
 GET    /export/students
@@ -155,50 +177,62 @@ GET    /export/attendance
 GET    /export/submissions
 GET    /export/payments
 GET    /export/payroll
-GET    /export/full                 # multi-sheet workbook (also auto-saves to /backups)
+GET    /export/full                    # multi-sheet workbook (also auto-saves to /backups)
 ```
 
 ---
 
 ### Google Integrations
 
-#### Google Meet (via Calendar API) — Phase 2
-- `POST /classes` creates a Calendar event with a Meet link via `conferenceData`
-- Recurring classes use `RRULE` recurrence on the Calendar event
-- Meet link is stored on the `Class` record
+#### Google Calendar
 
-#### Live Meet Attendance Monitor (via Meet REST API) — Phase 1
-- A Spring `@Scheduled` task runs every ~60 seconds
-- Each tick identifies classes currently within their scheduled session window
-- For each active session, calls `spaces/{spaceId}/participants` (filtered by `latestEndTime IS NULL`) on the Meet REST API to list participants currently in the call
-- Each participant is matched to an enrolled student by Google account email
-- `PRESENT` is written when a student's first join event is seen; `LATE` if their `earliestStartTime` is beyond the configured grace period past class start
-- At session end (class end time + a short buffer), any enrolled student still without an `Attendance` row is written as `ABSENT`
-- Notifications fire once per student per session — deduplication prevents repeat emails across poller ticks
+- Principal manages class schedules in Google Calendar (source of truth for recurrence and exceptions)
+- When a class is registered in the app, the app reads the Calendar event's `RRULE` `BYDAY`, `start`, and `end` to populate local `Class` schedule fields; stores `calendarEventId` and Meet link from `conferenceData`
+- **Exception sync:** a nightly `@Scheduled` job calls `events.instances` for each Class's `calendarEventId` and writes cancelled instances to `ClassCancellation`
+- `POST /calendar/sync` and `POST /classes/{id}/calendar-sync` allow on-demand re-fetch (e.g. for last-minute cancellations)
 
-#### Google Classroom — Read (Phase 1) / Provision (Phase 2)
-- **Phase 1 (read-only):** `googleClassroomId` is set manually on the Class record; the app never creates or modifies Classroom courses
-  - `POST /classes/{id}/roster-sync` pulls enrolled students via `courses.students.list`
-  - `POST /assignments/sync/{classId}` pulls coursework and submissions:
-    - `teacherPostedOnTime` — coursework `creationTime` within 2 days of class date
-    - `submittedOnTime` — derived from Classroom's native `late` field on `studentSubmissions`
-- **Phase 2 (publish):** `POST /classes` additionally provisions a Classroom course and assigns the teacher
+#### Live Meet Attendance Monitor
+
+At startup and daily at midnight, fetches today's Calendar events. For each event with a Meet link, Spring `TaskScheduler` schedules the following tasks:
+
+| Time | Action |
+|---|---|
+| T − 15 min | Call `spaces/{spaceId}/participants`; if no active participants, notify principal "Meeting not started" |
+| T − 3 min | Snapshot who is present; notify principal of any students or teacher not yet joined; notify those students' parents |
+| T + 0 (start) | Snapshot present students and teacher; begin per-minute polling; notify principal as each new arrival joins, and once when everyone is present |
+| T + 0 → T + end | Poll every minute; mark each new joiner `LATE`; stop early once all expected students and teacher have been seen |
+| T + end + buffer | Mark all still-absent students `ABSENT`; send parent notifications; stop polling |
+
+- Roster = Calendar event `attendees`, matched to local `Student` records by `meetEmail` and local `Teacher` records by `meetEmail`
+- `PRESENT` on a student's or teacher's first join at or before T + 0; `LATE` on any join detected after T + 0
+- Notifications fire once per student per session — `NotificationLog` keyed on `(studentId, classId, date, type)` prevents duplicate sends
+- Principal notifications (meeting not started, arrivals, all-present) are keyed on `(classId, date, type)` with `studentId` nullable
+
+#### Google Classroom
+
+- `googleClassroomId` is set manually on the local `Class` record
+- `POST /classes/{id}/roster-sync` pulls enrolled students via `courses.students.list`; matches by `classroomEmail`
+- `POST /assignments/sync/{classId}` pulls coursework and submissions:
+  - `teacherPostedOnTime` — coursework `creationTime` within 2 days of `classDate`
+  - `submittedOnTime` — derived from Classroom's native `late` field on `studentSubmissions`
 
 ---
 
 ### Notifications
 
-#### Email & SMS Triggers
-
-| Trigger | Recipient | Channel | Phase |
-|---|---|---|---|
-| Student absent (detected by live monitor at session end) | Parent | Email | 1 |
-| Student late (detected by live monitor on delayed join) | Parent + Principal | Email | 1 |
-| Invoice overdue | Principal + Parent | Email + SMS | 4 |
-| Payment received | Principal | Email | 4 |
-| Teacher didn't post homework on time | Principal | Email | 4 |
-| Student missed submission deadline | Principal + Parent | Email | 4 |
-| Teacher payroll due | Principal | Email | 4 |
+| Trigger | Recipient | Channel |
+|---|---|---|
+| Meeting not started at T−15 min | Principal | Email |
+| Student / teacher not yet joined at T−3 min | Principal + Parent (per student) | Email |
+| Student or teacher arrived (after T+0) | Principal | Email |
+| All students and teacher present | Principal | Email |
+| Student absent (detected at session end) | Parent | Email |
+| Student late (detected on delayed join) | Parent + Principal | Email |
+| Invoice overdue | Principal + Parent | Email + SMS |
+| Payment received | Principal | Email |
+| Teacher didn't post homework on time | Principal | Email |
+| Student missed submission deadline | Principal + Parent | Email |
+| Teacher payroll due | Principal | Email |
 
 All sent notifications are recorded in `NotificationLog`.
 
@@ -240,6 +274,7 @@ Communicates with Spring Boot at `http://localhost:8080`.
 │  Classes    │                                  │
 │  Payments   │                                  │
 │  Payroll    │                                  │
+│  Notifications                                 │
 │  Export     │                                  │
 │             │                                  │
 └─────────────┴──────────────────────────────────┘
@@ -251,29 +286,15 @@ Single page app with persistent sidebar navigation. One React Router route per s
 
 ### Pages
 
-#### Dashboard (Default View)
-
-Two focal points on load:
-
-**Ongoing Classes**
-- Table: Class Name, Teacher, Time, Meet Link (clickable), Students Enrolled
-- Status badge: `IN SESSION` / `UPCOMING` / `DONE` based on current time
-
-**Today's Attendance**
-- Per-class summary: e.g. `18 / 20 present`
-- Click a class → per-student breakdown (Present / Absent / Late)
-- Mark attendance inline from this view
-
-**Alerts Panel**
-- Proactive issue feed, e.g.:
-  - "3 invoices overdue"
-  - "Teacher X hasn't posted homework for Class Y"
-  - "2 students absent 3+ times this month"
+#### Dashboard
+- **Ongoing Classes:** table of today's classes (from Calendar) with status badge `IN SESSION` / `UPCOMING` / `DONE`; Meet link clickable
+- **Today's Attendance:** per-class summary (e.g. `18 / 20 present`); click to expand per-student breakdown
+- **Alerts Panel:** proactive issue feed — overdue invoices, late homework, repeated absences
 
 #### Students
-- Searchable table: name, email, enrolled classes, outstanding balance
+- Searchable table: name, email, parent contact, enrolled classes, outstanding balance
 - Click a student → detail panel: attendance history, submission compliance, invoices
-- Inactive (soft-deleted) students hidden by default, toggleable
+- Inactive students hidden by default, toggleable
 
 #### Teachers
 - Table: name, hourly rate, amount currently owed
@@ -281,8 +302,8 @@ Two focal points on load:
 
 #### Classes
 - Table: class name, teacher, term, schedule, Meet link, Classroom link
-- Create class → form that triggers backend (auto-creates Meet + Classroom course)
-- Per-class view: roster, assignment compliance, sync button
+- Link class to an existing Google Calendar event
+- Per-class view: roster, assignment compliance, "Sync Calendar" and "Sync Roster" buttons
 
 #### Payments
 - Default view: outstanding invoices sorted by due date
@@ -291,13 +312,13 @@ Two focal points on load:
 
 #### Payroll
 - Table: teacher, hours this period, rate, total owed, paid status
-- Log session button
-- Mark paid button per teacher
+- Log session button; mark paid button per teacher
+
+#### Notifications
+- Log of all sent notifications: recipient, type, channel, timestamp
 
 #### Export
-- One button per export type
-- "Export All" button for the full multi-sheet workbook
-- Each triggers a file download from the backend
+- One button per export type; "Export All" for the full multi-sheet workbook
 
 ---
 
@@ -308,39 +329,3 @@ A `start.bat` (Windows) / `start.sh` (Mac/Linux) script that:
 2. Opens `http://localhost:3000` in the default browser
 
 The principal double-clicks the shortcut and the app is ready. No installation beyond Java and the JAR file.
-
----
-
-## Build Phases
-
-### Phase 1 — Core Data, Classroom Sync & Attendance Notifications
-- Spring Boot project setup, H2, JPA entities (all 11 entities including `NotificationLog`)
-- Basic CRUD endpoints for all core entities
-- Soft delete on students
-- React app + sidebar layout + routing
-- Students, Teachers, Classes pages (read/create/edit); Class form includes manual `googleClassroomId` field
-- **Google Classroom (read-only):** roster sync + assignment/submission pull with `teacherPostedOnTime` / `submittedOnTime` flags
-- **Live Meet attendance monitor:** `@Scheduled` poller queries Admin Reports API during active sessions; writes `PRESENT`/`LATE` during the session and `ABSENT` at session end
-- **Spring Mail setup:** email notifications fired by the monitor — absent → parent; late → parent + principal (once per student per session)
-- NotificationLog viewer in frontend
-
-### Phase 2 — Dashboard & Google Publishing
-- Dashboard: ongoing classes, today's attendance view, alerts panel
-- Attendance manual mark UI
-- Google Calendar/Meet link generation on class creation
-- Google Classroom course provisioning on class creation (publish side)
-
-### Phase 3 — Payments & Payroll
-- Invoice creation, payment recording, overdue status
-- Teacher session logging + payroll calculation
-- Payments and Payroll pages in frontend
-
-### Phase 4 — Remaining Notifications
-- Twilio SMS setup
-- Remaining notification triggers: invoice overdue (email + SMS), payment received, teacher late homework, missed submission, payroll due
-
-### Phase 5 — Export & Polish
-- Apache POI XLSX export for all entities
-- Export All + auto-backup to `/backups`
-- `start.bat` / `start.sh` desktop shortcut scripts
-- General UI polish, edge cases, error handling
