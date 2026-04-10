@@ -12,6 +12,7 @@ backups/
 
 # Local config overrides
 backend/src/main/resources/application-local.properties
+backend/bin/
 
 # Backend — Gradle
 backend/.gradle/
