@@ -54,8 +54,17 @@ export interface AttendanceEntry {
   inMeetNow: boolean
 }
 
+export interface GuestEntry {
+  googleUserId: string | null
+  displayName: string | null
+  personId: number | null
+  personType: 'STUDENT' | 'TEACHER' | null
+  registeredName: string | null
+}
+
 export interface AttendanceSummaryResponse {
   calendarEventId: string
+  spaceCode: string
   eventTitle: string
   date: string
   startTime: string
@@ -66,6 +75,7 @@ export interface AttendanceSummaryResponse {
   late: number
   absent: number
   students: AttendanceEntry[]
+  guests: GuestEntry[]
 }
 
 export interface AttendanceEntry2 {

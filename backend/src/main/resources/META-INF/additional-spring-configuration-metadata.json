@@ -6,6 +6,11 @@
       "description": "Email address of the school principal, used for notifications and attendance filtering."
     },
     {
+      "name": "app.principal.google-user-id",
+      "type": "java.lang.String",
+      "description": "Google User ID of the principal, used to exclude them from the guest list in meeting attendance."
+    },
+    {
       "name": "app.notifications.enabled",
       "type": "java.lang.Boolean",
       "description": "Whether automated email notifications are enabled.",

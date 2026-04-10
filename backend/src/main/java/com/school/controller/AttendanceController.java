@@ -42,19 +42,22 @@ public class AttendanceController {
     private final TeacherRepository teacherRepository;
     private final MeetClient meetClient;
     private final String principalEmail;
+    private final String principalGoogleUserId;
 
     public AttendanceController(CalendarSyncService calendarSyncService,
                                 AttendanceRepository attendanceRepository,
                                 StudentRepository studentRepository,
                                 TeacherRepository teacherRepository,
                                 MeetClient meetClient,
-                                @Value("${app.principal.email}") String principalEmail) {
+                                @Value("${app.principal.email}") String principalEmail,
+                                @Value("${app.principal.google-user-id:}") String principalGoogleUserId) {
         this.calendarSyncService = calendarSyncService;
         this.attendanceRepository = attendanceRepository;
         this.studentRepository = studentRepository;
         this.teacherRepository = teacherRepository;
         this.meetClient = meetClient;
         this.principalEmail = principalEmail;
+        this.principalGoogleUserId = principalGoogleUserId;
     }
 
     @GetMapping("/today")
@@ -130,6 +133,53 @@ public class AttendanceController {
 
             int totalExpected = entries.size();
 
+            // Guests: live participants not covered by the attendee list
+            Set<String> coveredRefs = new HashSet<>();
+            for (var entry : entries) {
+                if (entry.personId() != null && entry.personType() != null) {
+                    coveredRefs.add(entry.personType() + ":" + entry.personId());
+                }
+            }
+            // Also exclude the principal (skipped from entries but may still be in the meeting)
+            studentRepository.findByMeetEmail(principalEmail)
+                    .ifPresent(s -> coveredRefs.add("STUDENT:" + s.getId()));
+            teacherRepository.findByMeetEmail(principalEmail)
+                    .ifPresent(t -> coveredRefs.add("TEACHER:" + t.getId()));
+            List<AttendanceSummaryResponse.GuestEntry> guests = new ArrayList<>();
+            for (MeetParticipant p : liveParticipants) {
+                if (!principalGoogleUserId.isBlank() && principalGoogleUserId.equals(p.googleUserId())) continue;
+                var studentOpt = p.googleUserId() != null
+                        ? studentRepository.findByGoogleUserId(p.googleUserId()) : java.util.Optional.<Student>empty();
+                if (studentOpt.isEmpty() && p.displayName() != null) {
+                    studentOpt = studentRepository.findByMeetDisplayNameIgnoreCase(p.displayName())
+                            .or(() -> studentRepository.findByNameIgnoreCase(p.displayName()));
+                }
+                if (studentOpt.isPresent()) {
+                    if (!coveredRefs.contains("STUDENT:" + studentOpt.get().getId())) {
+                        guests.add(new AttendanceSummaryResponse.GuestEntry(
+                                p.googleUserId(), p.displayName(),
+                                studentOpt.get().getId(), "STUDENT", studentOpt.get().getName()));
+                    }
+                    continue;
+                }
+                var teacherOpt = p.googleUserId() != null
+                        ? teacherRepository.findByGoogleUserId(p.googleUserId()) : java.util.Optional.<Teacher>empty();
+                if (teacherOpt.isEmpty() && p.displayName() != null) {
+                    teacherOpt = teacherRepository.findByMeetDisplayNameIgnoreCase(p.displayName())
+                            .or(() -> teacherRepository.findByNameIgnoreCase(p.displayName()));
+                }
+                if (teacherOpt.isPresent()) {
+                    if (!coveredRefs.contains("TEACHER:" + teacherOpt.get().getId())) {
+                        guests.add(new AttendanceSummaryResponse.GuestEntry(
+                                p.googleUserId(), p.displayName(),
+                                teacherOpt.get().getId(), "TEACHER", teacherOpt.get().getName()));
+                    }
+                    continue;
+                }
+                guests.add(new AttendanceSummaryResponse.GuestEntry(
+                        p.googleUserId(), p.displayName(), null, null, null));
+            }
+
             summaries.add(new AttendanceSummaryResponse(
                     event.getId(),
                     event.getSpaceCode(),
@@ -142,7 +192,8 @@ public class AttendanceController {
                     present,
                     0,
                     0,
-                    entries
+                    entries,
+                    guests
             ));
         }
 

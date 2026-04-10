@@ -18,7 +18,8 @@ public record AttendanceSummaryResponse(
         int present,
         int late,
         int absent,
-        List<AttendanceEntry> students
+        List<AttendanceEntry> students,
+        List<GuestEntry> guests
 ) {
     public record AttendanceEntry(
             Long personId,
@@ -28,5 +29,14 @@ public record AttendanceSummaryResponse(
             AttendanceStatus status,
             boolean registered,
             boolean inMeetNow
+    ) {}
+
+    /** A participant currently in the meeting who was not on the calendar invite list. */
+    public record GuestEntry(
+            String googleUserId,
+            String displayName,
+            Long personId,
+            String personType,
+            String registeredName
     ) {}
 }
