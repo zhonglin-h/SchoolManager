@@ -21,12 +21,20 @@ public class NotificationService {
     @Value("${app.principal.email}")
     private String principalEmail;
 
+    @Value("${app.notifications.enabled:true}")
+    private boolean notificationsEnabled;
+
     public NotificationService(NotificationLogRepository notificationLogRepository, EmailClient emailClient) {
         this.notificationLogRepository = notificationLogRepository;
         this.emailClient = emailClient;
     }
 
+    public boolean isNotificationsEnabled() {
+        return notificationsEnabled;
+    }
+
     public void notifyMeetingNotStarted(CalendarEvent event, String type) {
+        if (!notificationsEnabled) return;
         if (notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNull(
                 event.getId(), LocalDate.now(), type)) {
             return;
@@ -38,6 +46,7 @@ public class NotificationService {
     }
 
     public void notifyNotYetJoined(CalendarEvent event, Student student) {
+        if (!notificationsEnabled) return;
         String type = "NOT_YET_JOINED_3";
         if (notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
                 student.getId(), event.getId(), LocalDate.now(), type)) {
@@ -51,6 +60,7 @@ public class NotificationService {
     }
 
     public void notifyArrival(CalendarEvent event, Student student) {
+        if (!notificationsEnabled) return;
         String type = "ARRIVAL";
         if (notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
                 student.getId(), event.getId(), LocalDate.now(), type)) {
@@ -63,6 +73,7 @@ public class NotificationService {
     }
 
     public void notifyAllPresent(CalendarEvent event) {
+        if (!notificationsEnabled) return;
         String type = "ALL_PRESENT";
         if (notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNull(
                 event.getId(), LocalDate.now(), type)) {
@@ -75,6 +86,7 @@ public class NotificationService {
     }
 
     public void notifyLate(CalendarEvent event, Student student) {
+        if (!notificationsEnabled) return;
         String type = "LATE";
         if (notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
                 student.getId(), event.getId(), LocalDate.now(), type)) {
@@ -88,6 +100,7 @@ public class NotificationService {
     }
 
     public void notifyAbsent(CalendarEvent event, Student student) {
+        if (!notificationsEnabled) return;
         String type = "ABSENT";
         if (notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
                 student.getId(), event.getId(), LocalDate.now(), type)) {

@@ -105,6 +105,17 @@ export async function getNotifications(): Promise<NotificationLogResponse[]> {
   return data
 }
 
+// ── Settings ───────────────────────────────────────────────────────────────
+
+export interface AppSettings {
+  notificationsEnabled: boolean
+}
+
+export async function getSettings(): Promise<AppSettings> {
+  const { data } = await api.get<AppSettings>('/settings')
+  return data
+}
+
 // ── Calendar ───────────────────────────────────────────────────────────────
 
 export async function syncCalendar(): Promise<void> {

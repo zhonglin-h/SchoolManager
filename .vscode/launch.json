@@ -7,7 +7,7 @@
       "request": "launch",
       "mainClass": "com.school.SchoolManagerApp",
       "cwd": "${workspaceFolder:SchoolManager}/backend",
-      "vmArgs": "-Dspring.profiles.active=default",
+      "vmArgs": "-Dspring.profiles.active=local",
       "env": {}
     },
     {
