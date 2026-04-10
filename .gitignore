@@ -10,6 +10,9 @@ backend/client_secret.json
 data/
 backups/
 
+# Local config overrides
+backend/src/main/resources/application-local.properties
+
 # Backend — Gradle
 backend/.gradle/
 backend/build/
