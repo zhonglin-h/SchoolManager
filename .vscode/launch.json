@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Backend: Spring Boot",
+      "request": "launch",
+      "mainClass": "com.school.SchoolManagerApp",
+      "projectName": "school-manager",
+      "cwd": "${workspaceFolder}/backend",
+      "vmArgs": "-Dspring.profiles.active=default",
+      "env": {}
+    },
+    {
+      "type": "chrome",
+      "name": "Frontend: Chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/frontend/src",
+      "preLaunchTask": "Frontend: Dev Server"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack",
+      "configurations": ["Backend: Spring Boot", "Frontend: Chrome"],
+      "stopAll": true
+    }
+  ]
+}
