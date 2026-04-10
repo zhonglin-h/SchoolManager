@@ -19,7 +19,7 @@ A local, single-user school management tool for the principal. No authentication
 | XLSX Export | Apache POI |
 | Email | Spring Mail (Gmail SMTP) |
 | SMS | Twilio API |
-| Build | Maven |
+| Build | Gradle |
 
 ### Google Integration Setup
 

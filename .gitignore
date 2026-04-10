@@ -15,13 +15,15 @@ backend/.gradle/
 backend/build/
 backend/out/
 
-# Backend — Maven (if ever used)
-backend/target/
+# Compiled class files (anywhere)
+**/*.class
+
 
 # Frontend
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/package-lock.json
 
 # IDE
 .vscode/settings.json

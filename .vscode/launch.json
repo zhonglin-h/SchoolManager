@@ -6,8 +6,7 @@
       "name": "Backend: Spring Boot",
       "request": "launch",
       "mainClass": "com.school.SchoolManagerApp",
-      "projectName": "school-manager",
-      "cwd": "${workspaceFolder}/backend",
+      "cwd": "${workspaceFolder:SchoolManager}/backend",
       "vmArgs": "-Dspring.profiles.active=default",
       "env": {}
     },
@@ -16,7 +15,7 @@
       "name": "Frontend: Chrome",
       "request": "launch",
       "url": "http://localhost:3000",
-      "webRoot": "${workspaceFolder}/frontend/src",
+      "webRoot": "${workspaceFolder:SchoolManager}/frontend/src",
       "preLaunchTask": "Frontend: Dev Server"
     }
   ],

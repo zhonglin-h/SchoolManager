@@ -10,7 +10,7 @@ School Manager is a local, single-user full-stack web application for a school p
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Spring Boot (Java), Maven |
+| Backend | Spring Boot (Java), Gradle |
 | Database | H2 (embedded, file-persisted at `./data/schooldb`) |
 | ORM | Spring Data JPA / Hibernate |
 | Frontend | React 18 + TypeScript + Vite |
@@ -28,28 +28,28 @@ School Manager is a local, single-user full-stack web application for a school p
 ### Backend (once scaffolded)
 ```bash
 cd backend
-mvn spring-boot:run        # Start on :8080
-mvn clean install          # Build
-mvn test                   # Run all tests
-mvn test -Dtest=ClassName  # Run a single test class
+./gradlew bootRun                          # Start on :8080
+./gradlew build                            # Build
+./gradlew test                             # Run all tests
+./gradlew test --tests "*.ClassName"       # Run a single test class
 ```
 
 ### Frontend (once scaffolded)
 ```bash
 cd frontend
-npm install
-npm run dev        # Start Vite dev server on :3000
-npm run build      # Production build
-npm run lint       # ESLint
+pnpm install
+pnpm dev           # Start Vite dev server on :3000
+pnpm build         # Production build
+pnpm lint          # ESLint
 ```
 
 ### Full stack
 ```bash
 # Terminal 1
-cd backend && mvn spring-boot:run
+cd backend && ./gradlew bootRun
 
 # Terminal 2
-cd frontend && npm run dev
+cd frontend && pnpm dev
 # Visit http://localhost:3000
 ```
 

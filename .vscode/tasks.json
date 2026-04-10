@@ -4,8 +4,8 @@
     {
       "label": "Backend: Gradle Build",
       "type": "shell",
-      "command": "${workspaceFolder}/backend/gradlew",
-      "args": ["build", "-p", "${workspaceFolder}/backend"],
+      "command": "${workspaceFolder:SchoolManager}/backend/gradlew",
+      "args": ["build", "-p", "${workspaceFolder:SchoolManager}/backend"],
       "group": "build",
       "presentation": {
         "panel": "dedicated",
@@ -16,8 +16,8 @@
     {
       "label": "Backend: Run Tests",
       "type": "shell",
-      "command": "${workspaceFolder}/backend/gradlew",
-      "args": ["test", "-p", "${workspaceFolder}/backend"],
+      "command": "${workspaceFolder:SchoolManager}/backend/gradlew",
+      "args": ["test", "-p", "${workspaceFolder:SchoolManager}/backend"],
       "group": "test",
       "presentation": {
         "panel": "dedicated",
@@ -28,10 +28,10 @@
     {
       "label": "Frontend: Install",
       "type": "shell",
-      "command": "npm",
+      "command": "pnpm",
       "args": ["install"],
       "options": {
-        "cwd": "${workspaceFolder}/frontend"
+        "cwd": "${workspaceFolder:SchoolManager}/frontend"
       },
       "presentation": {
         "panel": "dedicated",
@@ -41,10 +41,10 @@
     {
       "label": "Frontend: Dev Server",
       "type": "shell",
-      "command": "npm",
+      "command": "pnpm",
       "args": ["run", "dev"],
       "options": {
-        "cwd": "${workspaceFolder}/frontend"
+        "cwd": "${workspaceFolder:SchoolManager}/frontend"
       },
       "isBackground": true,
       "presentation": {
@@ -65,10 +65,10 @@
     {
       "label": "Frontend: Build",
       "type": "shell",
-      "command": "npm",
+      "command": "pnpm",
       "args": ["run", "build"],
       "options": {
-        "cwd": "${workspaceFolder}/frontend"
+        "cwd": "${workspaceFolder:SchoolManager}/frontend"
       },
       "group": "build",
       "presentation": {
