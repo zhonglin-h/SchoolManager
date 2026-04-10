@@ -113,7 +113,7 @@ public class MeetAttendanceMonitor {
                 upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "MEETING_NOT_STARTED_15", minus15));
                 taskScheduler.schedule(() -> {
                     upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("MEETING_NOT_STARTED_15"));
-                    checkMeetingStarted(event, "MEETING_NOT_STARTED_15");
+                    checkMeetingStarted(event, NotificationType.MEETING_NOT_STARTED_15);
                 }, minus15);
             }
             if (minus3.isAfter(now)) {
@@ -140,11 +140,11 @@ public class MeetAttendanceMonitor {
         }
     }
 
-    public void checkMeetingStarted(CalendarEvent event, String type) {
+    public void checkMeetingStarted(CalendarEvent event, NotificationType type) {
         try {
             boolean active = googleMeetClient.isMeetingActive(event.getSpaceCode());
             if (!active) {
-                notificationService.notifyMeetingNotStarted(event, type);
+                notificationService.notify(type, event, null);
             }
         } catch (Exception e) {
             log.warn("Failed to check meeting started for {}: {}", event.getId(), e.getMessage());
@@ -158,7 +158,7 @@ public class MeetAttendanceMonitor {
             Set<Long> presentStudentIds = resolveStudentIds(resolveAndAutoLearn(participants));
             for (Student student : expectedStudents) {
                 if (!presentStudentIds.contains(student.getId())) {
-                    notificationService.notifyNotYetJoined(event, student);
+                    notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, student);
                 }
             }
         } catch (Exception e) {
@@ -183,6 +183,7 @@ public class MeetAttendanceMonitor {
                 if (presentStudentIds.contains(student.getId())) {
                     seenStudentIds.add(student.getId());
                     recordStudentAttendance(student, event, AttendanceStatus.PRESENT);
+                    notificationService.notify(NotificationType.ARRIVAL, event, student);
                 }
             }
             for (Teacher teacher : expectedTeachers) {
@@ -207,8 +208,7 @@ public class MeetAttendanceMonitor {
                     if (!seenStudentIds.contains(student.getId()) && presentStudentIds.contains(student.getId())) {
                         seenStudentIds.add(student.getId());
                         recordStudentAttendance(student, event, AttendanceStatus.LATE);
-                        notificationService.notifyArrival(event, student);
-                        notificationService.notifyLate(event, student);
+                        notificationService.notify(NotificationType.LATE, event, student);
                     }
                 }
                 for (Teacher teacher : expectedTeachers) {
@@ -218,7 +218,7 @@ public class MeetAttendanceMonitor {
                     }
                 }
                 if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {
-                    notificationService.notifyAllPresent(event);
+                    notificationService.notify(NotificationType.ALL_PRESENT, event, null);
                     ScheduledFuture<?> future = pollingFutures.remove(event.getId());
                     if (future != null) future.cancel(false);
                 }
@@ -241,7 +241,7 @@ public class MeetAttendanceMonitor {
                     .findByStudentIdAndCalendarEventIdAndDate(student.getId(), event.getId(), today);
             if (existing.isEmpty()) {
                 recordStudentAttendance(student, event, AttendanceStatus.ABSENT);
-                notificationService.notifyAbsent(event, student);
+                notificationService.notify(NotificationType.ABSENT, event, student);
             }
         }
         for (Teacher teacher : getExpectedTeachers(event)) {

@@ -41,4 +41,9 @@ public class NotificationLog {
 
     @Enumerated(EnumType.STRING)
     private NotificationChannel channel;
+
+    @Builder.Default
+    private boolean success = true;
+
+    private String failureReason;
 }

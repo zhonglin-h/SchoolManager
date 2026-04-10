@@ -1,8 +1,19 @@
 import axios from 'axios'
+import { showError } from '../context/toastStore'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL as string,
 })
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const message: string =
+      error?.response?.data?.message ?? error?.message ?? 'An unexpected error occurred'
+    showError(message)
+    return Promise.reject(error)
+  },
+)
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -93,6 +104,8 @@ export interface NotificationLogResponse {
   message: string
   sentAt: string
   channel: string
+  success: boolean
+  failureReason: string | null
 }
 
 export interface AppSettings {

@@ -6,12 +6,14 @@ import com.school.entity.Student;
 import com.school.integration.EmailClient;
 import com.school.model.CalendarEvent;
 import com.school.repository.NotificationLogRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+@Slf4j
 @Service
 public class NotificationService {
 
@@ -35,95 +37,45 @@ public class NotificationService {
         return notificationsEnabled;
     }
 
-    public void notifyMeetingNotStarted(CalendarEvent event, String type) {
+    public void notify(NotificationType type, CalendarEvent event, Student student) {
         if (!notificationsEnabled) return;
-        if (notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNull(
-                event.getId(), LocalDate.now(), type)) {
-            return;
-        }
-        String subject = "Meeting Not Started: " + event.getTitle();
-        String body = "The Google Meet session for \"" + event.getTitle() + "\" has not been started yet. Type: " + type;
-        emailClient.send(principalEmail, subject, body);
-        saveLog(null, event, type, body, NotificationChannel.EMAIL);
-    }
 
-    public void notifyNotYetJoined(CalendarEvent event, Student student) {
-        if (!notificationsEnabled) return;
-        String type = "NOT_YET_JOINED_3";
-        if (notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
-                student.getId(), event.getId(), LocalDate.now(), type)) {
-            return;
-        }
-        String subject = "Student Not Yet Joined: " + student.getName();
-        String body = student.getName() + " has not yet joined the Meet session for \"" + event.getTitle() + "\".";
-        emailClient.send(principalEmail, subject, body);
-        emailClient.send(student.getParentEmail(), subject, body);
-        saveLog(student, event, type, body, NotificationChannel.EMAIL);
-    }
+        boolean alreadySent = student != null
+                ? notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
+                        student.getId(), event.getId(), LocalDate.now(), type.name())
+                : notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNull(
+                        event.getId(), LocalDate.now(), type.name());
+        if (alreadySent) return;
 
-    public void notifyArrival(CalendarEvent event, Student student) {
-        if (!notificationsEnabled) return;
-        String type = "ARRIVAL";
-        if (notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
-                student.getId(), event.getId(), LocalDate.now(), type)) {
-            return;
-        }
-        String subject = "Student Arrived: " + student.getName();
-        String body = student.getName() + " has joined the Meet session for \"" + event.getTitle() + "\".";
-        emailClient.send(principalEmail, subject, body);
-        saveLog(student, event, type, body, NotificationChannel.EMAIL);
-    }
+        String subject = type.subject(event, student);
+        String body = type.body(event, student);
+        String failureReason = null;
 
-    public void notifyAllPresent(CalendarEvent event) {
-        if (!notificationsEnabled) return;
-        String type = "ALL_PRESENT";
-        if (notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNull(
-                event.getId(), LocalDate.now(), type)) {
-            return;
+        try {
+            if (type.toPrincipal) {
+                emailClient.send(principalEmail, subject, body);
+            }
+            if (type.toParent && student != null
+                    && student.getParentEmail() != null && !student.getParentEmail().isBlank()) {
+                emailClient.send(student.getParentEmail(), subject, body);
+            }
+        } catch (Exception e) {
+            failureReason = e.getMessage();
+            log.error("Failed to send {} notification{}: {}", type.name(),
+                    student != null ? " for student " + student.getName() : "", e.getMessage());
         }
-        String subject = "All Students Present: " + event.getTitle();
-        String body = "All expected students have joined the Meet session for \"" + event.getTitle() + "\".";
-        emailClient.send(principalEmail, subject, body);
-        saveLog(null, event, type, body, NotificationChannel.EMAIL);
-    }
 
-    public void notifyLate(CalendarEvent event, Student student) {
-        if (!notificationsEnabled) return;
-        String type = "LATE";
-        if (notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
-                student.getId(), event.getId(), LocalDate.now(), type)) {
-            return;
-        }
-        String subject = "Student Late: " + student.getName();
-        String body = student.getName() + " joined the Meet session late for \"" + event.getTitle() + "\".";
-        emailClient.send(student.getParentEmail(), subject, body);
-        emailClient.send(principalEmail, subject, body);
-        saveLog(student, event, type, body, NotificationChannel.EMAIL);
-    }
-
-    public void notifyAbsent(CalendarEvent event, Student student) {
-        if (!notificationsEnabled) return;
-        String type = "ABSENT";
-        if (notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
-                student.getId(), event.getId(), LocalDate.now(), type)) {
-            return;
-        }
-        String subject = "Student Absent: " + student.getName();
-        String body = student.getName() + " was absent from the Meet session for \"" + event.getTitle() + "\".";
-        emailClient.send(student.getParentEmail(), subject, body);
-        saveLog(student, event, type, body, NotificationChannel.EMAIL);
-    }
-
-    private void saveLog(Student student, CalendarEvent event, String type, String message, NotificationChannel channel) {
-        NotificationLog log = NotificationLog.builder()
+        NotificationLog entry = NotificationLog.builder()
                 .student(student)
                 .calendarEventId(event.getId())
                 .date(LocalDate.now())
-                .type(type)
-                .message(message)
+                .type(type.name())
+                .message(body)
                 .sentAt(LocalDateTime.now())
-                .channel(channel)
+                .channel(NotificationChannel.EMAIL)
+                .success(failureReason == null)
+                .failureReason(failureReason)
                 .build();
-        notificationLogRepository.save(log);
+        notificationLogRepository.save(entry);
     }
 }
