@@ -60,7 +60,7 @@ class MeetAttendanceMonitorTest {
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(monitor, "endBufferMinutes", 5);
+        ReflectionTestUtils.setField(monitor, "lateBufferMinutes", 5);
 
         event = new CalendarEvent("evt-1", "Math Class",
                 "https://meet.google.com/abc-def", "abc-def",
@@ -219,6 +219,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void pollingTick_marksLateAndNotifiesForDelayedJoiner() throws Exception {
+        ReflectionTestUtils.setField(monitor, "lateBufferMinutes", 0);
         when(meetClient.getActiveParticipants("abc-def"))
                 .thenReturn(List.of())                                   // initial snapshot: empty
                 .thenReturn(List.of(ALICE_PARTICIPANT));                  // first poll: Alice joins

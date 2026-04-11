@@ -43,8 +43,8 @@ public class MeetAttendanceMonitor {
     private final MeetClient googleMeetClient;
     private final ThreadPoolTaskScheduler taskScheduler;
 
-    @Value("${app.attendance.end-buffer-minutes}")
-    private int endBufferMinutes;
+    @Value("${app.attendance.late-buffer-minutes}")
+    private int lateBufferMinutes;
 
     private final Map<String, ScheduledFuture<?>> pollingFutures = new ConcurrentHashMap<>();
     private final List<ScheduledCheck> upcomingChecks = new CopyOnWriteArrayList<>();
@@ -106,7 +106,7 @@ public class MeetAttendanceMonitor {
                     .atZone(ZoneId.systemDefault()).toInstant();
             Instant start = event.getStartTime()
                     .atZone(ZoneId.systemDefault()).toInstant();
-            Instant endWithBuffer = event.getEndTime().plusMinutes(endBufferMinutes)
+            Instant end = event.getEndTime()
                     .atZone(ZoneId.systemDefault()).toInstant();
 
             if (minus15.isAfter(now)) {
@@ -130,12 +130,12 @@ public class MeetAttendanceMonitor {
                     startSessionPolling(event);
                 }, start);
             }
-            if (endWithBuffer.isAfter(now)) {
-                upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "SESSION_FINALIZE", endWithBuffer));
+            if (end.isAfter(now)) {
+                upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "SESSION_FINALIZE", end));
                 taskScheduler.schedule(() -> {
                     upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("SESSION_FINALIZE"));
                     finalizeSession(event);
-                }, endWithBuffer);
+                }, end);
             }
         }
     }
@@ -172,6 +172,8 @@ public class MeetAttendanceMonitor {
         int totalExpected = expectedStudents.size() + expectedTeachers.size();
         Set<Long> seenStudentIds = new HashSet<>();
         Set<Long> seenTeacherIds = new HashSet<>();
+        Instant classStart = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant();
+        Instant lateThreshold = classStart.plusSeconds(lateBufferMinutes * 60L);
 
         try {
             List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
@@ -207,14 +209,23 @@ public class MeetAttendanceMonitor {
                 for (Student student : expectedStudents) {
                     if (!seenStudentIds.contains(student.getId()) && presentStudentIds.contains(student.getId())) {
                         seenStudentIds.add(student.getId());
-                        recordStudentAttendance(student, event, AttendanceStatus.LATE);
-                        notificationService.notify(NotificationType.LATE, event, student);
+                        if (Instant.now().isAfter(lateThreshold)) {
+                            recordStudentAttendance(student, event, AttendanceStatus.LATE);
+                            notificationService.notify(NotificationType.LATE, event, student);
+                        } else {
+                            recordStudentAttendance(student, event, AttendanceStatus.PRESENT);
+                            notificationService.notify(NotificationType.ARRIVAL, event, student);
+                        }
                     }
                 }
                 for (Teacher teacher : expectedTeachers) {
                     if (!seenTeacherIds.contains(teacher.getId()) && presentTeacherIds.contains(teacher.getId())) {
                         seenTeacherIds.add(teacher.getId());
-                        recordTeacherAttendance(teacher, event, AttendanceStatus.LATE);
+                        if (Instant.now().isAfter(lateThreshold)) {
+                            recordTeacherAttendance(teacher, event, AttendanceStatus.LATE);
+                        } else {
+                            recordTeacherAttendance(teacher, event, AttendanceStatus.PRESENT);
+                        }
                     }
                 }
                 if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {
@@ -260,7 +271,7 @@ public class MeetAttendanceMonitor {
                 if (joinTime == null) {
                     recordStudentAttendance(student, event, AttendanceStatus.ABSENT);
                     notificationService.notify(NotificationType.ABSENT, event, student);
-                } else if (joinTime.isAfter(classStart)) {
+                } else if (joinTime.isAfter(classStart.plusSeconds(lateBufferMinutes * 60L))) {
                     recordStudentAttendance(student, event, AttendanceStatus.LATE);
                     notificationService.notify(NotificationType.LATE, event, student);
                 } else {
@@ -276,7 +287,7 @@ public class MeetAttendanceMonitor {
                         teacher.getName(), joinTimeByUserId, joinTimeByDisplayName);
                 if (joinTime == null) {
                     recordTeacherAttendance(teacher, event, AttendanceStatus.ABSENT);
-                } else if (joinTime.isAfter(classStart)) {
+                } else if (joinTime.isAfter(classStart.plusSeconds(lateBufferMinutes * 60L))) {
                     recordTeacherAttendance(teacher, event, AttendanceStatus.LATE);
                 } else {
                     recordTeacherAttendance(teacher, event, AttendanceStatus.PRESENT);

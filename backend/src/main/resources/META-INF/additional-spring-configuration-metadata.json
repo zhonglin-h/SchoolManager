@@ -17,9 +17,9 @@
       "defaultValue": true
     },
     {
-      "name": "app.attendance.end-buffer-minutes",
+      "name": "app.attendance.late-buffer-minutes",
       "type": "java.lang.Integer",
-      "description": "Minutes after a class ends before attendance is finalized.",
+      "description": "Minutes after class start within which a student joining is still marked PRESENT rather than LATE.",
       "defaultValue": 5
     },
     {
