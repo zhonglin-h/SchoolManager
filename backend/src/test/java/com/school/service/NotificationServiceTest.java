@@ -216,6 +216,32 @@ class NotificationServiceTest {
         assertThat(log.getType()).isEqualTo("ABSENT");
         assertThat(log.getStudent()).isEqualTo(student);
         assertThat(log.getDate()).isEqualTo(LocalDate.now());
+        assertThat(log.getRecipient()).isEqualTo("alice-parent@test.com");
+    }
+
+    @Test
+    void savedLog_recipientContainsPrincipalWhenToPrincipal() {
+        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNullAndSuccessTrue(
+                anyString(), any(LocalDate.class), anyString())).thenReturn(false);
+
+        notificationService.notify(NotificationType.ALL_PRESENT, event, null);
+
+        ArgumentCaptor<NotificationLog> logCaptor = ArgumentCaptor.forClass(NotificationLog.class);
+        verify(notificationLogRepository).save(logCaptor.capture());
+        assertThat(logCaptor.getValue().getRecipient()).isEqualTo(PRINCIPAL);
+    }
+
+    @Test
+    void savedLog_recipientContainsBothWhenToPrincipalAndParent() {
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(
+                anyLong(), anyString(), any(LocalDate.class), anyString())).thenReturn(false);
+
+        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, student);
+
+        ArgumentCaptor<NotificationLog> logCaptor = ArgumentCaptor.forClass(NotificationLog.class);
+        verify(notificationLogRepository).save(logCaptor.capture());
+        assertThat(logCaptor.getValue().getRecipient())
+                .isEqualTo(PRINCIPAL + ", " + "alice-parent@test.com");
     }
 
     @Test

@@ -16,7 +16,8 @@ public record NotificationLogResponse(
         LocalDateTime sentAt,
         NotificationChannel channel,
         boolean success,
-        String failureReason
+        String failureReason,
+        String recipient
 ) {
     public static NotificationLogResponse from(NotificationLog n) {
         return new NotificationLogResponse(
@@ -29,7 +30,8 @@ public record NotificationLogResponse(
                 n.getSentAt(),
                 n.getChannel(),
                 n.isSuccess(),
-                n.getFailureReason()
+                n.getFailureReason(),
+                n.getRecipient()
         );
     }
 }

@@ -106,6 +106,7 @@ export interface NotificationLogResponse {
   channel: string
   success: boolean
   failureReason: string | null
+  recipient: string | null
 }
 
 export interface AppSettings {

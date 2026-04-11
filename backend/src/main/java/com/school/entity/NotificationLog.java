@@ -1,5 +1,6 @@
 package com.school.entity;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -41,6 +42,9 @@ public class NotificationLog {
 
     @Enumerated(EnumType.STRING)
     private NotificationChannel channel;
+
+    @Column(length = 500)
+    private String recipient;
 
     @Builder.Default
     private boolean success = true;
