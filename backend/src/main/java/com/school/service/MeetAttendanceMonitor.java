@@ -419,6 +419,7 @@ public class MeetAttendanceMonitor {
             attendanceRepository.save(Attendance.builder()
                     .student(student)
                     .calendarEventId(event.getId())
+                    .eventTitle(event.getTitle())
                     .date(today)
                     .status(status)
                     .build());
@@ -433,6 +434,7 @@ public class MeetAttendanceMonitor {
             attendanceRepository.save(Attendance.builder()
                     .teacher(teacher)
                     .calendarEventId(event.getId())
+                    .eventTitle(event.getTitle())
                     .date(today)
                     .status(status)
                     .build());

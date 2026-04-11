@@ -95,6 +95,18 @@ export interface AttendanceEntry2 {
   status: string
 }
 
+export interface AttendanceRecord {
+  id: number
+  personId: number | null
+  personType: 'STUDENT' | 'TEACHER' | null
+  personName: string | null
+  calendarEventId: string
+  eventTitle: string | null
+  date: string
+  status: string
+  updatedAt: string | null
+}
+
 export interface NotificationLogResponse {
   id: number
   studentId: number | null
@@ -185,9 +197,20 @@ export async function upsertAttendance(
   personType: 'STUDENT' | 'TEACHER',
   calendarEventId: string,
   status: 'PRESENT' | 'LATE' | 'ABSENT',
-  date?: string
+  date?: string,
+  eventTitle?: string
 ): Promise<void> {
-  await api.post('/attendance/upsert', { personId, personType, calendarEventId, status, date })
+  await api.post('/attendance/upsert', { personId, personType, calendarEventId, status, date, eventTitle })
+}
+
+export async function getAttendanceRecords(
+  personType: 'ALL' | 'STUDENT' | 'TEACHER' = 'ALL',
+  personId?: number
+): Promise<AttendanceRecord[]> {
+  const { data } = await api.get<AttendanceRecord[]>('/attendance/records', {
+    params: { personType, ...(personId != null ? { personId } : {}) },
+  })
+  return data
 }
 
 // ── Notifications ──────────────────────────────────────────────────────────

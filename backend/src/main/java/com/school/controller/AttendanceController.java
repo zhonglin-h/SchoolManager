@@ -251,6 +251,7 @@ public class AttendanceController {
         attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(student.getId(), event.getId(), date)
                 .ifPresentOrElse(existing -> {}, () -> attendanceRepository.save(
                         Attendance.builder().student(student).calendarEventId(event.getId())
+                                .eventTitle(event.getTitle())
                                 .date(date).status(status).build()));
         return status;
     }
@@ -261,6 +262,7 @@ public class AttendanceController {
         attendanceRepository.findByTeacherIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), date)
                 .ifPresentOrElse(existing -> {}, () -> attendanceRepository.save(
                         Attendance.builder().teacher(teacher).calendarEventId(event.getId())
+                                .eventTitle(event.getTitle())
                                 .date(date).status(status).build()));
         return status;
     }
@@ -407,6 +409,9 @@ public class AttendanceController {
                             .date(date)
                             .build());
             att.setStatus(req.status());
+            if (req.eventTitle() != null && att.getEventTitle() == null) {
+                att.setEventTitle(req.eventTitle());
+            }
             attendanceRepository.save(att);
         } else if ("TEACHER".equals(req.personType())) {
             Teacher teacher = teacherRepository.findById(req.personId())
@@ -419,6 +424,9 @@ public class AttendanceController {
                             .date(date)
                             .build());
             att.setStatus(req.status());
+            if (req.eventTitle() != null && att.getEventTitle() == null) {
+                att.setEventTitle(req.eventTitle());
+            }
             attendanceRepository.save(att);
         } else {
             return ResponseEntity.badRequest().build();
@@ -430,8 +438,72 @@ public class AttendanceController {
             Long personId,
             String personType,
             String calendarEventId,
+            String eventTitle,
             LocalDate date,
             AttendanceStatus status
+    ) {}
+
+    /**
+     * Returns attendance records with an optional filter.
+     *
+     * @param personType ALL (default), STUDENT, or TEACHER
+     * @param personId   optional — if provided, only records for this person are returned
+     */
+    @GetMapping("/records")
+    public ResponseEntity<List<AttendanceRecordResponse>> getRecords(
+            @RequestParam(defaultValue = "ALL") String personType,
+            @RequestParam(required = false) Long personId) {
+
+        List<Attendance> records;
+
+        if (personId != null) {
+            if ("TEACHER".equals(personType)) {
+                records = attendanceRepository.findByTeacherIdOrderByDateDescIdDesc(personId);
+            } else {
+                records = attendanceRepository.findByStudentIdOrderByDateDescIdDesc(personId);
+            }
+        } else if ("STUDENT".equals(personType)) {
+            records = attendanceRepository.findByStudentNotNullOrderByDateDescIdDesc();
+        } else if ("TEACHER".equals(personType)) {
+            records = attendanceRepository.findByTeacherNotNullOrderByDateDescIdDesc();
+        } else {
+            records = attendanceRepository.findAllOrderByDateDescIdDesc();
+        }
+
+        List<AttendanceRecordResponse> result = records.stream()
+                .map(a -> {
+                    Long pid;
+                    String ptype;
+                    String pname;
+                    if (a.getStudent() != null) {
+                        pid = a.getStudent().getId();
+                        ptype = "STUDENT";
+                        pname = a.getStudent().getName();
+                    } else {
+                        pid = a.getTeacher() != null ? a.getTeacher().getId() : null;
+                        ptype = "TEACHER";
+                        pname = a.getTeacher() != null ? a.getTeacher().getName() : null;
+                    }
+                    return new AttendanceRecordResponse(
+                            a.getId(), pid, ptype, pname,
+                            a.getCalendarEventId(), a.getEventTitle(),
+                            a.getDate(), a.getStatus(), a.getUpdatedAt());
+                })
+                .toList();
+
+        return ResponseEntity.ok(result);
+    }
+
+    public record AttendanceRecordResponse(
+            Long id,
+            Long personId,
+            String personType,
+            String personName,
+            String calendarEventId,
+            String eventTitle,
+            LocalDate date,
+            AttendanceStatus status,
+            java.time.LocalDateTime updatedAt
     ) {}
 
     @GetMapping("/student/{id}")
