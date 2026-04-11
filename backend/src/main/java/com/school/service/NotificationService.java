@@ -41,9 +41,9 @@ public class NotificationService {
         if (!notificationsEnabled) return;
 
         boolean alreadySent = student != null
-                ? notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
+                ? notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(
                         student.getId(), event.getId(), LocalDate.now(), type.name())
-                : notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNull(
+                : notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNullAndSuccessTrue(
                         event.getId(), LocalDate.now(), type.name());
         if (alreadySent) return;
 
@@ -51,18 +51,23 @@ public class NotificationService {
         String body = type.body(event, student);
         String failureReason = null;
 
-        try {
-            if (type.toPrincipal) {
+        if (type.toPrincipal) {
+            try {
                 emailClient.send(principalEmail, subject, body);
+            } catch (Exception e) {
+                failureReason = e.getMessage();
+                log.error("Failed to send {} notification to principal: {}", type.name(), e.getMessage());
             }
-            if (type.toParent && student != null
-                    && student.getParentEmail() != null && !student.getParentEmail().isBlank()) {
+        }
+        if (type.toParent && student != null
+                && student.getParentEmail() != null && !student.getParentEmail().isBlank()) {
+            try {
                 emailClient.send(student.getParentEmail(), subject, body);
+            } catch (Exception e) {
+                failureReason = e.getMessage();
+                log.error("Failed to send {} notification to parent of {}: {}", type.name(),
+                        student.getName(), e.getMessage());
             }
-        } catch (Exception e) {
-            failureReason = e.getMessage();
-            log.error("Failed to send {} notification{}: {}", type.name(),
-                    student != null ? " for student " + student.getName() : "", e.getMessage());
         }
 
         NotificationLog entry = NotificationLog.builder()

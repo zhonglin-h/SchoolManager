@@ -35,7 +35,7 @@ public enum NotificationType {
     ABSENT(
             (e, s) -> "Student Absent: " + s.getName(),
             (e, s) -> s.getName() + " was absent from the Meet session for \"" + e.getTitle() + "\".",
-            false, true
+            true, true
     );
 
     private final BiFunction<CalendarEvent, Student, String> subjectFn;
