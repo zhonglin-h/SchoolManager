@@ -17,6 +17,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -331,6 +333,51 @@ public class AttendanceController {
         log.info("DEBUG /attendance/debug/{} -> {}", spaceCode, out);
         return ResponseEntity.ok(out);
     }
+
+    /**
+     * Upserts an attendance record for a student or teacher.
+     * If a record already exists for the given person/event/date it is updated; otherwise created.
+     */
+    @PostMapping("/upsert")
+    public ResponseEntity<Void> upsert(@RequestBody UpsertAttendanceRequest req) {
+        LocalDate date = req.date() != null ? req.date() : LocalDate.now();
+        if ("STUDENT".equals(req.personType())) {
+            Student student = studentRepository.findById(req.personId())
+                    .orElseThrow(() -> new RuntimeException("Student not found: " + req.personId()));
+            Attendance att = attendanceRepository
+                    .findByStudentIdAndCalendarEventIdAndDate(req.personId(), req.calendarEventId(), date)
+                    .orElseGet(() -> Attendance.builder()
+                            .student(student)
+                            .calendarEventId(req.calendarEventId())
+                            .date(date)
+                            .build());
+            att.setStatus(req.status());
+            attendanceRepository.save(att);
+        } else if ("TEACHER".equals(req.personType())) {
+            Teacher teacher = teacherRepository.findById(req.personId())
+                    .orElseThrow(() -> new RuntimeException("Teacher not found: " + req.personId()));
+            Attendance att = attendanceRepository
+                    .findByTeacherIdAndCalendarEventIdAndDate(req.personId(), req.calendarEventId(), date)
+                    .orElseGet(() -> Attendance.builder()
+                            .teacher(teacher)
+                            .calendarEventId(req.calendarEventId())
+                            .date(date)
+                            .build());
+            att.setStatus(req.status());
+            attendanceRepository.save(att);
+        } else {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok().build();
+    }
+
+    public record UpsertAttendanceRequest(
+            Long personId,
+            String personType,
+            String calendarEventId,
+            LocalDate date,
+            AttendanceStatus status
+    ) {}
 
     @GetMapping("/student/{id}")
     public ResponseEntity<List<StudentAttendanceRecord>> getByStudent(@PathVariable Long id) {

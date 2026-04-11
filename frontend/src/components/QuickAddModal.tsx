@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { createStudent, createTeacher } from '../services/api'
+import { createStudent, createTeacher, upsertAttendance } from '../services/api'
 
 interface Props {
   email: string
   initialName?: string
+  calendarEventId?: string
   mode: 'student' | 'teacher'
   onClose: () => void
   onSaved?: (id: number, personType: 'STUDENT' | 'TEACHER') => void
 }
 
-export default function QuickAddModal({ email, initialName = '', mode, onClose, onSaved }: Props) {
+export default function QuickAddModal({ email, initialName = '', calendarEventId, mode, onClose, onSaved }: Props) {
   const queryClient = useQueryClient()
   const [name, setName] = useState(initialName)
   const [meetEmail, setMeetEmail] = useState(email)
@@ -32,10 +33,16 @@ export default function QuickAddModal({ email, initialName = '', mode, onClose, 
           parentEmail: '',
           parentPhone: '',
         })
+        if (calendarEventId) {
+          await upsertAttendance(person.id, 'STUDENT', calendarEventId, 'PRESENT')
+        }
         queryClient.invalidateQueries({ queryKey: ['students'] })
         onSaved?.(person.id, 'STUDENT')
       } else {
         const person = await createTeacher({ name, meetEmail, meetDisplayName, phone: '', hourlyRate: null })
+        if (calendarEventId) {
+          await upsertAttendance(person.id, 'TEACHER', calendarEventId, 'PRESENT')
+        }
         queryClient.invalidateQueries({ queryKey: ['teachers'] })
         onSaved?.(person.id, 'TEACHER')
       }

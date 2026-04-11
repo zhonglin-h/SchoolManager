@@ -180,6 +180,16 @@ export async function getStudentAttendance(id: number): Promise<AttendanceEntry2
   return data
 }
 
+export async function upsertAttendance(
+  personId: number,
+  personType: 'STUDENT' | 'TEACHER',
+  calendarEventId: string,
+  status: 'PRESENT' | 'LATE' | 'ABSENT',
+  date?: string
+): Promise<void> {
+  await api.post('/attendance/upsert', { personId, personType, calendarEventId, status, date })
+}
+
 // ── Notifications ──────────────────────────────────────────────────────────
 
 export async function getNotifications(): Promise<NotificationLogResponse[]> {
