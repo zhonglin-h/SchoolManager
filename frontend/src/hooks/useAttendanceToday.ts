@@ -9,6 +9,7 @@ export function useAttendanceToday() {
   const query = useQuery({
     queryKey: ['attendance', 'today'],
     queryFn: () => getAttendanceToday(false),
+    refetchInterval: 60000,
   })
 
   async function refreshLive() {
