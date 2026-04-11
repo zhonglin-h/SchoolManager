@@ -9,7 +9,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
@@ -56,14 +55,14 @@ class NotificationServiceTest {
                 .build();
     }
 
-    // --- notifyMeetingNotStarted ---
+    // --- MEETING_NOT_STARTED_15 ---
 
     @Test
     void notifyMeetingNotStarted_sendsEmailAndSavesLog() {
-        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNull(
+        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNullAndSuccessTrue(
                 anyString(), any(LocalDate.class), anyString())).thenReturn(false);
 
-        notificationService.notifyMeetingNotStarted(event, "MEETING_NOT_STARTED_15");
+        notificationService.notify(NotificationType.MEETING_NOT_STARTED_15, event, null);
 
         verify(emailClient).send(eq(PRINCIPAL), anyString(), anyString());
         verify(notificationLogRepository).save(any(NotificationLog.class));
@@ -71,23 +70,23 @@ class NotificationServiceTest {
 
     @Test
     void notifyMeetingNotStarted_skipsDuplicate() {
-        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNull(
+        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNullAndSuccessTrue(
                 anyString(), any(LocalDate.class), anyString())).thenReturn(true);
 
-        notificationService.notifyMeetingNotStarted(event, "MEETING_NOT_STARTED_15");
+        notificationService.notify(NotificationType.MEETING_NOT_STARTED_15, event, null);
 
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
         verify(notificationLogRepository, never()).save(any());
     }
 
-    // --- notifyNotYetJoined ---
+    // --- NOT_YET_JOINED_3 ---
 
     @Test
     void notifyNotYetJoined_sendsToPrincipalAndParent() {
-        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString())).thenReturn(false);
 
-        notificationService.notifyNotYetJoined(event, student);
+        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, student);
 
         ArgumentCaptor<String> toCaptor = ArgumentCaptor.forClass(String.class);
         verify(emailClient, times(2)).send(toCaptor.capture(), anyString(), anyString());
@@ -97,22 +96,22 @@ class NotificationServiceTest {
 
     @Test
     void notifyNotYetJoined_skipsDuplicate() {
-        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString())).thenReturn(true);
 
-        notificationService.notifyNotYetJoined(event, student);
+        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, student);
 
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
     }
 
-    // --- notifyArrival ---
+    // --- ARRIVAL ---
 
     @Test
     void notifyArrival_sendsToPrincipalOnly() {
-        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString())).thenReturn(false);
 
-        notificationService.notifyArrival(event, student);
+        notificationService.notify(NotificationType.ARRIVAL, event, student);
 
         ArgumentCaptor<String> toCaptor = ArgumentCaptor.forClass(String.class);
         verify(emailClient, times(1)).send(toCaptor.capture(), anyString(), anyString());
@@ -121,22 +120,22 @@ class NotificationServiceTest {
 
     @Test
     void notifyArrival_skipsDuplicate() {
-        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString())).thenReturn(true);
 
-        notificationService.notifyArrival(event, student);
+        notificationService.notify(NotificationType.ARRIVAL, event, student);
 
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
     }
 
-    // --- notifyAllPresent ---
+    // --- ALL_PRESENT ---
 
     @Test
     void notifyAllPresent_sendsToPrincipalOnly() {
-        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNull(
+        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNullAndSuccessTrue(
                 anyString(), any(LocalDate.class), anyString())).thenReturn(false);
 
-        notificationService.notifyAllPresent(event);
+        notificationService.notify(NotificationType.ALL_PRESENT, event, null);
 
         ArgumentCaptor<String> toCaptor = ArgumentCaptor.forClass(String.class);
         verify(emailClient, times(1)).send(toCaptor.capture(), anyString(), anyString());
@@ -145,22 +144,22 @@ class NotificationServiceTest {
 
     @Test
     void notifyAllPresent_skipsDuplicate() {
-        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNull(
+        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNullAndSuccessTrue(
                 anyString(), any(LocalDate.class), anyString())).thenReturn(true);
 
-        notificationService.notifyAllPresent(event);
+        notificationService.notify(NotificationType.ALL_PRESENT, event, null);
 
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
     }
 
-    // --- notifyLate ---
+    // --- LATE ---
 
     @Test
     void notifyLate_sendsToPrincipalAndParent() {
-        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString())).thenReturn(false);
 
-        notificationService.notifyLate(event, student);
+        notificationService.notify(NotificationType.LATE, event, student);
 
         ArgumentCaptor<String> toCaptor = ArgumentCaptor.forClass(String.class);
         verify(emailClient, times(2)).send(toCaptor.capture(), anyString(), anyString());
@@ -169,22 +168,22 @@ class NotificationServiceTest {
 
     @Test
     void notifyLate_skipsDuplicate() {
-        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString())).thenReturn(true);
 
-        notificationService.notifyLate(event, student);
+        notificationService.notify(NotificationType.LATE, event, student);
 
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
     }
 
-    // --- notifyAbsent ---
+    // --- ABSENT ---
 
     @Test
     void notifyAbsent_sendsToParentOnly() {
-        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString())).thenReturn(false);
 
-        notificationService.notifyAbsent(event, student);
+        notificationService.notify(NotificationType.ABSENT, event, student);
 
         ArgumentCaptor<String> toCaptor = ArgumentCaptor.forClass(String.class);
         verify(emailClient, times(1)).send(toCaptor.capture(), anyString(), anyString());
@@ -193,10 +192,10 @@ class NotificationServiceTest {
 
     @Test
     void notifyAbsent_skipsDuplicate() {
-        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString())).thenReturn(true);
 
-        notificationService.notifyAbsent(event, student);
+        notificationService.notify(NotificationType.ABSENT, event, student);
 
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
     }
@@ -205,10 +204,10 @@ class NotificationServiceTest {
 
     @Test
     void savedLog_hasCorrectFields() {
-        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndType(
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString())).thenReturn(false);
 
-        notificationService.notifyAbsent(event, student);
+        notificationService.notify(NotificationType.ABSENT, event, student);
 
         ArgumentCaptor<NotificationLog> logCaptor = ArgumentCaptor.forClass(NotificationLog.class);
         verify(notificationLogRepository).save(logCaptor.capture());
@@ -221,10 +220,10 @@ class NotificationServiceTest {
 
     @Test
     void principalOnlyLog_hasNullStudent() {
-        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNull(
+        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndStudentIsNullAndSuccessTrue(
                 anyString(), any(LocalDate.class), anyString())).thenReturn(false);
 
-        notificationService.notifyAllPresent(event);
+        notificationService.notify(NotificationType.ALL_PRESENT, event, null);
 
         ArgumentCaptor<NotificationLog> logCaptor = ArgumentCaptor.forClass(NotificationLog.class);
         verify(notificationLogRepository).save(logCaptor.capture());

@@ -107,9 +107,9 @@ class MeetAttendanceMonitorTest {
     @Test
     void checkPreClassJoins_matchesByGoogleUserId() throws Exception {
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT));
-        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
-        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
 
         monitor.checkPreClassJoins(event);
 
@@ -121,9 +121,9 @@ class MeetAttendanceMonitorTest {
     void checkPreClassJoins_fallsBackToDisplayNameWhenNoGoogleUserId() throws Exception {
         MeetParticipant noId = new MeetParticipant(null, "Alice", null);
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(noId));
-        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
-        when(studentRepository.findByNameIgnoreCase("Alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByNameIgnoreCaseAndActiveTrue("Alice")).thenReturn(Optional.of(alice));
 
         monitor.checkPreClassJoins(event);
 
@@ -136,10 +136,10 @@ class MeetAttendanceMonitorTest {
         // Alice has no googleUserId stored yet; participant arrives with one
         MeetParticipant newParticipant = new MeetParticipant("uid-alice", "Alice", null);
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(newParticipant));
-        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
-        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.empty());
-        when(studentRepository.findByNameIgnoreCase("Alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.empty());
+        when(studentRepository.findByNameIgnoreCaseAndActiveTrue("Alice")).thenReturn(Optional.of(alice));
 
         monitor.checkPreClassJoins(event);
 
@@ -151,10 +151,10 @@ class MeetAttendanceMonitorTest {
     @Test
     void checkPreClassJoins_doesNotNotifyWhenAllPresent() throws Exception {
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
-        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
-        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByGoogleUserId("uid-bob")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-bob")).thenReturn(Optional.of(bob));
 
         monitor.checkPreClassJoins(event);
 
@@ -164,8 +164,8 @@ class MeetAttendanceMonitorTest {
     @Test
     void checkPreClassJoins_skipsAttendeesNotInStudentRegistry() throws Exception {
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of());
-        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.empty());
-        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.empty());
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
 
         monitor.checkPreClassJoins(event);
 
@@ -179,10 +179,10 @@ class MeetAttendanceMonitorTest {
     @SuppressWarnings("unchecked")
     void startSessionPolling_recordsPresentForStudentsAlreadyInMeeting() throws Exception {
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
-        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
-        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByGoogleUserId("uid-bob")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-bob")).thenReturn(Optional.of(bob));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
         when(taskScheduler.scheduleAtFixedRate(any(Runnable.class), any(Duration.class)))
@@ -199,9 +199,9 @@ class MeetAttendanceMonitorTest {
     @SuppressWarnings("unchecked")
     void startSessionPolling_doesNotDuplicateAttendanceIfAlreadyRecorded() throws Exception {
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT));
-        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
-        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(eq(1L), anyString(), any()))
                 .thenReturn(Optional.of(Attendance.builder().student(alice)
                         .calendarEventId("evt-1").date(LocalDate.now())
@@ -223,9 +223,9 @@ class MeetAttendanceMonitorTest {
         when(meetClient.getActiveParticipants("abc-def"))
                 .thenReturn(List.of())                                   // initial snapshot: empty
                 .thenReturn(List.of(ALICE_PARTICIPANT));                  // first poll: Alice joins
-        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
-        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
 
@@ -248,10 +248,10 @@ class MeetAttendanceMonitorTest {
     void pollingTick_notifiesAllPresentWhenEveryoneAccountedFor() throws Exception {
         when(meetClient.getActiveParticipants("abc-def"))
                 .thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
-        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
-        when(studentRepository.findByGoogleUserId("uid-alice")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByGoogleUserId("uid-bob")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-bob")).thenReturn(Optional.of(bob));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
 
@@ -270,8 +270,8 @@ class MeetAttendanceMonitorTest {
     @Test
     void finalizeSession_marksAbsentAndNotifiesForMissingStudents() throws Exception {
         when(meetClient.getAllParticipants(anyString())).thenReturn(List.of());
-        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
 
@@ -287,8 +287,8 @@ class MeetAttendanceMonitorTest {
     @Test
     void finalizeSession_doesNotMarkAbsentIfAttendanceAlreadyRecorded() throws Exception {
         when(meetClient.getAllParticipants(anyString())).thenReturn(List.of());
-        when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
-        when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(eq(1L), anyString(), any()))
                 .thenReturn(Optional.of(Attendance.builder().student(alice)
                         .calendarEventId("evt-1").date(LocalDate.now())
