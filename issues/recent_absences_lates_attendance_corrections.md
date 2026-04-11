@@ -14,14 +14,14 @@
    - Tabular layout for organizing data.
 
 3. **Data Display:**
-   - Show: Student Name, Date/Time, Attendance Type (e.g., Late, Absent), Reason (if available), and Notes (optional).
+   - Show: Student Name, Date/Time, Attendance Type (e.g., Late, Absent), and Notes (optional).
    - Include pagination for large datasets.
 
 4. **Filtering Options:**
    - Filters: Date Range, Attendance Type (Absences/Lates/Present), and Student Name.
 
 5. **Editing Feature:**
-   - Allow editing records to update Type, Date, Reason, and Notes directly from the table.
+   - Allow editing records to update Type, Date, and Notes directly from the table.
 
 **Suggestions:**
 Include ideas such as audit trails, quick actions for reviewing records, summary statistics, export options (CSV), and color indicators for easy identification of records.
