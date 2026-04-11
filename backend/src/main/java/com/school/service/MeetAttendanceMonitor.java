@@ -234,23 +234,63 @@ public class MeetAttendanceMonitor {
         ScheduledFuture<?> future = pollingFutures.remove(event.getId());
         if (future != null) future.cancel(false);
 
+        Instant classStart = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant();
         LocalDate today = LocalDate.now();
+
+        // Build a join-time map from the full participant history (including those who left)
+        Map<String, Instant> joinTimeByUserId = new java.util.HashMap<>();
+        Map<String, Instant> joinTimeByDisplayName = new java.util.HashMap<>();
+        try {
+            List<MeetParticipant> allParticipants = googleMeetClient.getAllParticipants(event.getSpaceCode());
+            for (MeetParticipant p : allParticipants) {
+                if (p.earliestStartTime() == null) continue;
+                if (p.googleUserId() != null) joinTimeByUserId.put(p.googleUserId(), p.earliestStartTime());
+                if (p.displayName() != null) joinTimeByDisplayName.put(p.displayName().toLowerCase(), p.earliestStartTime());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch all participants for finalize {}: {}", event.getId(), e.getMessage());
+        }
 
         for (Student student : getExpectedStudents(event)) {
             Optional<Attendance> existing = attendanceRepository
                     .findByStudentIdAndCalendarEventIdAndDate(student.getId(), event.getId(), today);
             if (existing.isEmpty()) {
-                recordStudentAttendance(student, event, AttendanceStatus.ABSENT);
-                notificationService.notify(NotificationType.ABSENT, event, student);
+                Instant joinTime = resolveJoinTime(student.getGoogleUserId(), student.getMeetDisplayName(),
+                        student.getName(), joinTimeByUserId, joinTimeByDisplayName);
+                if (joinTime == null) {
+                    recordStudentAttendance(student, event, AttendanceStatus.ABSENT);
+                    notificationService.notify(NotificationType.ABSENT, event, student);
+                } else if (joinTime.isAfter(classStart)) {
+                    recordStudentAttendance(student, event, AttendanceStatus.LATE);
+                    notificationService.notify(NotificationType.LATE, event, student);
+                } else {
+                    recordStudentAttendance(student, event, AttendanceStatus.PRESENT);
+                }
             }
         }
         for (Teacher teacher : getExpectedTeachers(event)) {
             Optional<Attendance> existing = attendanceRepository
                     .findByTeacherIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), today);
             if (existing.isEmpty()) {
-                recordTeacherAttendance(teacher, event, AttendanceStatus.ABSENT);
+                Instant joinTime = resolveJoinTime(teacher.getGoogleUserId(), teacher.getMeetDisplayName(),
+                        teacher.getName(), joinTimeByUserId, joinTimeByDisplayName);
+                if (joinTime == null) {
+                    recordTeacherAttendance(teacher, event, AttendanceStatus.ABSENT);
+                } else if (joinTime.isAfter(classStart)) {
+                    recordTeacherAttendance(teacher, event, AttendanceStatus.LATE);
+                } else {
+                    recordTeacherAttendance(teacher, event, AttendanceStatus.PRESENT);
+                }
             }
         }
+    }
+
+    private Instant resolveJoinTime(String googleUserId, String meetDisplayName, String name,
+                                    Map<String, Instant> byUserId, Map<String, Instant> byDisplayName) {
+        if (googleUserId != null && byUserId.containsKey(googleUserId)) return byUserId.get(googleUserId);
+        if (meetDisplayName != null && byDisplayName.containsKey(meetDisplayName.toLowerCase())) return byDisplayName.get(meetDisplayName.toLowerCase());
+        if (name != null && byDisplayName.containsKey(name.toLowerCase())) return byDisplayName.get(name.toLowerCase());
+        return null;
     }
 
     /**

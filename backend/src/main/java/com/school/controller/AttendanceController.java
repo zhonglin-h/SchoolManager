@@ -23,9 +23,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -93,13 +96,22 @@ public class AttendanceController {
                 } catch (Exception ignored) {}
             }
 
-            // Build lookup sets for live participant matching
+            // Build lookup sets and join-time maps for live participant matching
             Set<String> liveGoogleIds = new HashSet<>();
             Set<String> liveDisplayNames = new HashSet<>();
+            Map<String, Instant> joinByUserId = new HashMap<>();
+            Map<String, Instant> joinByDisplayName = new HashMap<>();
             for (MeetParticipant p : liveParticipants) {
-                if (p.googleUserId() != null) liveGoogleIds.add(p.googleUserId());
-                if (p.displayName() != null) liveDisplayNames.add(p.displayName().toLowerCase());
+                if (p.googleUserId() != null) {
+                    liveGoogleIds.add(p.googleUserId());
+                    if (p.earliestStartTime() != null) joinByUserId.put(p.googleUserId(), p.earliestStartTime());
+                }
+                if (p.displayName() != null) {
+                    liveDisplayNames.add(p.displayName().toLowerCase());
+                    if (p.earliestStartTime() != null) joinByDisplayName.put(p.displayName().toLowerCase(), p.earliestStartTime());
+                }
             }
+            Instant classStart = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant();
 
             List<AttendanceSummaryResponse.AttendanceEntry> entries = new ArrayList<>();
             int present = 0;
@@ -113,6 +125,12 @@ public class AttendanceController {
                         Attendance att = byStudentId.get(student.getId());
                         AttendanceStatus status = att != null ? att.getStatus() : null;
                         boolean inMeetNow = isInMeet(student, liveGoogleIds, liveDisplayNames);
+                        if (status == null && inMeetNow) {
+                            status = writeStudentAttendance(student, event, today,
+                                    resolveJoinTime(student.getGoogleUserId(), student.getMeetDisplayName(),
+                                            student.getName(), joinByUserId, joinByDisplayName),
+                                    classStart);
+                        }
                         entries.add(new AttendanceSummaryResponse.AttendanceEntry(
                                 student.getId(), "STUDENT", student.getName(), email, status, true, inMeetNow));
                     } else {
@@ -122,6 +140,12 @@ public class AttendanceController {
                             Attendance att = byTeacherId.get(teacher.getId());
                             AttendanceStatus status = att != null ? att.getStatus() : null;
                             boolean inMeetNow = isInMeet(teacher, liveGoogleIds, liveDisplayNames);
+                            if (status == null && inMeetNow) {
+                                status = writeTeacherAttendance(teacher, event, today,
+                                        resolveJoinTime(teacher.getGoogleUserId(), teacher.getMeetDisplayName(),
+                                                teacher.getName(), joinByUserId, joinByDisplayName),
+                                        classStart);
+                            }
                             entries.add(new AttendanceSummaryResponse.AttendanceEntry(
                                     teacher.getId(), "TEACHER", teacher.getName(), email, status, true, inMeetNow));
                         } else {
@@ -133,8 +157,7 @@ public class AttendanceController {
             }
 
             for (AttendanceSummaryResponse.AttendanceEntry entry : entries) {
-                if (entry.status() == AttendanceStatus.PRESENT || entry.status() == AttendanceStatus.LATE
-                        || entry.inMeetNow()) present++;
+                if (entry.status() == AttendanceStatus.PRESENT || entry.status() == AttendanceStatus.LATE) present++;
             }
 
             int totalExpected = entries.size();
@@ -208,6 +231,38 @@ public class AttendanceController {
                 .thenComparing(AttendanceSummaryResponse::eventTitle));
 
         return ResponseEntity.ok(summaries);
+    }
+
+    private Instant resolveJoinTime(String googleUserId, String meetDisplayName, String name,
+                                    Map<String, Instant> byUserId, Map<String, Instant> byDisplayName) {
+        if (googleUserId != null && byUserId.containsKey(googleUserId)) return byUserId.get(googleUserId);
+        if (meetDisplayName != null && byDisplayName.containsKey(meetDisplayName.toLowerCase())) return byDisplayName.get(meetDisplayName.toLowerCase());
+        if (name != null && byDisplayName.containsKey(name.toLowerCase())) return byDisplayName.get(name.toLowerCase());
+        return null;
+    }
+
+    private AttendanceStatus statusFromJoinTime(Instant joinTime, Instant classStart) {
+        return (joinTime != null && joinTime.isAfter(classStart)) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+    }
+
+    private AttendanceStatus writeStudentAttendance(Student student, CalendarEvent event, LocalDate date,
+                                                     Instant joinTime, Instant classStart) {
+        AttendanceStatus status = statusFromJoinTime(joinTime, classStart);
+        attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(student.getId(), event.getId(), date)
+                .ifPresentOrElse(existing -> {}, () -> attendanceRepository.save(
+                        Attendance.builder().student(student).calendarEventId(event.getId())
+                                .date(date).status(status).build()));
+        return status;
+    }
+
+    private AttendanceStatus writeTeacherAttendance(Teacher teacher, CalendarEvent event, LocalDate date,
+                                                     Instant joinTime, Instant classStart) {
+        AttendanceStatus status = statusFromJoinTime(joinTime, classStart);
+        attendanceRepository.findByTeacherIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), date)
+                .ifPresentOrElse(existing -> {}, () -> attendanceRepository.save(
+                        Attendance.builder().teacher(teacher).calendarEventId(event.getId())
+                                .date(date).status(status).build()));
+        return status;
     }
 
     private boolean isInMeet(Student student, Set<String> liveGoogleIds, Set<String> liveDisplayNames) {

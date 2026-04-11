@@ -76,8 +76,26 @@ public class GoogleMeetClient implements MeetClient {
         String conferenceRecord = activeConference.path("conferenceRecord").asText(null);
         if (conferenceRecord == null) return List.of();
 
+        return fetchParticipants(conferenceRecord, true);
+    }
+
+    @Override
+    public List<MeetParticipant> getAllParticipants(String spaceCode) throws IOException, InterruptedException {
+        JsonNode space = getSpace(spaceCode);
+        if (space == null) return List.of();
+
+        JsonNode activeConference = space.get("activeConference");
+        if (activeConference == null || activeConference.isNull()) return List.of();
+
+        String conferenceRecord = activeConference.path("conferenceRecord").asText(null);
+        if (conferenceRecord == null) return List.of();
+
+        return fetchParticipants(conferenceRecord, false);
+    }
+
+    private List<MeetParticipant> fetchParticipants(String conferenceRecord, boolean activeOnly)
+            throws IOException, InterruptedException {
         String token = getValidAccessToken();
-        // No server-side filter — latestEndTime absent means still in the meeting; filter client-side
         String url = MEET_API + "/" + conferenceRecord + "/participants";
 
         HttpRequest request = HttpRequest.newBuilder()
@@ -87,7 +105,7 @@ public class GoogleMeetClient implements MeetClient {
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        log.info("GET participants ({}) -> HTTP {} body: {}", spaceCode, response.statusCode(), response.body());
+        log.info("GET participants ({}) -> HTTP {} body: {}", conferenceRecord, response.statusCode(), response.body());
 
         JsonNode root = objectMapper.readTree(response.body());
         JsonNode participants = root.get("participants");
@@ -95,27 +113,27 @@ public class GoogleMeetClient implements MeetClient {
         List<MeetParticipant> result = new ArrayList<>();
         if (participants != null && participants.isArray()) {
             for (JsonNode participant : participants) {
-                // Skip participants who have already left (latestEndTime present)
-                if (participant.has("latestEndTime")) continue;
-                log.info("  participant node keys: {}", participant.fieldNames());
+                if (activeOnly && participant.has("latestEndTime")) continue;
+
+                java.time.Instant joinTime = null;
+                String raw = participant.path("earliestStartTime").asText(null);
+                if (raw != null) {
+                    try { joinTime = java.time.Instant.parse(raw); } catch (Exception ignored) {}
+                }
+
                 JsonNode signedinUser = participant.get("signedinUser");
                 if (signedinUser != null) {
                     String displayName = signedinUser.path("displayName").asText(null);
-                    // "users/118377222510251534014" → "118377222510251534014"
                     String userResource = signedinUser.path("user").asText(null);
                     String googleUserId = userResource != null && userResource.startsWith("users/")
                             ? userResource.substring("users/".length())
                             : userResource;
-                    log.info("  signedinUser -> googleUserId={} displayName={}", googleUserId, displayName);
-                    result.add(new MeetParticipant(googleUserId, displayName));
+                    result.add(new MeetParticipant(googleUserId, displayName, joinTime));
                 } else {
                     JsonNode anonymousUser = participant.get("anonymousUser");
                     if (anonymousUser != null) {
                         String displayName = anonymousUser.path("displayName").asText(null);
-                        log.info("  anonymousUser -> displayName={}", displayName);
-                        result.add(new MeetParticipant(null, displayName));
-                    } else {
-                        log.info("  unknown participant structure: {}", participant);
+                        result.add(new MeetParticipant(null, displayName, joinTime));
                     }
                 }
             }

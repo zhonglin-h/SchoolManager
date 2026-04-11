@@ -39,7 +39,7 @@ function mergeWithLive(
         : false,
     }))
     const present = students.filter(
-      (e) => e.status === 'PRESENT' || e.status === 'LATE' || e.inMeetNow
+      (e) => e.status === 'PRESENT' || e.status === 'LATE'
     ).length
     return {
       ...event,

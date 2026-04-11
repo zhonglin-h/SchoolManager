@@ -6,6 +6,7 @@ import com.school.entity.Student;
 import com.school.integration.MeetClient;
 import com.school.integration.MeetParticipant;
 import com.school.model.CalendarEvent;
+import com.school.service.NotificationType;
 import com.school.repository.AttendanceRepository;
 import com.school.repository.StudentRepository;
 import com.school.repository.TeacherRepository;
@@ -54,8 +55,8 @@ class MeetAttendanceMonitorTest {
     private Student alice;
     private Student bob;
 
-    private static final MeetParticipant ALICE_PARTICIPANT = new MeetParticipant("uid-alice", "Alice");
-    private static final MeetParticipant BOB_PARTICIPANT   = new MeetParticipant("uid-bob",   "Bob");
+    private static final MeetParticipant ALICE_PARTICIPANT = new MeetParticipant("uid-alice", "Alice", null);
+    private static final MeetParticipant BOB_PARTICIPANT   = new MeetParticipant("uid-bob",   "Bob",   null);
 
     @BeforeEach
     void setUp() {
@@ -78,27 +79,27 @@ class MeetAttendanceMonitorTest {
     void checkMeetingStarted_notifiesPrincipalWhenMeetingNotActive() throws Exception {
         when(meetClient.isMeetingActive("abc-def")).thenReturn(false);
 
-        monitor.checkMeetingStarted(event, "MEETING_NOT_STARTED_15");
+        monitor.checkMeetingStarted(event, NotificationType.MEETING_NOT_STARTED_15);
 
-        verify(notificationService).notifyMeetingNotStarted(event, "MEETING_NOT_STARTED_15");
+        verify(notificationService).notify(NotificationType.MEETING_NOT_STARTED_15, event, null);
     }
 
     @Test
     void checkMeetingStarted_doesNothingWhenMeetingIsActive() throws Exception {
         when(meetClient.isMeetingActive("abc-def")).thenReturn(true);
 
-        monitor.checkMeetingStarted(event, "MEETING_NOT_STARTED_15");
+        monitor.checkMeetingStarted(event, NotificationType.MEETING_NOT_STARTED_15);
 
-        verify(notificationService, never()).notifyMeetingNotStarted(any(), anyString());
+        verify(notificationService, never()).notify(any(), any(), any());
     }
 
     @Test
     void checkMeetingStarted_swallowsExceptionGracefully() throws Exception {
         when(meetClient.isMeetingActive(anyString())).thenThrow(new RuntimeException("API error"));
 
-        monitor.checkMeetingStarted(event, "MEETING_NOT_STARTED_15");
+        monitor.checkMeetingStarted(event, NotificationType.MEETING_NOT_STARTED_15);
 
-        verify(notificationService, never()).notifyMeetingNotStarted(any(), anyString());
+        verify(notificationService, never()).notify(any(), any(), any());
     }
 
     // --- resolveAndAutoLearn (via checkPreClassJoins) ---
@@ -112,13 +113,13 @@ class MeetAttendanceMonitorTest {
 
         monitor.checkPreClassJoins(event);
 
-        verify(notificationService, never()).notifyNotYetJoined(event, alice);
-        verify(notificationService).notifyNotYetJoined(event, bob);
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(event), eq(alice));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, event, bob);
     }
 
     @Test
     void checkPreClassJoins_fallsBackToDisplayNameWhenNoGoogleUserId() throws Exception {
-        MeetParticipant noId = new MeetParticipant(null, "Alice");
+        MeetParticipant noId = new MeetParticipant(null, "Alice", null);
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(noId));
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
@@ -126,14 +127,14 @@ class MeetAttendanceMonitorTest {
 
         monitor.checkPreClassJoins(event);
 
-        verify(notificationService, never()).notifyNotYetJoined(event, alice);
-        verify(notificationService).notifyNotYetJoined(event, bob);
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(event), eq(alice));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, event, bob);
     }
 
     @Test
     void checkPreClassJoins_autoSavesGoogleUserIdOnNameMatch() throws Exception {
         // Alice has no googleUserId stored yet; participant arrives with one
-        MeetParticipant newParticipant = new MeetParticipant("uid-alice", "Alice");
+        MeetParticipant newParticipant = new MeetParticipant("uid-alice", "Alice", null);
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(newParticipant));
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
@@ -157,7 +158,7 @@ class MeetAttendanceMonitorTest {
 
         monitor.checkPreClassJoins(event);
 
-        verify(notificationService, never()).notifyNotYetJoined(any(), any());
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), any(), any());
     }
 
     @Test
@@ -168,8 +169,8 @@ class MeetAttendanceMonitorTest {
 
         monitor.checkPreClassJoins(event);
 
-        verify(notificationService).notifyNotYetJoined(event, bob);
-        verify(notificationService, never()).notifyNotYetJoined(eq(event), eq(alice));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, event, bob);
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(event), eq(alice));
     }
 
     // --- startSessionPolling (initial snapshot) ---
@@ -238,8 +239,7 @@ class MeetAttendanceMonitorTest {
         verify(attendanceRepository, org.mockito.Mockito.atLeastOnce()).save(attendanceCaptor.capture());
         assertThat(attendanceCaptor.getAllValues())
                 .anyMatch(a -> a.getStudent().equals(alice) && a.getStatus() == AttendanceStatus.LATE);
-        verify(notificationService).notifyArrival(event, alice);
-        verify(notificationService).notifyLate(event, alice);
+        verify(notificationService).notify(NotificationType.LATE, event, alice);
     }
 
     @Test
@@ -261,13 +261,14 @@ class MeetAttendanceMonitorTest {
         monitor.startSessionPolling(event);
         runnableCaptor.getValue().run();
 
-        verify(notificationService).notifyAllPresent(event);
+        verify(notificationService).notify(NotificationType.ALL_PRESENT, event, null);
     }
 
     // --- finalizeSession ---
 
     @Test
-    void finalizeSession_marksAbsentAndNotifiesForMissingStudents() {
+    void finalizeSession_marksAbsentAndNotifiesForMissingStudents() throws Exception {
+        when(meetClient.getAllParticipants(anyString())).thenReturn(List.of());
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
@@ -278,12 +279,13 @@ class MeetAttendanceMonitorTest {
         ArgumentCaptor<Attendance> captor = ArgumentCaptor.forClass(Attendance.class);
         verify(attendanceRepository, org.mockito.Mockito.times(2)).save(captor.capture());
         assertThat(captor.getAllValues()).allMatch(a -> a.getStatus() == AttendanceStatus.ABSENT);
-        verify(notificationService).notifyAbsent(event, alice);
-        verify(notificationService).notifyAbsent(event, bob);
+        verify(notificationService).notify(NotificationType.ABSENT, event, alice);
+        verify(notificationService).notify(NotificationType.ABSENT, event, bob);
     }
 
     @Test
-    void finalizeSession_doesNotMarkAbsentIfAttendanceAlreadyRecorded() {
+    void finalizeSession_doesNotMarkAbsentIfAttendanceAlreadyRecorded() throws Exception {
+        when(meetClient.getAllParticipants(anyString())).thenReturn(List.of());
         when(studentRepository.findByMeetEmail("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmail("bob@meet.com")).thenReturn(Optional.of(bob));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(eq(1L), anyString(), any()))
@@ -295,8 +297,8 @@ class MeetAttendanceMonitorTest {
 
         monitor.finalizeSession(event);
 
-        verify(notificationService, never()).notifyAbsent(event, alice);
-        verify(notificationService).notifyAbsent(event, bob);
+        verify(notificationService, never()).notify(eq(NotificationType.ABSENT), eq(event), eq(alice));
+        verify(notificationService).notify(NotificationType.ABSENT, event, bob);
     }
 
     // --- getUpcomingChecks ---

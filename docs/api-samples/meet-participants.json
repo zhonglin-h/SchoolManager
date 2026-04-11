@@ -1,0 +1,28 @@
+{
+  "participants": [
+    {
+      "name": "conferenceRecords/xvO1-2rse2QS7nXJVmEyDxIXOAIIigIgABgBCA/participants/102221544984602802791",
+      "signedinUser": {
+        "user": "users/102221544984602802791",
+        "displayName": "Emi Ioakeimidis"
+      },
+      "earliestStartTime": "2026-04-11T01:38:38.231151Z"
+    },
+    {
+      "name": "conferenceRecords/xvO1-2rse2QS7nXJVmEyDxIXOAIIigIgABgBCA/participants/114068539577627846300",
+      "signedinUser": {
+        "user": "users/114068539577627846300",
+        "displayName": "keyu cao"
+      },
+      "earliestStartTime": "2026-04-11T01:37:18.141807Z"
+    },
+    {
+      "name": "conferenceRecords/xvO1-2rse2QS7nXJVmEyDxIXOAIIigIgABgBCA/participants/118377222510251534014",
+      "signedinUser": {
+        "user": "users/118377222510251534014",
+        "displayName": "Victoria Yin"
+      },
+      "earliestStartTime": "2026-04-11T00:51:49.005391Z"
+    }
+  ]
+}

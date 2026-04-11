@@ -7,14 +7,6 @@ import org.springframework.stereotype.Component;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Stub Meet client for local development.
- * Enable with app.meet.mock=true in application.properties.
- *
- * Set app.meet.mock.active-names to a comma-separated list of display names
- * that should be treated as currently active in the meeting.
- * Leave empty to simulate an empty meeting.
- */
 @Component
 @ConditionalOnProperty(name = "app.meet.mock", havingValue = "true")
 public class MockMeetClient implements MeetClient {
@@ -23,13 +15,14 @@ public class MockMeetClient implements MeetClient {
 
     public MockMeetClient(
             @Value("${app.meet.mock.active-names:}") String activeNamesCsv) {
+        java.time.Instant joinTime = java.time.Instant.now();
         if (activeNamesCsv == null || activeNamesCsv.isBlank()) {
             this.activeParticipants = List.of();
         } else {
             this.activeParticipants = Arrays.stream(activeNamesCsv.split(","))
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())
-                    .map(name -> new MeetParticipant(null, name))
+                    .map(name -> new MeetParticipant(null, name, joinTime))
                     .toList();
         }
     }
@@ -41,6 +34,11 @@ public class MockMeetClient implements MeetClient {
 
     @Override
     public List<MeetParticipant> getActiveParticipants(String spaceCode) {
+        return activeParticipants;
+    }
+
+    @Override
+    public List<MeetParticipant> getAllParticipants(String spaceCode) {
         return activeParticipants;
     }
 }
