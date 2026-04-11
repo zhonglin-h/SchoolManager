@@ -23,8 +23,5 @@
 5. **Editing Feature:**
    - Allow editing records to update Type, Date, Reason, and Notes directly from the table.
 
-6. **Access Control:**
-   - Restrict access to principals or admin roles.
-
 **Suggestions:**
 Include ideas such as audit trails, quick actions for reviewing records, summary statistics, export options (CSV), and color indicators for easy identification of records.
