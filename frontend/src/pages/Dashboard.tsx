@@ -121,52 +121,52 @@ function AttendanceCard({ event, onGuestRegistered }: { event: AttendanceSummary
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
 
-          {event.guests && event.guests.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-gray-100">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Others in meeting</p>
-          <table className="min-w-full text-sm">
-            <tbody>
-              {event.guests.map((guest: GuestEntry, i: number) => (
-                <tr key={guest.googleUserId ?? i} className="border-b last:border-0">
-                  <td className="py-1 pr-6">
-                    {guest.registeredName ? (
-                      <span className="text-gray-800">{guest.registeredName}</span>
-                    ) : (
-                      <span className="text-gray-500 italic">{guest.displayName ?? 'Unknown'}</span>
-                    )}
-                  </td>
-                  <td className="py-1 pr-6">
-                    {guest.personType === 'STUDENT' && <span className="text-xs text-gray-400">Student · not invited</span>}
-                    {guest.personType === 'TEACHER' && <span className="text-xs text-gray-400">Teacher · not invited</span>}
-                    {!guest.personType && <span className="text-xs text-gray-400">Not registered</span>}
-                  </td>
-                  <td className="py-1">
-                    {!guest.personType && (
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => setQuickAdd({ email: '', initialName: guest.displayName ?? '', calendarEventId: event.calendarEventId, mode: 'student' })}
-                          className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-0.5 rounded"
-                        >
-                          + Student
-                        </button>
-                        <button
-                          onClick={() => setQuickAdd({ email: '', initialName: guest.displayName ?? '', calendarEventId: event.calendarEventId, mode: 'teacher' })}
-                          className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-2 py-0.5 rounded"
-                        >
-                          + Teacher
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {event.guests && event.guests.length > 0 && (
+                <>
+                  <tr>
+                    <td colSpan={3} className="pt-3 pb-1">
+                      <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">Others in meeting</span>
+                    </td>
+                  </tr>
+                  {event.guests.map((guest: GuestEntry, i: number) => (
+                    <tr key={guest.googleUserId ?? i} className="border-b last:border-0">
+                      <td className="py-1 pr-6">
+                        {guest.registeredName ? (
+                          <span className="text-gray-800">{guest.registeredName}</span>
+                        ) : (
+                          <span className="text-gray-500 italic">{guest.displayName ?? 'Unknown'}</span>
+                        )}
+                      </td>
+                      <td className="py-1 pr-6">
+                        {guest.personType === 'STUDENT' && <span className="text-xs text-gray-400">Student · not invited</span>}
+                        {guest.personType === 'TEACHER' && <span className="text-xs text-gray-400">Teacher · not invited</span>}
+                        {!guest.personType && <span className="text-xs text-gray-400">Not registered</span>}
+                      </td>
+                      <td className="py-1">
+                        {!guest.personType && (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => setQuickAdd({ email: '', initialName: guest.displayName ?? '', calendarEventId: event.calendarEventId, mode: 'student' })}
+                              className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-0.5 rounded"
+                            >
+                              + Student
+                            </button>
+                            <button
+                              onClick={() => setQuickAdd({ email: '', initialName: guest.displayName ?? '', calendarEventId: event.calendarEventId, mode: 'teacher' })}
+                              className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-2 py-0.5 rounded"
+                            >
+                              + Teacher
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              )}
             </tbody>
           </table>
-            </div>
-          )}
         </div>
       )}
 
