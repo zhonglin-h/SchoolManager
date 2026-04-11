@@ -58,8 +58,10 @@ export function useAttendanceToday() {
 
   const query = useQuery({
     queryKey: ['attendance', 'today'],
-    queryFn: () => getAttendanceToday(false),
-    refetchInterval: 60000,
+    queryFn: () => {
+      if (import.meta.env.DEV) console.log('[attendance] DB refresh')
+      return getAttendanceToday(false)
+    },
   })
 
   const data = useMemo(
@@ -67,16 +69,19 @@ export function useAttendanceToday() {
     [query.data, liveData]
   )
 
-  // Once DB data first arrives, do a single background live fetch
+  // Once DB data first arrives, start the live refresh cycle
   useEffect(() => {
     if (query.data && !initialLiveDoneRef.current) {
       initialLiveDoneRef.current = true
       refreshLive()
+      const interval = setInterval(refreshLive, 60000)
+      return () => clearInterval(interval)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query.data])
 
   async function refreshLive() {
+    if (import.meta.env.DEV) console.log('[attendance] live refresh')
     setIsLiveRefreshing(true)
     try {
       const result = await getAttendanceToday(true)
