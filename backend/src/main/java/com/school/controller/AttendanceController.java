@@ -409,7 +409,7 @@ public class AttendanceController {
                             .date(date)
                             .build());
             att.setStatus(req.status());
-            if (req.eventTitle() != null && att.getEventTitle() == null) {
+            if (req.eventTitle() != null) {
                 att.setEventTitle(req.eventTitle());
             }
             attendanceRepository.save(att);
@@ -424,7 +424,7 @@ public class AttendanceController {
                             .date(date)
                             .build());
             att.setStatus(req.status());
-            if (req.eventTitle() != null && att.getEventTitle() == null) {
+            if (req.eventTitle() != null) {
                 att.setEventTitle(req.eventTitle());
             }
             attendanceRepository.save(att);

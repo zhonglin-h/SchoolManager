@@ -50,7 +50,7 @@ public class Attendance {
     @Enumerated(EnumType.STRING)
     private AttendanceStatus status;
 
-    @Column(nullable = false)
+    @Column
     private LocalDateTime updatedAt;
 
     @PrePersist

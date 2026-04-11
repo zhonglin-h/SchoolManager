@@ -69,9 +69,12 @@ export default function AttendanceRecords() {
       {
         accessorKey: 'eventTitle',
         header: 'Class',
-        cell: ({ getValue }) => (
-          <span className="text-gray-700">{getValue<string | null>() ?? <span className="text-gray-400 italic">—</span>}</span>
-        ),
+        cell: ({ getValue }) => {
+          const title = getValue<string | null>()
+          return title
+            ? <span className="text-gray-700">{title}</span>
+            : <span className="text-gray-400 italic">—</span>
+        },
       },
       {
         accessorKey: 'status',
