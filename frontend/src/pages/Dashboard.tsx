@@ -45,7 +45,7 @@ function MeetingActiveDot({ active }: { active: boolean | null }) {
   return <span className="inline-flex rounded-full h-2.5 w-2.5 bg-gray-300 ml-2 mt-0.5" />
 }
 
-function AttendanceCard({ event }: { event: AttendanceSummaryResponse }) {
+function AttendanceCard({ event, onGuestRegistered }: { event: AttendanceSummaryResponse; onGuestRegistered?: (displayName: string, id: number, personType: 'STUDENT' | 'TEACHER') => void }) {
   const [expanded, setExpanded] = useState(false)
   const [quickAdd, setQuickAdd] = useState<{ email: string; initialName?: string; mode: 'student' | 'teacher' } | null>(null)
 
@@ -175,6 +175,7 @@ function AttendanceCard({ event }: { event: AttendanceSummaryResponse }) {
           email={quickAdd.email}
           initialName={quickAdd.initialName}
           mode={quickAdd.mode}
+          onSaved={(id, personType) => onGuestRegistered?.(quickAdd.initialName ?? '', id, personType)}
           onClose={() => setQuickAdd(null)}
         />
       )}
@@ -183,7 +184,7 @@ function AttendanceCard({ event }: { event: AttendanceSummaryResponse }) {
 }
 
 export default function Dashboard() {
-  const { data, isLoading, isFetching, isLiveRefreshing, refreshLive, isError } = useAttendanceToday()
+  const { data, isLoading, isFetching, isLiveRefreshing, refreshLive, patchLiveGuest, isError } = useAttendanceToday()
   const { data: checks = [] } = useScheduledChecks()
 
   return (
@@ -219,7 +220,7 @@ export default function Dashboard() {
         )}
 
         {data && data.map((event) => (
-          <AttendanceCard key={event.calendarEventId} event={event} />
+          <AttendanceCard key={event.calendarEventId} event={event} onGuestRegistered={(displayName, id, personType) => patchLiveGuest(event.calendarEventId, displayName, id, personType)} />
         ))}
       </section>
 

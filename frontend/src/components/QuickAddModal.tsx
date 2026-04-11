@@ -7,9 +7,10 @@ interface Props {
   initialName?: string
   mode: 'student' | 'teacher'
   onClose: () => void
+  onSaved?: (id: number, personType: 'STUDENT' | 'TEACHER') => void
 }
 
-export default function QuickAddModal({ email, initialName = '', mode, onClose }: Props) {
+export default function QuickAddModal({ email, initialName = '', mode, onClose, onSaved }: Props) {
   const queryClient = useQueryClient()
   const [name, setName] = useState(initialName)
   const [meetEmail, setMeetEmail] = useState(email)
@@ -23,7 +24,7 @@ export default function QuickAddModal({ email, initialName = '', mode, onClose }
     setError(null)
     try {
       if (mode === 'student') {
-        await createStudent({
+        const person = await createStudent({
           name,
           meetEmail,
           meetDisplayName,
@@ -32,9 +33,11 @@ export default function QuickAddModal({ email, initialName = '', mode, onClose }
           parentPhone: '',
         })
         queryClient.invalidateQueries({ queryKey: ['students'] })
+        onSaved?.(person.id, 'STUDENT')
       } else {
-        await createTeacher({ name, meetEmail, meetDisplayName, phone: '', hourlyRate: null })
+        const person = await createTeacher({ name, meetEmail, meetDisplayName, phone: '', hourlyRate: null })
         queryClient.invalidateQueries({ queryKey: ['teachers'] })
+        onSaved?.(person.id, 'TEACHER')
       }
       queryClient.invalidateQueries({ queryKey: ['attendance', 'today'] })
       onClose()

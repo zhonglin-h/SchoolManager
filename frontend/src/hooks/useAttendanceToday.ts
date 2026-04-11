@@ -32,16 +32,21 @@ function mergeWithLive(
   return dbData.map((event) => {
     const live = liveMap[event.calendarEventId]
     if (!live) return event
+    const students = event.students.map((entry) => ({
+      ...entry,
+      inMeetNow: entry.personId != null
+        ? (live.inMeetNow[`${entry.personType}:${entry.personId}`] ?? false)
+        : false,
+    }))
+    const present = students.filter(
+      (e) => e.status === 'PRESENT' || e.status === 'LATE' || e.inMeetNow
+    ).length
     return {
       ...event,
       meetingActive: live.meetingActive,
       guests: live.guests,
-      students: event.students.map((entry) => ({
-        ...entry,
-        inMeetNow: entry.personId != null
-          ? (live.inMeetNow[`${entry.personType}:${entry.personId}`] ?? false)
-          : false,
-      })),
+      students,
+      present,
     }
   })
 }
@@ -49,7 +54,7 @@ function mergeWithLive(
 export function useAttendanceToday() {
   const [isLiveRefreshing, setIsLiveRefreshing] = useState(false)
   const [liveData, setLiveData] = useState<Record<string, LiveEventData>>({})
-  const lastLiveFetchRef = useRef(0)
+  const initialLiveDoneRef = useRef(false)
 
   const query = useQuery({
     queryKey: ['attendance', 'today'],
@@ -62,14 +67,14 @@ export function useAttendanceToday() {
     [query.data, liveData]
   )
 
-  // After each DB fetch completes, kick off a background live refresh
+  // Once DB data first arrives, do a single background live fetch
   useEffect(() => {
-    if (query.dataUpdatedAt > 0 && query.dataUpdatedAt !== lastLiveFetchRef.current) {
-      lastLiveFetchRef.current = query.dataUpdatedAt
+    if (query.data && !initialLiveDoneRef.current) {
+      initialLiveDoneRef.current = true
       refreshLive()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query.dataUpdatedAt])
+  }, [query.data])
 
   async function refreshLive() {
     setIsLiveRefreshing(true)
@@ -81,5 +86,28 @@ export function useAttendanceToday() {
     }
   }
 
-  return { ...query, data, isLiveRefreshing, refreshLive }
+  function patchLiveGuest(
+    calendarEventId: string,
+    displayName: string,
+    personId: number,
+    personType: 'STUDENT' | 'TEACHER'
+  ) {
+    setLiveData((prev) => {
+      const event = prev[calendarEventId]
+      if (!event) return prev
+      return {
+        ...prev,
+        [calendarEventId]: {
+          ...event,
+          guests: event.guests.map((g) =>
+            g.displayName === displayName
+              ? { ...g, personId, personType, registeredName: displayName }
+              : g
+          ),
+        },
+      }
+    })
+  }
+
+  return { ...query, data, isLiveRefreshing, refreshLive, patchLiveGuest }
 }
