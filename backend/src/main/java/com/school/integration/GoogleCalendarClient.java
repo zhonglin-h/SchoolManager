@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,9 +30,10 @@ public class GoogleCalendarClient {
     }
 
     public List<CalendarEvent> getTodaysEvents() throws IOException {
-        LocalDate today = LocalDate.now();
-        ZonedDateTime startOfDay = today.atStartOfDay(ZoneOffset.UTC);
-        ZonedDateTime endOfDay = today.plusDays(1).atStartOfDay(ZoneOffset.UTC);
+        ZoneId localZone = ZoneId.systemDefault();
+        LocalDate today = LocalDate.now(localZone);
+        ZonedDateTime startOfDay = today.atStartOfDay(localZone);
+        ZonedDateTime endOfDay = today.plusDays(1).atStartOfDay(localZone);
 
         DateTime timeMin = new DateTime(startOfDay.toInstant().toEpochMilli());
         DateTime timeMax = new DateTime(endOfDay.toInstant().toEpochMilli());
