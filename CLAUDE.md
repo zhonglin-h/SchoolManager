@@ -127,6 +127,17 @@ VITE_API_BASE_URL=http://localhost:8080
 
 Credential files (`service-account.json`, `.env.local`) must never be committed.
 
+## Tooling
+
+### Serena MCP
+Serena is available as an MCP server and provides semantic coding tools for codebase exploration and editing. Always prefer Serena's tools over raw file reads when doing code work:
+
+- Use `mcp__serena__get_symbols_overview` and `mcp__serena__find_symbol` to explore code structure instead of reading entire files.
+- Use `mcp__serena__search_for_pattern` for flexible codebase searches.
+- Use `mcp__serena__replace_symbol_body`, `mcp__serena__insert_after_symbol`, etc. for targeted edits.
+- Serena tools are **deferred** — load their schemas first with `ToolSearch` (e.g., `select:mcp__serena__find_symbol`) before calling them.
+- Open the Serena dashboard at http://127.0.0.1:24283/dashboard/index.html or via `mcp__serena__open_dashboard`.
+
 ## Development Phases
 
 See `Build Phases.md` for the full incremental delivery plan. Summary:
