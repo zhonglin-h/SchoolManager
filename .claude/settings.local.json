@@ -3,7 +3,9 @@
     "allow": [
       "WebFetch(domain:developers.google.com)",
       "mcp__serena__*",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(./gradlew test:*)",
+      "Bash(./gradlew compileJava:*)"
     ]
   }
 }
