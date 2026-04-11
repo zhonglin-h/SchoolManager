@@ -47,7 +47,7 @@ function MeetingActiveDot({ active }: { active: boolean | null }) {
 
 function AttendanceCard({ event }: { event: AttendanceSummaryResponse }) {
   const [expanded, setExpanded] = useState(false)
-  const [quickAdd, setQuickAdd] = useState<{ email: string; mode: 'student' | 'teacher' } | null>(null)
+  const [quickAdd, setQuickAdd] = useState<{ email: string; initialName?: string; mode: 'student' | 'teacher' } | null>(null)
 
   return (
     <div className="bg-white rounded-lg shadow p-4 mb-4">
@@ -147,13 +147,13 @@ function AttendanceCard({ event }: { event: AttendanceSummaryResponse }) {
                     {!guest.personType && (
                       <div className="flex gap-1">
                         <button
-                          onClick={() => guest.displayName && setQuickAdd({ email: guest.displayName, mode: 'student' })}
+                          onClick={() => setQuickAdd({ email: '', initialName: guest.displayName ?? '', mode: 'student' })}
                           className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-0.5 rounded"
                         >
                           + Student
                         </button>
                         <button
-                          onClick={() => guest.displayName && setQuickAdd({ email: guest.displayName, mode: 'teacher' })}
+                          onClick={() => setQuickAdd({ email: '', initialName: guest.displayName ?? '', mode: 'teacher' })}
                           className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-2 py-0.5 rounded"
                         >
                           + Teacher
@@ -173,6 +173,7 @@ function AttendanceCard({ event }: { event: AttendanceSummaryResponse }) {
       {quickAdd && (
         <QuickAddModal
           email={quickAdd.email}
+          initialName={quickAdd.initialName}
           mode={quickAdd.mode}
           onClose={() => setQuickAdd(null)}
         />
@@ -182,7 +183,7 @@ function AttendanceCard({ event }: { event: AttendanceSummaryResponse }) {
 }
 
 export default function Dashboard() {
-  const { data, isLoading, isError } = useAttendanceToday()
+  const { data, isLoading, isFetching, isError } = useAttendanceToday()
   const { data: checks = [] } = useScheduledChecks()
 
   return (
@@ -190,7 +191,12 @@ export default function Dashboard() {
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
 
       <section className="mb-8">
-        <h2 className="text-lg font-semibold text-gray-700 mb-3">Today's Attendance</h2>
+        <div className="flex items-center gap-3 mb-3">
+          <h2 className="text-lg font-semibold text-gray-700">Today's Attendance</h2>
+          {isFetching && !isLoading && (
+            <span className="text-xs text-gray-400 animate-pulse">Refreshing…</span>
+          )}
+        </div>
 
         {isLoading && <p className="text-gray-500">Loading attendance…</p>}
 

@@ -4,13 +4,15 @@ import { createStudent, createTeacher } from '../services/api'
 
 interface Props {
   email: string
+  initialName?: string
   mode: 'student' | 'teacher'
   onClose: () => void
 }
 
-export default function QuickAddModal({ email, mode, onClose }: Props) {
+export default function QuickAddModal({ email, initialName = '', mode, onClose }: Props) {
   const queryClient = useQueryClient()
-  const [name, setName] = useState('')
+  const [name, setName] = useState(initialName)
+  const [meetEmail, setMeetEmail] = useState(email)
   const [meetDisplayName, setMeetDisplayName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -23,7 +25,7 @@ export default function QuickAddModal({ email, mode, onClose }: Props) {
       if (mode === 'student') {
         await createStudent({
           name,
-          meetEmail: email,
+          meetEmail,
           meetDisplayName,
           classroomEmail: '',
           parentEmail: '',
@@ -31,7 +33,7 @@ export default function QuickAddModal({ email, mode, onClose }: Props) {
         })
         queryClient.invalidateQueries({ queryKey: ['students'] })
       } else {
-        await createTeacher({ name, meetEmail: email, meetDisplayName, phone: '', hourlyRate: null })
+        await createTeacher({ name, meetEmail, meetDisplayName, phone: '', hourlyRate: null })
         queryClient.invalidateQueries({ queryKey: ['teachers'] })
       }
       queryClient.invalidateQueries({ queryKey: ['attendance', 'today'] })
@@ -49,7 +51,7 @@ export default function QuickAddModal({ email, mode, onClose }: Props) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-lg p-5 w-80">
         <h2 className="text-base font-semibold text-gray-800 mb-1">Add as {label}</h2>
-        <p className="text-xs text-gray-500 mb-4 truncate">{email}</p>
+        {email && <p className="text-xs text-gray-500 mb-4 truncate">{email}</p>}
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Name</label>
@@ -61,6 +63,16 @@ export default function QuickAddModal({ email, mode, onClose }: Props) {
               className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
             />
           </div>
+          {!email && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Meet Email</label>
+              <input
+                value={meetEmail}
+                onChange={(e) => setMeetEmail(e.target.value)}
+                className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+          )}
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Meet Display Name <span className="text-gray-400">(optional)</span></label>
             <input
