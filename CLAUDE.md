@@ -138,6 +138,10 @@ Serena is available as an MCP server and provides semantic coding tools for code
 - Serena tools are **deferred** — load their schemas first with `ToolSearch` (e.g., `select:mcp__serena__find_symbol`) before calling them.
 - Open the Serena dashboard at http://127.0.0.1:24283/dashboard/index.html or via `mcp__serena__open_dashboard`.
 
+## Plans
+
+Feature plans are stored in `./Plans/`. When asked to plan a feature or enhancement, save the plan as a Markdown file there.
+
 ## Development Phases
 
 See `Build Phases.md` for the full incremental delivery plan. Summary:
