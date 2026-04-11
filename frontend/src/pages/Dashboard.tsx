@@ -183,19 +183,29 @@ function AttendanceCard({ event }: { event: AttendanceSummaryResponse }) {
 }
 
 export default function Dashboard() {
-  const { data, isLoading, isFetching, isError } = useAttendanceToday()
+  const { data, isLoading, isFetching, isLiveRefreshing, refreshLive, isError } = useAttendanceToday()
   const { data: checks = [] } = useScheduledChecks()
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
 
+      {(isFetching && !isLoading || isLiveRefreshing) && (
+        <div className="fixed bottom-4 right-4 bg-gray-800 text-white text-xs px-3 py-2 rounded shadow-lg z-50 animate-pulse">
+          Refreshing…
+        </div>
+      )}
+
       <section className="mb-8">
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold text-gray-700">Today's Attendance</h2>
-          {isFetching && !isLoading && (
-            <span className="text-xs text-gray-400 animate-pulse">Refreshing…</span>
-          )}
+          <button
+            onClick={refreshLive}
+            disabled={isLiveRefreshing}
+            className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 flex items-center gap-1"
+          >
+            ↻ Refresh live
+          </button>
         </div>
 
         {isLoading && <p className="text-gray-500">Loading attendance…</p>}

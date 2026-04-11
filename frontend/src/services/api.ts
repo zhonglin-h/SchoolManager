@@ -168,8 +168,10 @@ export async function deleteTeacher(id: number): Promise<void> {
 
 // ── Attendance ─────────────────────────────────────────────────────────────
 
-export async function getAttendanceToday(): Promise<AttendanceSummaryResponse[]> {
-  const { data } = await api.get<AttendanceSummaryResponse[]>('/attendance/today')
+export async function getAttendanceToday(live = false): Promise<AttendanceSummaryResponse[]> {
+  const { data } = await api.get<AttendanceSummaryResponse[]>('/attendance/today', {
+    params: live ? { live: true } : undefined,
+  })
   return data
 }
 

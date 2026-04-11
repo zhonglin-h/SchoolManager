@@ -264,11 +264,11 @@ public class MeetAttendanceMonitor {
             Optional<Student> student = Optional.empty();
 
             if (participant.googleUserId() != null) {
-                student = studentRepository.findByGoogleUserId(participant.googleUserId());
+                student = studentRepository.findByGoogleUserIdAndActiveTrue(participant.googleUserId());
             }
             if (student.isEmpty() && participant.displayName() != null) {
-                student = studentRepository.findByMeetDisplayNameIgnoreCase(participant.displayName())
-                        .or(() -> studentRepository.findByNameIgnoreCase(participant.displayName()));
+                student = studentRepository.findByMeetDisplayNameIgnoreCaseAndActiveTrue(participant.displayName())
+                        .or(() -> studentRepository.findByNameIgnoreCaseAndActiveTrue(participant.displayName()));
             }
             if (student.isPresent()) {
                 autoLearnStudent(student.get(), participant);
@@ -278,11 +278,11 @@ public class MeetAttendanceMonitor {
 
             Optional<Teacher> teacher = Optional.empty();
             if (participant.googleUserId() != null) {
-                teacher = teacherRepository.findByGoogleUserId(participant.googleUserId());
+                teacher = teacherRepository.findByGoogleUserIdAndActiveTrue(participant.googleUserId());
             }
             if (teacher.isEmpty() && participant.displayName() != null) {
-                teacher = teacherRepository.findByMeetDisplayNameIgnoreCase(participant.displayName())
-                        .or(() -> teacherRepository.findByNameIgnoreCase(participant.displayName()));
+                teacher = teacherRepository.findByMeetDisplayNameIgnoreCaseAndActiveTrue(participant.displayName())
+                        .or(() -> teacherRepository.findByNameIgnoreCaseAndActiveTrue(participant.displayName()));
             }
             if (teacher.isPresent()) {
                 autoLearnTeacher(teacher.get(), participant);
@@ -346,7 +346,7 @@ public class MeetAttendanceMonitor {
         List<Student> students = new ArrayList<>();
         if (event.getAttendeeEmails() == null) return students;
         for (String email : event.getAttendeeEmails()) {
-            studentRepository.findByMeetEmail(email).ifPresent(students::add);
+            studentRepository.findByMeetEmailAndActiveTrue(email).ifPresent(students::add);
         }
         return students;
     }
@@ -355,7 +355,7 @@ public class MeetAttendanceMonitor {
         List<Teacher> teachers = new ArrayList<>();
         if (event.getAttendeeEmails() == null) return teachers;
         for (String email : event.getAttendeeEmails()) {
-            teacherRepository.findByMeetEmail(email).ifPresent(teachers::add);
+            teacherRepository.findByMeetEmailAndActiveTrue(email).ifPresent(teachers::add);
         }
         return teachers;
     }

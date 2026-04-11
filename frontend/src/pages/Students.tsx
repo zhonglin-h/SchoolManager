@@ -179,7 +179,7 @@ export default function Students() {
                 disabled={createStudent.isPending || updateStudent.isPending}
                 className="bg-blue-600 text-white text-sm px-4 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
               >
-                {editingId !== null ? 'Save Changes' : 'Create'}
+                {createStudent.isPending || updateStudent.isPending ? 'Saving…' : editingId !== null ? 'Save Changes' : 'Create'}
               </button>
               <button
                 type="button"

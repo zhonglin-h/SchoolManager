@@ -18,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
@@ -61,7 +62,8 @@ public class AttendanceController {
     }
 
     @GetMapping("/today")
-    public ResponseEntity<List<AttendanceSummaryResponse>> getToday() throws Exception {
+    public ResponseEntity<List<AttendanceSummaryResponse>> getToday(
+            @RequestParam(defaultValue = "false") boolean live) throws Exception {
         List<CalendarEvent> events = calendarSyncService.getTodaysEvents();
         LocalDate today = LocalDate.now();
         List<AttendanceSummaryResponse> summaries = new ArrayList<>();
@@ -80,12 +82,14 @@ public class AttendanceController {
 
             Boolean meetingActive = null;
             List<MeetParticipant> liveParticipants = Collections.emptyList();
-            try {
-                meetingActive = meetClient.isMeetingActive(event.getSpaceCode());
-                if (Boolean.TRUE.equals(meetingActive)) {
-                    liveParticipants = meetClient.getActiveParticipants(event.getSpaceCode());
-                }
-            } catch (Exception ignored) {}
+            if (live) {
+                try {
+                    meetingActive = meetClient.isMeetingActive(event.getSpaceCode());
+                    if (Boolean.TRUE.equals(meetingActive)) {
+                        liveParticipants = meetClient.getActiveParticipants(event.getSpaceCode());
+                    }
+                } catch (Exception ignored) {}
+            }
 
             // Build lookup sets for live participant matching
             Set<String> liveGoogleIds = new HashSet<>();
@@ -101,7 +105,7 @@ public class AttendanceController {
             if (event.getAttendeeEmails() != null) {
                 for (String email : event.getAttendeeEmails()) {
                     if (email.equalsIgnoreCase(principalEmail)) continue;
-                    var studentOpt = studentRepository.findByMeetEmail(email);
+                    var studentOpt = studentRepository.findByMeetEmailAndActiveTrue(email);
                     if (studentOpt.isPresent()) {
                         var student = studentOpt.get();
                         Attendance att = byStudentId.get(student.getId());
@@ -110,7 +114,7 @@ public class AttendanceController {
                         entries.add(new AttendanceSummaryResponse.AttendanceEntry(
                                 student.getId(), "STUDENT", student.getName(), email, status, true, inMeetNow));
                     } else {
-                        var teacherOpt = teacherRepository.findByMeetEmail(email);
+                        var teacherOpt = teacherRepository.findByMeetEmailAndActiveTrue(email);
                         if (teacherOpt.isPresent()) {
                             var teacher = teacherOpt.get();
                             Attendance att = byTeacherId.get(teacher.getId());
@@ -141,18 +145,18 @@ public class AttendanceController {
                 }
             }
             // Also exclude the principal (skipped from entries but may still be in the meeting)
-            studentRepository.findByMeetEmail(principalEmail)
+            studentRepository.findByMeetEmailAndActiveTrue(principalEmail)
                     .ifPresent(s -> coveredRefs.add("STUDENT:" + s.getId()));
-            teacherRepository.findByMeetEmail(principalEmail)
+            teacherRepository.findByMeetEmailAndActiveTrue(principalEmail)
                     .ifPresent(t -> coveredRefs.add("TEACHER:" + t.getId()));
             List<AttendanceSummaryResponse.GuestEntry> guests = new ArrayList<>();
             for (MeetParticipant p : liveParticipants) {
                 if (!principalGoogleUserId.isBlank() && principalGoogleUserId.equals(p.googleUserId())) continue;
                 var studentOpt = p.googleUserId() != null
-                        ? studentRepository.findByGoogleUserId(p.googleUserId()) : java.util.Optional.<Student>empty();
+                        ? studentRepository.findByGoogleUserIdAndActiveTrue(p.googleUserId()) : java.util.Optional.<Student>empty();
                 if (studentOpt.isEmpty() && p.displayName() != null) {
-                    studentOpt = studentRepository.findByMeetDisplayNameIgnoreCase(p.displayName())
-                            .or(() -> studentRepository.findByNameIgnoreCase(p.displayName()));
+                    studentOpt = studentRepository.findByMeetDisplayNameIgnoreCaseAndActiveTrue(p.displayName())
+                            .or(() -> studentRepository.findByNameIgnoreCaseAndActiveTrue(p.displayName()));
                 }
                 if (studentOpt.isPresent()) {
                     if (!coveredRefs.contains("STUDENT:" + studentOpt.get().getId())) {
@@ -163,10 +167,10 @@ public class AttendanceController {
                     continue;
                 }
                 var teacherOpt = p.googleUserId() != null
-                        ? teacherRepository.findByGoogleUserId(p.googleUserId()) : java.util.Optional.<Teacher>empty();
+                        ? teacherRepository.findByGoogleUserIdAndActiveTrue(p.googleUserId()) : java.util.Optional.<Teacher>empty();
                 if (teacherOpt.isEmpty() && p.displayName() != null) {
-                    teacherOpt = teacherRepository.findByMeetDisplayNameIgnoreCase(p.displayName())
-                            .or(() -> teacherRepository.findByNameIgnoreCase(p.displayName()));
+                    teacherOpt = teacherRepository.findByMeetDisplayNameIgnoreCaseAndActiveTrue(p.displayName())
+                            .or(() -> teacherRepository.findByNameIgnoreCaseAndActiveTrue(p.displayName()));
                 }
                 if (teacherOpt.isPresent()) {
                     if (!coveredRefs.contains("TEACHER:" + teacherOpt.get().getId())) {

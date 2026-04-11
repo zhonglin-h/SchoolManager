@@ -9,7 +9,11 @@ import java.util.Optional;
 public interface StudentRepository extends JpaRepository<Student, Long> {
     List<Student> findByActiveTrue();
     Optional<Student> findByMeetEmail(String meetEmail);
+    Optional<Student> findByMeetEmailAndActiveTrue(String meetEmail);
     Optional<Student> findByGoogleUserId(String googleUserId);
+    Optional<Student> findByGoogleUserIdAndActiveTrue(String googleUserId);
     Optional<Student> findByMeetDisplayNameIgnoreCase(String meetDisplayName);
+    Optional<Student> findByMeetDisplayNameIgnoreCaseAndActiveTrue(String meetDisplayName);
     Optional<Student> findByNameIgnoreCase(String name);
+    Optional<Student> findByNameIgnoreCaseAndActiveTrue(String name);
 }
