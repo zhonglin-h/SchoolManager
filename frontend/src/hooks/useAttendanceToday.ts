@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { getAttendanceToday } from '../services/api'
 import type { AttendanceSummaryResponse, GuestEntry } from '../services/api'
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useMemo } from 'react'
 
 interface LiveEventData {
   meetingActive: boolean | null
@@ -51,10 +51,10 @@ function mergeWithLive(
   })
 }
 
+const LIVE_QUERY_KEY = ['attendance', 'today', 'live']
+
 export function useAttendanceToday() {
-  const [isLiveRefreshing, setIsLiveRefreshing] = useState(false)
-  const [liveData, setLiveData] = useState<Record<string, LiveEventData>>({})
-  const initialLiveDoneRef = useRef(false)
+  const queryClient = useQueryClient()
 
   const query = useQuery({
     queryKey: ['attendance', 'today'],
@@ -64,32 +64,22 @@ export function useAttendanceToday() {
     },
   })
 
-  const data = useMemo(
-    () => (query.data ? mergeWithLive(query.data, liveData) : query.data),
-    [query.data, liveData]
-  )
-
-  // Once DB data first arrives, start the live refresh cycle
-  useEffect(() => {
-    if (query.data && !initialLiveDoneRef.current) {
-      initialLiveDoneRef.current = true
-      refreshLive()
-      const interval = setInterval(refreshLive, 60000)
-      return () => clearInterval(interval)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query.data])
-
-  async function refreshLive() {
-    if (import.meta.env.DEV) console.log('[attendance] live refresh')
-    setIsLiveRefreshing(true)
-    try {
+  const liveQuery = useQuery({
+    queryKey: LIVE_QUERY_KEY,
+    queryFn: async () => {
+      if (import.meta.env.DEV) console.log('[attendance] live refresh')
       const result = await getAttendanceToday(true)
-      setLiveData(extractLive(result))
-    } finally {
-      setIsLiveRefreshing(false)
-    }
-  }
+      return extractLive(result)
+    },
+    refetchInterval: 60000,
+    placeholderData: keepPreviousData,
+    enabled: query.isSuccess,
+  })
+
+  const data = useMemo(
+    () => (query.data ? mergeWithLive(query.data, liveQuery.data ?? {}) : query.data),
+    [query.data, liveQuery.data]
+  )
 
   function patchLiveGuest(
     calendarEventId: string,
@@ -97,22 +87,33 @@ export function useAttendanceToday() {
     personId: number,
     personType: 'STUDENT' | 'TEACHER'
   ) {
-    setLiveData((prev) => {
+    queryClient.setQueryData<Record<string, LiveEventData>>(LIVE_QUERY_KEY, (prev) => {
+      if (!prev) return prev
       const event = prev[calendarEventId]
       if (!event) return prev
       return {
         ...prev,
         [calendarEventId]: {
           ...event,
-          guests: event.guests.map((g) =>
-            g.displayName === displayName
-              ? { ...g, personId, personType, registeredName: displayName }
-              : g
-          ),
+          // Remove from guests — they'll appear in the students section after refetch
+          guests: event.guests.filter((g: GuestEntry) => g.displayName !== displayName),
+          // Mark as in-meeting so the student row shows "In meeting" after DB refetch
+          inMeetNow: {
+            ...event.inMeetNow,
+            [`${personType}:${personId}`]: true,
+          },
         },
       }
     })
+    // Pull the newly registered person into the students list
+    query.refetch()
   }
 
-  return { ...query, data, isLiveRefreshing, refreshLive, patchLiveGuest }
+  return {
+    ...query,
+    data,
+    isLiveRefreshing: liveQuery.isFetching,
+    refreshLive: () => liveQuery.refetch(),
+    patchLiveGuest,
+  }
 }
