@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @RestController
@@ -444,15 +445,21 @@ public class AttendanceController {
     ) {}
 
     /**
-     * Returns attendance records with an optional filter.
+     * Returns attendance records with optional filters.
      *
      * @param personType ALL (default), STUDENT, or TEACHER
      * @param personId   optional — if provided, only records for this person are returned
+     * @param dateFrom   optional — only records on or after this date (ISO date, e.g. 2024-01-01)
+     * @param dateTo     optional — only records on or before this date (ISO date, e.g. 2024-12-31)
+     * @param status     optional — comma-separated list of statuses to include (PRESENT, LATE, ABSENT)
      */
     @GetMapping("/records")
     public ResponseEntity<List<AttendanceRecordResponse>> getRecords(
             @RequestParam(defaultValue = "ALL") String personType,
-            @RequestParam(required = false) Long personId) {
+            @RequestParam(required = false) Long personId,
+            @RequestParam(required = false) LocalDate dateFrom,
+            @RequestParam(required = false) LocalDate dateTo,
+            @RequestParam(required = false) List<AttendanceStatus> status) {
 
         List<Attendance> records;
 
@@ -469,6 +476,20 @@ public class AttendanceController {
         } else {
             records = attendanceRepository.findAllOrderByDateDescIdDesc();
         }
+
+        // Apply optional date range and status filters in memory
+        Stream<Attendance> stream = records.stream();
+        if (dateFrom != null) {
+            stream = stream.filter(a -> !a.getDate().isBefore(dateFrom));
+        }
+        if (dateTo != null) {
+            stream = stream.filter(a -> !a.getDate().isAfter(dateTo));
+        }
+        if (status != null && !status.isEmpty()) {
+            Set<AttendanceStatus> statusSet = new HashSet<>(status);
+            stream = stream.filter(a -> statusSet.contains(a.getStatus()));
+        }
+        records = stream.collect(Collectors.toList());
 
         List<AttendanceRecordResponse> result = records.stream()
                 .map(a -> {
