@@ -16,6 +16,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.transaction.annotation.Transactional;
+
 @Slf4j
 @Service
 public class NotificationService {
@@ -44,6 +46,12 @@ public class NotificationService {
 
     public boolean isNotificationsEnabled() {
         return notificationsEnabled;
+    }
+
+    @Transactional
+    public void clearTodayLogsForEvent(String calendarEventId) {
+        notificationLogRepository.deleteByCalendarEventIdAndDate(calendarEventId, LocalDate.now());
+        log.info("Cleared today's notification logs for rescheduled event {}", calendarEventId);
     }
 
     public void notify(NotificationType type, CalendarEvent event, Student student) {

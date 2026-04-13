@@ -61,6 +61,12 @@ class NotificationServiceTest {
                 .build();
     }
 
+    @Test
+    void clearTodayLogsForEvent_delegatesToRepository() {
+        notificationService.clearTodayLogsForEvent("evt-1");
+        verify(notificationLogRepository).deleteByCalendarEventIdAndDate("evt-1", LocalDate.now());
+    }
+
     // --- MEETING_NOT_STARTED_15 (email to principal, no Telegram) ---
 
     @Test

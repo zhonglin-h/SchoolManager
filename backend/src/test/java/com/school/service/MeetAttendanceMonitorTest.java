@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -422,6 +423,87 @@ class MeetAttendanceMonitorTest {
 
         assertThat(firstCount).isGreaterThan(0);
         assertThat(monitor.getUpcomingChecks()).isEmpty();
+    }
+
+    // --- scheduleEventsForToday: future cancellation and reschedule handling ---
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_cancelsExistingOneTimeFuturesOnReSyncOfSameEvent() throws Exception {
+        CalendarEvent futureEvent = new CalendarEvent("evt-resync", "Resync Class",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of());
+
+        ScheduledFuture firstFuture = mock(ScheduledFuture.class);
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(futureEvent));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(firstFuture);
+        monitor.scheduleEventsForToday(); // first sync — futures stored
+
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+        monitor.scheduleEventsForToday(); // re-sync — old futures must be cancelled
+
+        verify(firstFuture, atLeastOnce()).cancel(false);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_cancelsOneTimeFuturesForRemovedEvents() throws Exception {
+        CalendarEvent futureEvent = new CalendarEvent("evt-gone", "Gone Class",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of());
+        ScheduledFuture goneFuture = mock(ScheduledFuture.class);
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(futureEvent));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(goneFuture);
+        monitor.scheduleEventsForToday(); // schedule the event
+
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of()); // event removed
+        monitor.scheduleEventsForToday();
+
+        verify(goneFuture, atLeastOnce()).cancel(false);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_clearsNotificationLogsWhenEventStartTimeChanges() throws Exception {
+        CalendarEvent original = new CalendarEvent("evt-rescheduled", "Math Class",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of());
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(original));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+        monitor.scheduleEventsForToday(); // record initial start time
+
+        CalendarEvent rescheduled = new CalendarEvent("evt-rescheduled", "Math Class",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(3), LocalDateTime.now().plusHours(4),
+                List.of());
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(rescheduled));
+        monitor.scheduleEventsForToday(); // same event ID, different start time
+
+        verify(notificationService).clearTodayLogsForEvent("evt-rescheduled");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_doesNotClearLogsWhenStartTimeUnchanged() throws Exception {
+        CalendarEvent sameEvent = new CalendarEvent("evt-same", "Math Class",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of());
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(sameEvent));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.scheduleEventsForToday();
+        monitor.scheduleEventsForToday(); // same start time — no log clear
+
+        verify(notificationService, never()).clearTodayLogsForEvent(anyString());
     }
 
     // --- helper ---

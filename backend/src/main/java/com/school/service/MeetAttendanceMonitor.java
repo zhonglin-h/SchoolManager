@@ -49,6 +49,8 @@ public class MeetAttendanceMonitor {
     private int lateBufferMinutes;
 
     private final Map<String, ScheduledFuture<?>> pollingFutures = new ConcurrentHashMap<>();
+    private final Map<String, List<ScheduledFuture<?>>> oneTimeFutures = new ConcurrentHashMap<>();
+    private final Map<String, Instant> lastScheduledStartTime = new ConcurrentHashMap<>();
     private final List<ScheduledCheck> upcomingChecks = new CopyOnWriteArrayList<>();
 
     public record ScheduledCheck(String eventId, String eventTitle, String checkType, Instant scheduledAt) {}
@@ -100,10 +102,45 @@ public class MeetAttendanceMonitor {
             return;
         }
 
+        // Build the set of IDs that are still on today's calendar after this sync
+        Set<String> freshEventIds = new HashSet<>();
+        for (CalendarEvent e : events) {
+            freshEventIds.add(e.getId());
+        }
+
+        // Cancel futures for events that were removed from or moved off today's calendar
+        for (String staleId : new ArrayList<>(oneTimeFutures.keySet())) {
+            if (!freshEventIds.contains(staleId)) {
+                cancelOneTimeFutures(staleId);
+                ScheduledFuture<?> pf = pollingFutures.remove(staleId);
+                if (pf != null) pf.cancel(false);
+                lastScheduledStartTime.remove(staleId);
+            }
+        }
+
         upcomingChecks.clear();
         Instant now = Instant.now();
 
         for (CalendarEvent event : events) {
+            // Cancel any existing one-shot futures for this event (prevents duplicates on re-sync)
+            cancelOneTimeFutures(event.getId());
+
+            // Cancel active polling future — will be restarted by the new SESSION_START task
+            ScheduledFuture<?> existingPolling = pollingFutures.remove(event.getId());
+            if (existingPolling != null) existingPolling.cancel(false);
+
+            // Detect reschedule: if the start time changed, clear today's notification logs
+            // so notifications can re-fire at the correct new time
+            Instant newStart = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant();
+            Instant previousStart = lastScheduledStartTime.get(event.getId());
+            if (previousStart != null && !previousStart.equals(newStart)) {
+                notificationService.clearTodayLogsForEvent(event.getId());
+                log.info("Event '{}' rescheduled; cleared today's notification logs", event.getTitle());
+            }
+            lastScheduledStartTime.put(event.getId(), newStart);
+
+            List<ScheduledFuture<?>> futures = new ArrayList<>();
+
             Instant minus15 = event.getStartTime().minusMinutes(15)
                     .atZone(ZoneId.systemDefault()).toInstant();
             Instant minus3 = event.getStartTime().minusMinutes(3)
@@ -115,32 +152,41 @@ public class MeetAttendanceMonitor {
 
             if (minus15.isAfter(now)) {
                 upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "MEETING_NOT_STARTED_15", minus15));
-                taskScheduler.schedule(() -> {
+                futures.add(taskScheduler.schedule(() -> {
                     upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("MEETING_NOT_STARTED_15"));
                     checkMeetingStarted(event, NotificationType.MEETING_NOT_STARTED_15);
-                }, minus15);
+                }, minus15));
             }
             if (minus3.isAfter(now)) {
                 upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "PRE_CLASS_JOINS", minus3));
-                taskScheduler.schedule(() -> {
+                futures.add(taskScheduler.schedule(() -> {
                     upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("PRE_CLASS_JOINS"));
                     checkPreClassJoins(event);
-                }, minus3);
+                }, minus3));
             }
             if (start.isAfter(now)) {
                 upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "SESSION_START", start));
-                taskScheduler.schedule(() -> {
+                futures.add(taskScheduler.schedule(() -> {
                     upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("SESSION_START"));
                     startSessionPolling(event);
-                }, start);
+                }, start));
             }
             if (end.isAfter(now)) {
                 upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "SESSION_FINALIZE", end));
-                taskScheduler.schedule(() -> {
+                futures.add(taskScheduler.schedule(() -> {
                     upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("SESSION_FINALIZE"));
                     finalizeSession(event);
-                }, end);
+                }, end));
             }
+
+            oneTimeFutures.put(event.getId(), futures);
+        }
+    }
+
+    private void cancelOneTimeFutures(String eventId) {
+        List<ScheduledFuture<?>> futures = oneTimeFutures.remove(eventId);
+        if (futures != null) {
+            futures.forEach(f -> f.cancel(false));
         }
     }
 
