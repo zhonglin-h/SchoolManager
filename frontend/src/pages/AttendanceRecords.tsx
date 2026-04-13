@@ -5,11 +5,12 @@ import {
   flexRender,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { useQuery } from '@tanstack/react-query'
-import { getAttendanceRecords } from '../services/api'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { getAttendanceRecords, upsertAttendance } from '../services/api'
 import type { AttendanceRecord } from '../services/api'
 
 type PersonTypeFilter = 'ALL' | 'STUDENT' | 'TEACHER'
+type AttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT'
 
 const STATUS_STYLES: Record<string, string> = {
   PRESENT: 'text-green-600 font-medium',
@@ -21,6 +22,8 @@ const TYPE_STYLES: Record<string, string> = {
   STUDENT: 'bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs',
   TEACHER: 'bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded text-xs',
 }
+
+const STATUS_OPTIONS: AttendanceStatus[] = ['PRESENT', 'LATE', 'ABSENT']
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
@@ -35,12 +38,36 @@ function formatDateTime(dtStr: string | null): string {
   })
 }
 
+interface EditModal {
+  record: AttendanceRecord
+  selected: AttendanceStatus
+}
+
 export default function AttendanceRecords() {
+  const queryClient = useQueryClient()
   const [personTypeFilter, setPersonTypeFilter] = useState<PersonTypeFilter>('ALL')
+  const [editModal, setEditModal] = useState<EditModal | null>(null)
 
   const { data = [], isLoading, isError } = useQuery({
     queryKey: ['attendance', 'records', personTypeFilter],
     queryFn: () => getAttendanceRecords(personTypeFilter),
+  })
+
+  const mutation = useMutation({
+    mutationFn: (m: EditModal) =>
+      upsertAttendance(
+        m.record.personId!,
+        m.record.personType as 'STUDENT' | 'TEACHER',
+        m.record.calendarEventId,
+        m.selected,
+        m.record.date,
+        m.record.eventTitle ?? undefined,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance', 'records'] })
+      queryClient.invalidateQueries({ queryKey: ['attendance', 'today'] })
+      setEditModal(null)
+    },
   })
 
   const columns = useMemo<ColumnDef<AttendanceRecord>[]>(
@@ -79,9 +106,24 @@ export default function AttendanceRecords() {
       {
         accessorKey: 'status',
         header: 'Status',
-        cell: ({ getValue }) => {
+        cell: ({ getValue, row }) => {
           const s = getValue<string>()
-          return <span className={STATUS_STYLES[s] ?? 'text-gray-600'}>{s}</span>
+          const record = row.original
+          const canEdit = record.personId != null && record.personType != null
+          return (
+            <div className="flex items-center gap-1.5">
+              <span className={STATUS_STYLES[s] ?? 'text-gray-600'}>{s}</span>
+              {canEdit && (
+                <button
+                  onClick={() => setEditModal({ record, selected: s as AttendanceStatus })}
+                  title="Edit status"
+                  className="text-gray-400 hover:text-blue-600 transition-colors"
+                >
+                  ✎
+                </button>
+              )}
+            </div>
+          )
         },
       },
       {
@@ -164,6 +206,54 @@ export default function AttendanceRecords() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Edit status modal */}
+      {editModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-5 w-72">
+            <h2 className="text-base font-semibold text-gray-800 mb-1">Edit Attendance Status</h2>
+            <p className="text-xs text-gray-500 mb-4 truncate">
+              {editModal.record.personName} · {formatDate(editModal.record.date)}
+              {editModal.record.eventTitle ? ` · ${editModal.record.eventTitle}` : ''}
+            </p>
+            <div className="flex flex-col gap-2 mb-4">
+              {STATUS_OPTIONS.map((s) => (
+                <label key={s} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="status"
+                    value={s}
+                    checked={editModal.selected === s}
+                    onChange={() => setEditModal((prev) => prev ? { ...prev, selected: s } : prev)}
+                    className="accent-blue-600"
+                  />
+                  <span className={STATUS_STYLES[s]}>{s}</span>
+                </label>
+              ))}
+            </div>
+            {mutation.isError && (
+              <p className="text-xs text-red-500 mb-2">Failed to save. Please try again.</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => mutation.mutate(editModal)}
+                disabled={mutation.isPending}
+                className="bg-blue-600 text-white text-sm px-4 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50 flex-1"
+              >
+                {mutation.isPending ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditModal(null); mutation.reset() }}
+                disabled={mutation.isPending}
+                className="text-sm px-4 py-1.5 rounded border hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
