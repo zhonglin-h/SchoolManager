@@ -32,8 +32,8 @@ If the meeting is **not** active → fires `MEETING_NOT_STARTED_15` notification
 
 ## T − 3 min: Pre-Class Join Check
 
-Fetches current active participants and resolves them to student IDs.  
-For each expected student **not yet present** → fires `NOT_YET_JOINED_3` notification.
+Fetches current active participants and resolves them to student/teacher IDs.  
+For each expected student/teacher/guest **not yet present** → fires `NOT_YET_JOINED_3` notification.
 
 ---
 
@@ -53,7 +53,7 @@ For each expected student **not yet present** → fires `NOT_YET_JOINED_3` notif
 
 - Pre-seeds the "seen" sets from attendance records already in the database.
 - Takes an immediate participant snapshot.
-- Starts the same 60-second polling loop (no meeting-active check; assumes it's live).
+- Starts the same 60-second polling loop as above (no meeting-active check; assumes it's live).
 
 ---
 
@@ -61,12 +61,14 @@ For each expected student **not yet present** → fires `NOT_YET_JOINED_3` notif
 
 For each expected student or teacher newly seen in the snapshot (not already in the "seen" set):
 
+- check status in attendance. If no records for this meeting, check following
+
 - **Student**
-  - `now ≤ lateThreshold` → status `PRESENT`, notify `ARRIVAL`
-  - `now > lateThreshold` → status `LATE`, notify `LATE`
+  - `now ≤ lateThreshold` → status `PRESENT`, notify `ARRIVAL`. Add record to attendance.
+  - `now > lateThreshold` → status `LATE`, notify `LATE`. Add record to attendance.
 - **Teacher**
-  - `now ≤ lateThreshold` → status `PRESENT`, notify `TEACHER_ARRIVED`
-  - `now > lateThreshold` → status `LATE`, notify `TEACHER_LATE`
+  - `now ≤ lateThreshold` → status `PRESENT`, notify `TEACHER_ARRIVED`. Add record to attendance.
+  - `now > lateThreshold` → status `LATE`, notify `TEACHER_LATE`. Add record to attendance.
 
 `lateThreshold = classStart + lateBufferMinutes` (configured via `app.attendance.late-buffer-minutes`).
 
@@ -76,7 +78,7 @@ Attendance is only written once per person per event per day (idempotent DB chec
 
 ## Session Finalize (at class end)
 
-1. Stops the polling loop.
+1. Stops the polling loop if it's still running.
 2. Fetches the **full participant history** (including people who already left) from the Meet API.
 3. For each expected student or teacher with **no attendance record yet**:
    - Join time not found → `ABSENT` + notify `ABSENT` / `TEACHER_ABSENT`
