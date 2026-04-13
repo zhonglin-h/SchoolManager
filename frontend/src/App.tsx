@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Students from './pages/Students'
 import Teachers from './pages/Teachers'
 import Notifications from './pages/Notifications'
+import AttendanceRecords from './pages/AttendanceRecords'
 import ToastProvider from './components/ToastProvider'
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/students" element={<Students />} />
                 <Route path="/teachers" element={<Teachers />} />
+                <Route path="/attendance" element={<AttendanceRecords />} />
                 <Route path="/notifications" element={<Notifications />} />
               </Routes>
             </main>
