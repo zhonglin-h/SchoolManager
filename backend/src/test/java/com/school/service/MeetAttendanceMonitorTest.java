@@ -3,6 +3,7 @@ package com.school.service;
 import com.school.entity.Attendance;
 import com.school.entity.AttendanceStatus;
 import com.school.entity.Student;
+import com.school.entity.Teacher;
 import com.school.integration.MeetClient;
 import com.school.integration.MeetParticipant;
 import com.school.model.CalendarEvent;
@@ -55,9 +56,11 @@ class MeetAttendanceMonitorTest {
     private CalendarEvent event;
     private Student alice;
     private Student bob;
+    private Teacher carol;
 
     private static final MeetParticipant ALICE_PARTICIPANT = new MeetParticipant("uid-alice", "Alice", null);
     private static final MeetParticipant BOB_PARTICIPANT   = new MeetParticipant("uid-bob",   "Bob",   null);
+    private static final MeetParticipant CAROL_PARTICIPANT = new MeetParticipant("uid-carol", "Carol", null);
 
     @BeforeEach
     void setUp() {
@@ -72,6 +75,7 @@ class MeetAttendanceMonitorTest {
                 .parentEmail("alice-p@test.com").build();
         bob = Student.builder().id(2L).name("Bob").meetEmail("bob@meet.com")
                 .parentEmail("bob-p@test.com").build();
+        carol = Teacher.builder().id(10L).name("Carol").meetEmail("carol@meet.com").build();
     }
 
     // --- checkMeetingStarted ---
@@ -551,6 +555,153 @@ class MeetAttendanceMonitorTest {
         assertThat(types).contains("PRE_CLASS_JOINS");
         // Notification logs must have been cleared so the T-3 notification can re-fire
         verify(notificationService).clearTodayLogsForEvent("evt-moved");
+    }
+
+    // --- checkPreClassJoins: teacher path ---
+
+    @Test
+    void checkPreClassJoins_notifiesTeacherWhenNotYetPresent() throws Exception {
+        CalendarEvent teacherEvent = new CalendarEvent("evt-t", "Math Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now().plusMinutes(3), LocalDateTime.now().plusHours(1),
+                List.of("alice@meet.com", "carol@meet.com"));
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of());
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("carol@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("carol@meet.com")).thenReturn(Optional.of(carol));
+
+        monitor.checkPreClassJoins(teacherEvent);
+
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, teacherEvent, new TeacherRecipient(carol));
+    }
+
+    @Test
+    void checkPreClassJoins_doesNotNotifyTeacherAlreadyPresent() throws Exception {
+        CalendarEvent teacherEvent = new CalendarEvent("evt-t", "Math Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now().plusMinutes(3), LocalDateTime.now().plusHours(1),
+                List.of("alice@meet.com", "carol@meet.com"));
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(CAROL_PARTICIPANT));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("carol@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("carol@meet.com")).thenReturn(Optional.of(carol));
+        when(teacherRepository.findByGoogleUserIdAndActiveTrue("uid-carol")).thenReturn(Optional.of(carol));
+
+        monitor.checkPreClassJoins(teacherEvent);
+
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(teacherEvent), eq(new TeacherRecipient(carol)));
+    }
+
+    @Test
+    void checkPreClassJoins_notifiesMissingStudentButNotPresentTeacher() throws Exception {
+        CalendarEvent teacherEvent = new CalendarEvent("evt-t", "Math Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now().plusMinutes(3), LocalDateTime.now().plusHours(1),
+                List.of("alice@meet.com", "bob@meet.com", "carol@meet.com"));
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(CAROL_PARTICIPANT, ALICE_PARTICIPANT));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByMeetEmailAndActiveTrue("carol@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("carol@meet.com")).thenReturn(Optional.of(carol));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-carol")).thenReturn(Optional.empty());
+        when(teacherRepository.findByGoogleUserIdAndActiveTrue("uid-carol")).thenReturn(Optional.of(carol));
+
+        monitor.checkPreClassJoins(teacherEvent);
+
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, teacherEvent, new StudentRecipient(bob));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(teacherEvent), eq(new StudentRecipient(alice)));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(teacherEvent), eq(new TeacherRecipient(carol)));
+    }
+
+    // --- finalizeSession: teacher path ---
+
+    @Test
+    void finalizeSession_marksTeacherAbsentWhenNotInParticipantHistory() throws Exception {
+        CalendarEvent teacherEvent = new CalendarEvent("evt-t", "Math Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now().minusHours(1), LocalDateTime.now(),
+                List.of("carol@meet.com"));
+        when(meetClient.getAllParticipants("abc-def")).thenReturn(List.of());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("carol@meet.com")).thenReturn(Optional.of(carol));
+        when(attendanceRepository.findByTeacherIdAndCalendarEventIdAndDate(eq(10L), anyString(), any()))
+                .thenReturn(Optional.empty());
+
+        monitor.finalizeSession(teacherEvent);
+
+        ArgumentCaptor<Attendance> captor = ArgumentCaptor.forClass(Attendance.class);
+        verify(attendanceRepository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(AttendanceStatus.ABSENT);
+        verify(notificationService).notify(NotificationType.TEACHER_ABSENT, teacherEvent, new TeacherRecipient(carol));
+    }
+
+    @Test
+    void finalizeSession_marksTeacherLateWhenJoinTimeAfterThreshold() throws Exception {
+        CalendarEvent teacherEvent = new CalendarEvent("evt-t", "Math Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now().minusHours(1), LocalDateTime.now(),
+                List.of("carol@meet.com"));
+        // Carol joined well after the late threshold (class started 1h ago, buffer=5min → late threshold 55min ago)
+        MeetParticipant carolLate = new MeetParticipant("uid-carol", "Carol",
+                java.time.Instant.now().minusSeconds(10)); // joined 10 seconds ago = very late
+        when(meetClient.getAllParticipants("abc-def")).thenReturn(List.of(carolLate));
+        when(teacherRepository.findByMeetEmailAndActiveTrue("carol@meet.com")).thenReturn(Optional.of(carol));
+        carol.setGoogleUserId("uid-carol");
+        when(attendanceRepository.findByTeacherIdAndCalendarEventIdAndDate(eq(10L), anyString(), any()))
+                .thenReturn(Optional.empty());
+
+        monitor.finalizeSession(teacherEvent);
+
+        ArgumentCaptor<Attendance> captor = ArgumentCaptor.forClass(Attendance.class);
+        verify(attendanceRepository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(AttendanceStatus.LATE);
+        verify(notificationService).notify(NotificationType.TEACHER_LATE, teacherEvent, new TeacherRecipient(carol));
+    }
+
+    @Test
+    void finalizeSession_marksTeacherPresentWhenJoinTimeOnTime() throws Exception {
+        CalendarEvent teacherEvent = new CalendarEvent("evt-t", "Math Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now().minusHours(1), LocalDateTime.now(),
+                List.of("carol@meet.com"));
+        // Carol joined right at class start (1 hour ago), well within the 5-minute late buffer
+        MeetParticipant carolOnTime = new MeetParticipant("uid-carol", "Carol",
+                java.time.Instant.now().minusSeconds(3600)); // joined exactly at start
+        when(meetClient.getAllParticipants("abc-def")).thenReturn(List.of(carolOnTime));
+        when(teacherRepository.findByMeetEmailAndActiveTrue("carol@meet.com")).thenReturn(Optional.of(carol));
+        carol.setGoogleUserId("uid-carol");
+        when(attendanceRepository.findByTeacherIdAndCalendarEventIdAndDate(eq(10L), anyString(), any()))
+                .thenReturn(Optional.empty());
+
+        monitor.finalizeSession(teacherEvent);
+
+        ArgumentCaptor<Attendance> captor = ArgumentCaptor.forClass(Attendance.class);
+        verify(attendanceRepository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(AttendanceStatus.PRESENT);
+        verify(notificationService).notify(NotificationType.TEACHER_ARRIVED, teacherEvent, new TeacherRecipient(carol));
+    }
+
+    @Test
+    void finalizeSession_doesNotDuplicateTeacherAttendanceIfAlreadyRecorded() throws Exception {
+        CalendarEvent teacherEvent = new CalendarEvent("evt-t", "Math Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now().minusHours(1), LocalDateTime.now(),
+                List.of("carol@meet.com"));
+        when(meetClient.getAllParticipants("abc-def")).thenReturn(List.of());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("carol@meet.com")).thenReturn(Optional.of(carol));
+        when(attendanceRepository.findByTeacherIdAndCalendarEventIdAndDate(eq(10L), anyString(), any()))
+                .thenReturn(Optional.of(Attendance.builder().teacher(carol)
+                        .calendarEventId("evt-t").date(LocalDate.now())
+                        .status(AttendanceStatus.PRESENT).build()));
+
+        monitor.finalizeSession(teacherEvent);
+
+        verify(attendanceRepository, never()).save(argThat(a -> a.getTeacher() != null && a.getTeacher().equals(carol)));
+        verify(notificationService, never()).notify(any(), eq(teacherEvent), eq(new TeacherRecipient(carol)));
     }
 
     // --- helper ---
