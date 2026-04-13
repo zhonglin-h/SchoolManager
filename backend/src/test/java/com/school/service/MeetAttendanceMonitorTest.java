@@ -558,4 +558,84 @@ class MeetAttendanceMonitorTest {
     private static <T> T argThat(org.mockito.ArgumentMatcher<T> matcher) {
         return org.mockito.Mockito.argThat(matcher);
     }
+
+    // --- resumeSessionPolling ---
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_callsResumeSessionPollingForInProgressEvent() throws Exception {
+        // Event started 10 minutes ago, ends in 50 minutes → in progress
+        CalendarEvent inProgress = new CalendarEvent("evt-inprogress", "In-Progress Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now().minusMinutes(10), LocalDateTime.now().plusMinutes(50),
+                List.of("alice@meet.com", "bob@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(inProgress));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        ScheduledFuture pollingFuture = mock(ScheduledFuture.class);
+        when(taskScheduler.scheduleAtFixedRate(any(Runnable.class), any(Duration.class)))
+                .thenReturn(pollingFuture);
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(attendanceRepository.findByCalendarEventIdAndDate(eq("evt-inprogress"), any(LocalDate.class)))
+                .thenReturn(List.of());
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of());
+
+        monitor.scheduleEventsForToday();
+
+        // Polling future must be registered (resumeSessionPolling was called)
+        verify(taskScheduler).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
+        // SESSION_FINALIZE must still be scheduled for the end time
+        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
+        assertThat(checks).anyMatch(c -> c.eventId().equals("evt-inprogress") && c.checkType().equals("SESSION_FINALIZE"));
+        // SESSION_START must NOT be scheduled (start is in the past)
+        assertThat(checks).noneMatch(c -> c.eventId().equals("evt-inprogress") && c.checkType().equals("SESSION_START"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_doesNotCallResumeSessionPollingForAlreadyEndedEvent() throws Exception {
+        // Event that ended 5 minutes ago → should NOT trigger resumeSessionPolling
+        CalendarEvent ended = new CalendarEvent("evt-ended", "Ended Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now().minusMinutes(65), LocalDateTime.now().minusMinutes(5),
+                List.of("alice@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(ended));
+
+        monitor.scheduleEventsForToday();
+
+        // No polling future should be registered
+        verify(taskScheduler, never()).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
+        // No one-time futures either (all check times in the past)
+        verify(taskScheduler, never()).schedule(any(Runnable.class), any(java.time.Instant.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void resumeSessionPolling_preSeedsFromExistingAttendanceRecords() throws Exception {
+        // Alice's attendance already recorded before restart; Bob not yet recorded
+        Attendance aliceAttendance = Attendance.builder().student(alice)
+                .calendarEventId("evt-1").date(LocalDate.now())
+                .status(AttendanceStatus.PRESENT).build();
+        when(attendanceRepository.findByCalendarEventIdAndDate(eq("evt-1"), any(LocalDate.class)))
+                .thenReturn(List.of(aliceAttendance));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        // Snapshot shows both in the meeting
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-bob")).thenReturn(Optional.of(bob));
+        when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
+                .thenReturn(Optional.empty());
+        when(taskScheduler.scheduleAtFixedRate(any(Runnable.class), any(Duration.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.resumeSessionPolling(event);
+
+        // Alice was pre-seeded → no new save for Alice
+        verify(attendanceRepository, never()).save(argThat(a -> a.getStudent() != null && a.getStudent().equals(alice)));
+        // Bob was NOT pre-seeded → attendance recorded
+        verify(attendanceRepository).save(argThat(a -> a.getStudent() != null && a.getStudent().equals(bob)));
+    }
 }
