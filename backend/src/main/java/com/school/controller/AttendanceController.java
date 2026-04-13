@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @RestController
@@ -251,6 +252,7 @@ public class AttendanceController {
         attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(student.getId(), event.getId(), date)
                 .ifPresentOrElse(existing -> {}, () -> attendanceRepository.save(
                         Attendance.builder().student(student).calendarEventId(event.getId())
+                                .eventTitle(event.getTitle())
                                 .date(date).status(status).build()));
         return status;
     }
@@ -261,6 +263,7 @@ public class AttendanceController {
         attendanceRepository.findByTeacherIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), date)
                 .ifPresentOrElse(existing -> {}, () -> attendanceRepository.save(
                         Attendance.builder().teacher(teacher).calendarEventId(event.getId())
+                                .eventTitle(event.getTitle())
                                 .date(date).status(status).build()));
         return status;
     }
@@ -407,6 +410,9 @@ public class AttendanceController {
                             .date(date)
                             .build());
             att.setStatus(req.status());
+            if (req.eventTitle() != null) {
+                att.setEventTitle(req.eventTitle());
+            }
             attendanceRepository.save(att);
         } else if ("TEACHER".equals(req.personType())) {
             Teacher teacher = teacherRepository.findById(req.personId())
@@ -419,6 +425,9 @@ public class AttendanceController {
                             .date(date)
                             .build());
             att.setStatus(req.status());
+            if (req.eventTitle() != null) {
+                att.setEventTitle(req.eventTitle());
+            }
             attendanceRepository.save(att);
         } else {
             return ResponseEntity.badRequest().build();
@@ -430,8 +439,92 @@ public class AttendanceController {
             Long personId,
             String personType,
             String calendarEventId,
+            String eventTitle,
             LocalDate date,
             AttendanceStatus status
+    ) {}
+
+    /**
+     * Returns attendance records with optional filters.
+     *
+     * @param personType ALL (default), STUDENT, or TEACHER
+     * @param personId   optional — if provided, only records for this person are returned
+     * @param dateFrom   optional — only records on or after this date (ISO date, e.g. 2024-01-01)
+     * @param dateTo     optional — only records on or before this date (ISO date, e.g. 2024-12-31)
+     * @param status     optional — repeated parameter for filtering by status (e.g. ?status=ABSENT&status=LATE); if omitted all statuses are returned
+     */
+    @GetMapping("/records")
+    public ResponseEntity<List<AttendanceRecordResponse>> getRecords(
+            @RequestParam(defaultValue = "ALL") String personType,
+            @RequestParam(required = false) Long personId,
+            @RequestParam(required = false) LocalDate dateFrom,
+            @RequestParam(required = false) LocalDate dateTo,
+            @RequestParam(required = false) List<AttendanceStatus> status) {
+
+        List<Attendance> records;
+
+        if (personId != null) {
+            if ("TEACHER".equals(personType)) {
+                records = attendanceRepository.findByTeacherIdOrderByDateDescIdDesc(personId);
+            } else {
+                records = attendanceRepository.findByStudentIdOrderByDateDescIdDesc(personId);
+            }
+        } else if ("STUDENT".equals(personType)) {
+            records = attendanceRepository.findByStudentNotNullOrderByDateDescIdDesc();
+        } else if ("TEACHER".equals(personType)) {
+            records = attendanceRepository.findByTeacherNotNullOrderByDateDescIdDesc();
+        } else {
+            records = attendanceRepository.findAllOrderByDateDescIdDesc();
+        }
+
+        // Apply optional date range and status filters in memory
+        Stream<Attendance> stream = records.stream();
+        if (dateFrom != null) {
+            stream = stream.filter(a -> !a.getDate().isBefore(dateFrom));
+        }
+        if (dateTo != null) {
+            stream = stream.filter(a -> !a.getDate().isAfter(dateTo));
+        }
+        if (status != null && !status.isEmpty()) {
+            Set<AttendanceStatus> statusSet = new HashSet<>(status);
+            stream = stream.filter(a -> statusSet.contains(a.getStatus()));
+        }
+        records = stream.collect(Collectors.toList());
+
+        List<AttendanceRecordResponse> result = records.stream()
+                .map(a -> {
+                    Long pid;
+                    String ptype;
+                    String pname;
+                    if (a.getStudent() != null) {
+                        pid = a.getStudent().getId();
+                        ptype = "STUDENT";
+                        pname = a.getStudent().getName();
+                    } else {
+                        pid = a.getTeacher() != null ? a.getTeacher().getId() : null;
+                        ptype = "TEACHER";
+                        pname = a.getTeacher() != null ? a.getTeacher().getName() : null;
+                    }
+                    return new AttendanceRecordResponse(
+                            a.getId(), pid, ptype, pname,
+                            a.getCalendarEventId(), a.getEventTitle(),
+                            a.getDate(), a.getStatus(), a.getUpdatedAt());
+                })
+                .toList();
+
+        return ResponseEntity.ok(result);
+    }
+
+    public record AttendanceRecordResponse(
+            Long id,
+            Long personId,
+            String personType,
+            String personName,
+            String calendarEventId,
+            String eventTitle,
+            LocalDate date,
+            AttendanceStatus status,
+            java.time.LocalDateTime updatedAt
     ) {}
 
     @GetMapping("/student/{id}")
