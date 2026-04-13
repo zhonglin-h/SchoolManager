@@ -185,7 +185,8 @@ function AttendanceCard({ event, onGuestRegistered }: { event: AttendanceSummary
 
 export default function Dashboard() {
   const { data, isLoading, isFetching, isLiveRefreshing, refreshLive, patchLiveGuest, isError } = useAttendanceToday()
-  const { data: checks = [] } = useScheduledChecks()
+  const { data: checksData } = useScheduledChecks()
+  const checks = checksData?.checks ?? []
 
   return (
     <div>
@@ -225,12 +226,19 @@ export default function Dashboard() {
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold text-gray-700 mb-3">Upcoming Checks</h2>
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-700">Upcoming Checks</h2>
+          {checksData && checksData.total > checksData.limit && (
+            <span className="text-xs text-gray-400">
+              Showing {checksData.limit} of {checksData.total} — raise <code>app.dashboard.upcoming-checks-limit</code> to see more
+            </span>
+          )}
+        </div>
         {checks.length === 0 ? (
           <p className="text-gray-500 text-sm">No checks scheduled for today.</p>
         ) : (
           <div className="bg-white rounded-lg shadow divide-y divide-gray-100">
-            {checks.slice(0, 5).map((check, i) => (
+            {checks.map((check, i) => (
               <div key={i} className="px-4 py-2.5 flex items-center justify-between text-sm">
                 <div>
                   <span className="font-medium text-gray-800">{check.eventTitle}</span>

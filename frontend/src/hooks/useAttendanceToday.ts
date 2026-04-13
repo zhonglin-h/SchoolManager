@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
-import { getAttendanceToday } from '../services/api'
+import { getAttendanceToday, syncCalendar } from '../services/api'
 import type { AttendanceSummaryResponse, GuestEntry } from '../services/api'
 import { useMemo } from 'react'
 
@@ -113,7 +113,10 @@ export function useAttendanceToday() {
     ...query,
     data,
     isLiveRefreshing: liveQuery.isFetching,
-    refreshLive: () => liveQuery.refetch(),
+    refreshLive: async () => {
+      await syncCalendar()
+      return liveQuery.refetch()
+    },
     patchLiveGuest,
   }
 }

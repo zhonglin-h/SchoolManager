@@ -1,23 +1,6 @@
 package com.school.service;
 
-import com.school.entity.Attendance;
-import com.school.entity.AttendanceStatus;
-import com.school.entity.Student;
-import com.school.entity.Teacher;
-import com.school.integration.MeetClient;
-import com.school.integration.MeetParticipant;
-import com.school.model.CalendarEvent;
-import com.school.repository.AttendanceRepository;
-import com.school.repository.StudentRepository;
-import com.school.repository.TeacherRepository;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
-import org.springframework.stereotype.Service;
-
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -30,6 +13,30 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.stereotype.Service;
+
+import com.school.entity.Attendance;
+import com.school.entity.AttendanceStatus;
+import com.school.entity.Student;
+import com.school.entity.Teacher;
+import com.school.integration.MeetClient;
+import com.school.integration.MeetParticipant;
+import com.school.model.CalendarEvent;
+import com.school.repository.AttendanceRepository;
+import com.school.repository.StudentRepository;
+import com.school.repository.TeacherRepository;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
@@ -47,12 +54,14 @@ public class MeetAttendanceMonitor {
     private int lateBufferMinutes;
 
     private final Map<String, ScheduledFuture<?>> pollingFutures = new ConcurrentHashMap<>();
+    private final Map<String, List<ScheduledFuture<?>>> oneTimeFutures = new ConcurrentHashMap<>();
+    private final Map<String, Instant> lastScheduledStartTime = new ConcurrentHashMap<>();
     private final List<ScheduledCheck> upcomingChecks = new CopyOnWriteArrayList<>();
 
     public record ScheduledCheck(String eventId, String eventTitle, String checkType, Instant scheduledAt) {}
 
-    /** A resolved participant — either a student or a teacher. */
-    private record PersonRef(Long id, String type) {}
+    private record ResolvedParticipants(Set<Long> studentIds, Set<Long> teacherIds) {}
+    private record ExpectedParticipants(List<Student> students, List<Teacher> teachers) {}
 
     public MeetAttendanceMonitor(CalendarSyncService calendarSyncService,
                                   StudentRepository studentRepository,
@@ -96,10 +105,46 @@ public class MeetAttendanceMonitor {
             return;
         }
 
+        // Build the set of IDs that are still on today's calendar after this sync
+        Set<String> freshEventIds = new HashSet<>();
+        for (CalendarEvent e : events) {
+            freshEventIds.add(e.getId());
+        }
+
+        // Cancel futures for events that were removed from or moved off today's calendar
+        // Copy keyset to avoid ConcurrentModificationException while removing stale entries
+        for (String staleId : new ArrayList<>(oneTimeFutures.keySet())) {
+            if (!freshEventIds.contains(staleId)) {
+                cancelOneTimeFutures(staleId);
+                ScheduledFuture<?> pf = pollingFutures.remove(staleId);
+                if (pf != null) pf.cancel(false);
+                lastScheduledStartTime.remove(staleId);
+            }
+        }
+
         upcomingChecks.clear();
         Instant now = Instant.now();
 
         for (CalendarEvent event : events) {
+            // Cancel any existing one-shot futures for this event (prevents duplicates on re-sync)
+            cancelOneTimeFutures(event.getId());
+
+            // Cancel active polling future — will be restarted by the new SESSION_START task
+            ScheduledFuture<?> existingPolling = pollingFutures.remove(event.getId());
+            if (existingPolling != null) existingPolling.cancel(false);
+
+            // Detect reschedule: if the start time changed, clear today's notification logs
+            // so notifications can re-fire at the correct new time
+            Instant newStart = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant();
+            Instant previousStart = lastScheduledStartTime.get(event.getId());
+            if (previousStart != null && !previousStart.equals(newStart)) {
+                notificationService.clearTodayLogsForEvent(event.getId());
+                log.info("Event '{}' rescheduled; cleared today's notification logs", event.getTitle());
+            }
+            lastScheduledStartTime.put(event.getId(), newStart);
+
+            List<ScheduledFuture<?>> futures = new ArrayList<>();
+
             Instant minus15 = event.getStartTime().minusMinutes(15)
                     .atZone(ZoneId.systemDefault()).toInstant();
             Instant minus3 = event.getStartTime().minusMinutes(3)
@@ -111,32 +156,50 @@ public class MeetAttendanceMonitor {
 
             if (minus15.isAfter(now)) {
                 upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "MEETING_NOT_STARTED_15", minus15));
-                taskScheduler.schedule(() -> {
+                futures.add(taskScheduler.schedule(() -> {
                     upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("MEETING_NOT_STARTED_15"));
                     checkMeetingStarted(event, NotificationType.MEETING_NOT_STARTED_15);
-                }, minus15);
+                }, minus15));
             }
             if (minus3.isAfter(now)) {
                 upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "PRE_CLASS_JOINS", minus3));
-                taskScheduler.schedule(() -> {
+                futures.add(taskScheduler.schedule(() -> {
                     upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("PRE_CLASS_JOINS"));
                     checkPreClassJoins(event);
-                }, minus3);
+                }, minus3));
             }
             if (start.isAfter(now)) {
                 upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "SESSION_START", start));
-                taskScheduler.schedule(() -> {
+                futures.add(taskScheduler.schedule(() -> {
                     upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("SESSION_START"));
                     startSessionPolling(event);
-                }, start);
+                }, start));
+            } else if (end.isAfter(now)) {
+                // Session already started but not yet ended: catch up on any missed polling
+                resumeSessionPolling(event);
             }
+
             if (end.isAfter(now)) {
                 upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "SESSION_FINALIZE", end));
-                taskScheduler.schedule(() -> {
+                futures.add(taskScheduler.schedule(() -> {
                     upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("SESSION_FINALIZE"));
                     finalizeSession(event);
-                }, end);
+                }, end));
             }
+
+            oneTimeFutures.put(event.getId(), futures);
+        }
+    }
+
+    /**
+     * Cancels all one-time scheduled check futures for the given event and removes them from
+     * the tracking map. Called before rescheduling an event and when an event is removed from
+     * today's calendar, to prevent stale tasks from firing at outdated times.
+     */
+    private void cancelOneTimeFutures(String eventId) {
+        List<ScheduledFuture<?>> futures = oneTimeFutures.remove(eventId);
+        if (futures != null) {
+            futures.forEach(f -> f.cancel(false));
         }
     }
 
@@ -154,11 +217,16 @@ public class MeetAttendanceMonitor {
     public void checkPreClassJoins(CalendarEvent event) {
         try {
             List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-            List<Student> expectedStudents = getExpectedStudents(event);
-            Set<Long> presentStudentIds = resolveStudentIds(resolveAndAutoLearn(participants));
-            for (Student student : expectedStudents) {
-                if (!presentStudentIds.contains(student.getId())) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, student);
+            ExpectedParticipants expected = getExpectedParticipants(event);
+            ResolvedParticipants resolved = resolveAndAutoLearn(participants);
+            for (Student student : expected.students()) {
+                if (!resolved.studentIds().contains(student.getId())) {
+                    notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
+                }
+            }
+            for (Teacher teacher : expected.teachers()) {
+                if (!resolved.teacherIds().contains(teacher.getId())) {
+                    notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new TeacherRecipient(teacher));
                 }
             }
         } catch (Exception e) {
@@ -167,78 +235,148 @@ public class MeetAttendanceMonitor {
     }
 
     public void startSessionPolling(CalendarEvent event) {
-        List<Student> expectedStudents = getExpectedStudents(event);
-        List<Teacher> expectedTeachers = getExpectedTeachers(event);
-        int totalExpected = expectedStudents.size() + expectedTeachers.size();
+        ExpectedParticipants expected = getExpectedParticipants(event);
+        int totalExpected = expected.students().size() + expected.teachers().size();
         Set<Long> seenStudentIds = new HashSet<>();
         Set<Long> seenTeacherIds = new HashSet<>();
-        Instant classStart = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant();
-        Instant lateThreshold = classStart.plusSeconds(lateBufferMinutes * 60L);
+        Instant lateThreshold = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant()
+                .plusSeconds(lateBufferMinutes * 60L);
+        AtomicBoolean meetingActive = new AtomicBoolean(false);
+        AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
 
+        // Initial snapshot at class start time
         try {
-            List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-            Set<PersonRef> presentRefs = resolveAndAutoLearn(participants);
-            Set<Long> presentStudentIds = resolveStudentIds(presentRefs);
-            Set<Long> presentTeacherIds = resolveTeacherIds(presentRefs);
-
-            for (Student student : expectedStudents) {
-                if (presentStudentIds.contains(student.getId())) {
-                    seenStudentIds.add(student.getId());
-                    recordStudentAttendance(student, event, AttendanceStatus.PRESENT);
-                    notificationService.notify(NotificationType.ARRIVAL, event, student);
-                }
-            }
-            for (Teacher teacher : expectedTeachers) {
-                if (presentTeacherIds.contains(teacher.getId())) {
-                    seenTeacherIds.add(teacher.getId());
-                    recordTeacherAttendance(teacher, event, AttendanceStatus.PRESENT);
-                }
+            if (googleMeetClient.isMeetingActive(event.getSpaceCode())) {
+                meetingActive.set(true);
+                processParticipants(event, googleMeetClient.getActiveParticipants(event.getSpaceCode()),
+                        expected, seenStudentIds, seenTeacherIds, lateThreshold);
+            } else {
+                sendMeetingStartReminder(event);
             }
         } catch (Exception e) {
             log.warn("Failed session start poll for {}: {}", event.getId(), e.getMessage());
         }
 
-        ScheduledFuture<?>[] futureHolder = new ScheduledFuture<?>[1];
-        futureHolder[0] = taskScheduler.scheduleAtFixedRate(() -> {
+        futureRef.set(taskScheduler.scheduleAtFixedRate(() -> {
             try {
-                List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-                Set<PersonRef> presentRefs = resolveAndAutoLearn(participants);
-                Set<Long> presentStudentIds = resolveStudentIds(presentRefs);
-                Set<Long> presentTeacherIds = resolveTeacherIds(presentRefs);
+                // While meeting not yet started, check every tick and remind via Telegram
+                if (!meetingActive.get()) {
+                    try {
+                        if (!googleMeetClient.isMeetingActive(event.getSpaceCode())) {
+                            sendMeetingStartReminder(event);
+                            return;
+                        }
+                        meetingActive.set(true);
+                    } catch (Exception e) {
+                        log.warn("Failed to check meeting active for {}: {}", event.getId(), e.getMessage());
+                        return;
+                    }
+                }
 
-                for (Student student : expectedStudents) {
-                    if (!seenStudentIds.contains(student.getId()) && presentStudentIds.contains(student.getId())) {
-                        seenStudentIds.add(student.getId());
-                        if (Instant.now().isAfter(lateThreshold)) {
-                            recordStudentAttendance(student, event, AttendanceStatus.LATE);
-                            notificationService.notify(NotificationType.LATE, event, student);
-                        } else {
-                            recordStudentAttendance(student, event, AttendanceStatus.PRESENT);
-                            notificationService.notify(NotificationType.ARRIVAL, event, student);
-                        }
-                    }
-                }
-                for (Teacher teacher : expectedTeachers) {
-                    if (!seenTeacherIds.contains(teacher.getId()) && presentTeacherIds.contains(teacher.getId())) {
-                        seenTeacherIds.add(teacher.getId());
-                        if (Instant.now().isAfter(lateThreshold)) {
-                            recordTeacherAttendance(teacher, event, AttendanceStatus.LATE);
-                        } else {
-                            recordTeacherAttendance(teacher, event, AttendanceStatus.PRESENT);
-                        }
-                    }
-                }
+                processParticipants(event, googleMeetClient.getActiveParticipants(event.getSpaceCode()),
+                        expected, seenStudentIds, seenTeacherIds, lateThreshold);
+
                 if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {
                     notificationService.notify(NotificationType.ALL_PRESENT, event, null);
-                    ScheduledFuture<?> future = pollingFutures.remove(event.getId());
-                    if (future != null) future.cancel(false);
+                    ScheduledFuture<?> f = futureRef.get();
+                    if (f != null) f.cancel(false);
                 }
             } catch (Exception e) {
                 log.warn("Failed polling for {}: {}", event.getId(), e.getMessage());
             }
-        }, java.time.Duration.ofSeconds(60));
+        }, Duration.ofSeconds(60)));
 
-        pollingFutures.put(event.getId(), futureHolder[0]);
+        pollingFutures.put(event.getId(), futureRef.get());
+    }
+
+    /**
+     * Called on startup when a session is already in progress (start &le; now &lt; end).
+     * Pre-seeds seen-sets from existing DB attendance records so we never double-notify,
+     * then immediately takes a participant snapshot and starts the 60-second polling loop.
+     */
+    public void resumeSessionPolling(CalendarEvent event) {
+        ExpectedParticipants expected = getExpectedParticipants(event);
+        int totalExpected = expected.students().size() + expected.teachers().size();
+        Set<Long> seenStudentIds = new HashSet<>();
+        Set<Long> seenTeacherIds = new HashSet<>();
+
+        // Pre-seed from attendance already recorded before the restart
+        attendanceRepository.findByCalendarEventIdAndDate(event.getId(), LocalDate.now())
+                .forEach(a -> {
+                    log.debug("Pre-seeding attendance for {}: studentId={}, teacherId={}, status={}",
+                            event.getId(), a.getStudent() != null ? a.getStudent().getId() : null,
+                            a.getTeacher() != null ? a.getTeacher().getId() : null, a.getStatus());
+                    if (a.getStudent() != null) seenStudentIds.add(a.getStudent().getId());
+                    if (a.getTeacher() != null) seenTeacherIds.add(a.getTeacher().getId());
+                });
+
+        Instant lateThreshold = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant()
+                .plusSeconds(lateBufferMinutes * 60L);
+        AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
+
+        // Immediate snapshot
+        try {
+            List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
+            processParticipants(event, participants, expected, seenStudentIds, seenTeacherIds, lateThreshold);
+        } catch (Exception e) {
+            log.warn("Failed catch-up snapshot for {}: {}", event.getId(), e.getMessage());
+        }
+        
+        // skip scheduling the periodic polling to avoid unnecessary work.
+        if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected) {
+            log.info("All participants already present for {}; skipping polling", event.getId());
+            return;
+        }
+
+        futureRef.set(taskScheduler.scheduleAtFixedRate(() -> {
+            try {
+                processParticipants(event, googleMeetClient.getActiveParticipants(event.getSpaceCode()),
+                        expected, seenStudentIds, seenTeacherIds, lateThreshold);
+
+                if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {
+                    notificationService.notify(NotificationType.ALL_PRESENT, event, null);
+                    ScheduledFuture<?> f = futureRef.get();
+                    if (f != null) f.cancel(true);
+                }
+            } catch (Exception e) {
+                log.warn("Failed catch-up polling for {}: {}", event.getId(), e.getMessage());
+            }
+        }, Duration.ofSeconds(60)));
+
+        pollingFutures.put(event.getId(), futureRef.get());
+    }
+
+    /**
+     * Resolves participants and records attendance for any newly-seen students and teachers.
+     * Uses the lateThreshold to determine PRESENT vs LATE status.
+     */
+    private void processParticipants(CalendarEvent event, List<MeetParticipant> participants,
+                                      ExpectedParticipants expected, Set<Long> seenStudentIds,
+                                      Set<Long> seenTeacherIds, Instant lateThreshold) {
+        ResolvedParticipants resolved = resolveAndAutoLearn(participants);
+        boolean isLate = Instant.now().isAfter(lateThreshold);
+
+        for (Student student : expected.students()) {
+            if (!seenStudentIds.contains(student.getId()) && resolved.studentIds().contains(student.getId())) {
+                seenStudentIds.add(student.getId());
+                AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+                recordStudentAttendance(student, event, status);
+                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL, event, new StudentRecipient(student));
+            }
+        }
+        for (Teacher teacher : expected.teachers()) {
+            if (!seenTeacherIds.contains(teacher.getId()) && resolved.teacherIds().contains(teacher.getId())) {
+                seenTeacherIds.add(teacher.getId());
+                AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+                recordTeacherAttendance(teacher, event, status);
+                NotificationType teacherType = isLate ? NotificationType.TEACHER_LATE : NotificationType.TEACHER_ARRIVED;
+                notificationService.notify(teacherType, event, new TeacherRecipient(teacher));
+            }
+        }
+    }
+
+    private void sendMeetingStartReminder(CalendarEvent event) {
+        notificationService.notify(NotificationType.MEETING_NOT_STARTED_15, event, null);
     }
 
     public void finalizeSession(CalendarEvent event) {
@@ -262,7 +400,9 @@ public class MeetAttendanceMonitor {
             log.warn("Failed to fetch all participants for finalize {}: {}", event.getId(), e.getMessage());
         }
 
-        for (Student student : getExpectedStudents(event)) {
+        ExpectedParticipants expected = getExpectedParticipants(event);
+
+        for (Student student : expected.students()) {
             Optional<Attendance> existing = attendanceRepository
                     .findByStudentIdAndCalendarEventIdAndDate(student.getId(), event.getId(), today);
             if (existing.isEmpty()) {
@@ -270,16 +410,17 @@ public class MeetAttendanceMonitor {
                         student.getName(), joinTimeByUserId, joinTimeByDisplayName);
                 if (joinTime == null) {
                     recordStudentAttendance(student, event, AttendanceStatus.ABSENT);
-                    notificationService.notify(NotificationType.ABSENT, event, student);
+                    notificationService.notify(NotificationType.ABSENT, event, new StudentRecipient(student));
                 } else if (joinTime.isAfter(classStart.plusSeconds(lateBufferMinutes * 60L))) {
                     recordStudentAttendance(student, event, AttendanceStatus.LATE);
-                    notificationService.notify(NotificationType.LATE, event, student);
+                    notificationService.notify(NotificationType.LATE, event, new StudentRecipient(student));
                 } else {
                     recordStudentAttendance(student, event, AttendanceStatus.PRESENT);
+                    notificationService.notify(NotificationType.ARRIVAL, event, new StudentRecipient(student));
                 }
             }
         }
-        for (Teacher teacher : getExpectedTeachers(event)) {
+        for (Teacher teacher : expected.teachers()) {
             Optional<Attendance> existing = attendanceRepository
                     .findByTeacherIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), today);
             if (existing.isEmpty()) {
@@ -287,10 +428,13 @@ public class MeetAttendanceMonitor {
                         teacher.getName(), joinTimeByUserId, joinTimeByDisplayName);
                 if (joinTime == null) {
                     recordTeacherAttendance(teacher, event, AttendanceStatus.ABSENT);
+                    notificationService.notify(NotificationType.TEACHER_ABSENT, event, new TeacherRecipient(teacher));
                 } else if (joinTime.isAfter(classStart.plusSeconds(lateBufferMinutes * 60L))) {
                     recordTeacherAttendance(teacher, event, AttendanceStatus.LATE);
+                    notificationService.notify(NotificationType.TEACHER_LATE, event, new TeacherRecipient(teacher));
                 } else {
                     recordTeacherAttendance(teacher, event, AttendanceStatus.PRESENT);
+                    notificationService.notify(NotificationType.TEACHER_ARRIVED, event, new TeacherRecipient(teacher));
                 }
             }
         }
@@ -309,11 +453,12 @@ public class MeetAttendanceMonitor {
      * Matching priority (per person type): googleUserId → meetDisplayName → name.
      * Auto-learns googleUserId and meetDisplayName on first match.
      */
-    private Set<PersonRef> resolveAndAutoLearn(List<MeetParticipant> participants) {
-        Set<PersonRef> matched = new HashSet<>();
+    private ResolvedParticipants resolveAndAutoLearn(List<MeetParticipant> participants) {
+        Set<Long> studentIds = new HashSet<>();
+        Set<Long> teacherIds = new HashSet<>();
+
         for (MeetParticipant participant : participants) {
             Optional<Student> student = Optional.empty();
-
             if (participant.googleUserId() != null) {
                 student = studentRepository.findByGoogleUserIdAndActiveTrue(participant.googleUserId());
             }
@@ -322,8 +467,13 @@ public class MeetAttendanceMonitor {
                         .or(() -> studentRepository.findByNameIgnoreCaseAndActiveTrue(participant.displayName()));
             }
             if (student.isPresent()) {
-                autoLearnStudent(student.get(), participant);
-                matched.add(new PersonRef(student.get().getId(), "STUDENT"));
+                if (autoLearnMeetIdentity(participant,
+                        student.get()::getGoogleUserId, student.get()::setGoogleUserId,
+                        student.get()::getMeetDisplayName, student.get()::setMeetDisplayName,
+                        "student " + student.get().getName())) {
+                    studentRepository.save(student.get());
+                }
+                studentIds.add(student.get().getId());
                 continue;
             }
 
@@ -336,79 +486,51 @@ public class MeetAttendanceMonitor {
                         .or(() -> teacherRepository.findByNameIgnoreCaseAndActiveTrue(participant.displayName()));
             }
             if (teacher.isPresent()) {
-                autoLearnTeacher(teacher.get(), participant);
-                matched.add(new PersonRef(teacher.get().getId(), "TEACHER"));
+                if (autoLearnMeetIdentity(participant,
+                        teacher.get()::getGoogleUserId, teacher.get()::setGoogleUserId,
+                        teacher.get()::getMeetDisplayName, teacher.get()::setMeetDisplayName,
+                        "teacher " + teacher.get().getName())) {
+                    teacherRepository.save(teacher.get());
+                }
+                teacherIds.add(teacher.get().getId());
             }
         }
-        return matched;
+        return new ResolvedParticipants(studentIds, teacherIds);
     }
 
-    private void autoLearnStudent(Student student, MeetParticipant participant) {
+    /**
+     * Learns googleUserId and meetDisplayName from a Meet participant if not already stored.
+     * Returns true if any field was updated (caller should persist the entity).
+     */
+    private boolean autoLearnMeetIdentity(MeetParticipant participant,
+                                           Supplier<String> getUid, Consumer<String> setUid,
+                                           Supplier<String> getDisplayName, Consumer<String> setDisplayName,
+                                           String entityLabel) {
         boolean changed = false;
-        if (participant.googleUserId() != null && student.getGoogleUserId() == null) {
-            student.setGoogleUserId(participant.googleUserId());
+        if (participant.googleUserId() != null && getUid.get() == null) {
+            setUid.accept(participant.googleUserId());
             changed = true;
         }
-        if (participant.displayName() != null && student.getMeetDisplayName() == null) {
-            student.setMeetDisplayName(participant.displayName());
+        if (participant.displayName() != null && getDisplayName.get() == null) {
+            setDisplayName.accept(participant.displayName());
             changed = true;
         }
         if (changed) {
-            studentRepository.save(student);
-            log.info("Auto-learned Meet identity for student '{}': userId={}, displayName={}",
-                    student.getName(), student.getGoogleUserId(), student.getMeetDisplayName());
+            log.info("Auto-learned Meet identity for {}: userId={}, displayName={}",
+                    entityLabel, getUid.get(), getDisplayName.get());
         }
+        return changed;
     }
 
-    private void autoLearnTeacher(Teacher teacher, MeetParticipant participant) {
-        boolean changed = false;
-        if (participant.googleUserId() != null && teacher.getGoogleUserId() == null) {
-            teacher.setGoogleUserId(participant.googleUserId());
-            changed = true;
-        }
-        if (participant.displayName() != null && teacher.getMeetDisplayName() == null) {
-            teacher.setMeetDisplayName(participant.displayName());
-            changed = true;
-        }
-        if (changed) {
-            teacherRepository.save(teacher);
-            log.info("Auto-learned Meet identity for teacher '{}': userId={}, displayName={}",
-                    teacher.getName(), teacher.getGoogleUserId(), teacher.getMeetDisplayName());
-        }
-    }
-
-    private static Set<Long> resolveStudentIds(Set<PersonRef> refs) {
-        Set<Long> ids = new HashSet<>();
-        for (PersonRef ref : refs) {
-            if ("STUDENT".equals(ref.type())) ids.add(ref.id());
-        }
-        return ids;
-    }
-
-    private static Set<Long> resolveTeacherIds(Set<PersonRef> refs) {
-        Set<Long> ids = new HashSet<>();
-        for (PersonRef ref : refs) {
-            if ("TEACHER".equals(ref.type())) ids.add(ref.id());
-        }
-        return ids;
-    }
-
-    private List<Student> getExpectedStudents(CalendarEvent event) {
+    private ExpectedParticipants getExpectedParticipants(CalendarEvent event) {
         List<Student> students = new ArrayList<>();
-        if (event.getAttendeeEmails() == null) return students;
+        List<Teacher> teachers = new ArrayList<>();
+        if (event.getAttendeeEmails() == null) return new ExpectedParticipants(students, teachers);
         for (String email : event.getAttendeeEmails()) {
             studentRepository.findByMeetEmailAndActiveTrue(email).ifPresent(students::add);
-        }
-        return students;
-    }
-
-    private List<Teacher> getExpectedTeachers(CalendarEvent event) {
-        List<Teacher> teachers = new ArrayList<>();
-        if (event.getAttendeeEmails() == null) return teachers;
-        for (String email : event.getAttendeeEmails()) {
             teacherRepository.findByMeetEmailAndActiveTrue(email).ifPresent(teachers::add);
         }
-        return teachers;
+        return new ExpectedParticipants(students, teachers);
     }
 
     private void recordStudentAttendance(Student student, CalendarEvent event, AttendanceStatus status) {

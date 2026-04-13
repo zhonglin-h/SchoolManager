@@ -30,6 +30,9 @@ public class NotificationLog {
     @ManyToOne(optional = true)
     private Student student;
 
+    @ManyToOne(optional = true)
+    private Teacher teacher;
+
     private String calendarEventId;
 
     private LocalDate date;
