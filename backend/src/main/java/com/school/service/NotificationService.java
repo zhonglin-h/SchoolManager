@@ -57,7 +57,7 @@ public class NotificationService {
                 String body = type.body(event, student);
                 String failureReason = null;
 
-                if (type.toPrincipal && !type.principalViaTelegram) {
+                if (type.toPrincipalViaEmail) {
                     try {
                         emailClient.send(principalEmail, subject, body);
                     } catch (Exception e) {
@@ -65,7 +65,7 @@ public class NotificationService {
                         log.error("Failed to send {} email to principal: {}", type.name(), e.getMessage());
                     }
                 }
-                if (type.toParent && student != null
+                if (type.toParentViaEmail && student != null
                         && student.getParentEmail() != null && !student.getParentEmail().isBlank()) {
                     try {
                         emailClient.send(student.getParentEmail(), subject, body);
@@ -92,7 +92,7 @@ public class NotificationService {
         }
 
         // --- Telegram path ---
-        if (type.toPrincipal && type.principalViaTelegram) {
+        if (type.toPrincipalViaTelegram) {
             boolean telegramAlreadySent = student != null
                     ? notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                             student.getId(), event.getId(), LocalDate.now(), type.name(), NotificationChannel.TELEGRAM)

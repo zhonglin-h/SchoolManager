@@ -7,6 +7,7 @@ import java.util.function.BiFunction;
 
 public enum NotificationType {
 
+    //                                                         principalEmail  principalTelegram  parentEmail
     MEETING_NOT_STARTED_15(
             (e, s) -> "Meeting Not Started: " + e.getTitle(),
             (e, s) -> "The Google Meet session for \"" + e.getTitle() + "\" has not been started yet.",
@@ -15,49 +16,49 @@ public enum NotificationType {
     NOT_YET_JOINED_3(
             (e, s) -> "Student Not Yet Joined: " + s.getName(),
             (e, s) -> s.getName() + " has not yet joined the Meet session for \"" + e.getTitle() + "\".",
-            true, true, false
+            true, false, true
     ),
     ARRIVAL(
             (e, s) -> "Student Arrived: " + s.getName(),
             (e, s) -> s.getName() + " has joined the Meet session for \"" + e.getTitle() + "\".",
-            true, false, true
+            false, true, false
     ),
     ALL_PRESENT(
             (e, s) -> "All Students Present: " + e.getTitle(),
             (e, s) -> "All expected students have joined the Meet session for \"" + e.getTitle() + "\".",
-            true, false, true
+            false, true, false
     ),
     LATE(
             (e, s) -> "Student Late: " + s.getName(),
             (e, s) -> s.getName() + " joined the Meet session late for \"" + e.getTitle() + "\".",
-            true, true, true
+            false, true, true
     ),
     ABSENT(
             (e, s) -> "Student Absent: " + s.getName(),
             (e, s) -> s.getName() + " was absent from the Meet session for \"" + e.getTitle() + "\".",
-            true, true, true
+            false, true, true
     );
 
     private final BiFunction<CalendarEvent, Student, String> subjectFn;
     private final BiFunction<CalendarEvent, Student, String> bodyFn;
-    final boolean toPrincipal;
-    final boolean toParent;
-    final boolean principalViaTelegram;
+    final boolean toPrincipalViaEmail;
+    final boolean toPrincipalViaTelegram;
+    final boolean toParentViaEmail;
 
     NotificationType(BiFunction<CalendarEvent, Student, String> subjectFn,
                      BiFunction<CalendarEvent, Student, String> bodyFn,
-                     boolean toPrincipal,
-                     boolean toParent,
-                     boolean principalViaTelegram) {
+                     boolean toPrincipalViaEmail,
+                     boolean toPrincipalViaTelegram,
+                     boolean toParentViaEmail) {
         this.subjectFn = subjectFn;
         this.bodyFn = bodyFn;
-        this.toPrincipal = toPrincipal;
-        this.toParent = toParent;
-        this.principalViaTelegram = principalViaTelegram;
+        this.toPrincipalViaEmail = toPrincipalViaEmail;
+        this.toPrincipalViaTelegram = toPrincipalViaTelegram;
+        this.toParentViaEmail = toParentViaEmail;
     }
 
     public boolean shouldSendEmail() {
-        return (toPrincipal && !principalViaTelegram) || toParent;
+        return toPrincipalViaEmail || toParentViaEmail;
     }
 
     public String subject(CalendarEvent event, Student student) {
