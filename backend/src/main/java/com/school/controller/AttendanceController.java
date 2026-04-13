@@ -451,7 +451,7 @@ public class AttendanceController {
      * @param personId   optional — if provided, only records for this person are returned
      * @param dateFrom   optional — only records on or after this date (ISO date, e.g. 2024-01-01)
      * @param dateTo     optional — only records on or before this date (ISO date, e.g. 2024-12-31)
-     * @param status     optional — comma-separated list of statuses to include (PRESENT, LATE, ABSENT)
+     * @param status     optional — repeated parameter for filtering by status (e.g. ?status=ABSENT&status=LATE); if omitted all statuses are returned
      */
     @GetMapping("/records")
     public ResponseEntity<List<AttendanceRecordResponse>> getRecords(

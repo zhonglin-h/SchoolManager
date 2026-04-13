@@ -81,8 +81,10 @@ export default function AttendanceRecords() {
     return { dateFrom: undefined, dateTo: undefined }
   }, [datePreset, customFrom, customTo])
 
+  // statusArray: explicitly pass the selected statuses to the backend.
+  // Empty set (no selection) is treated as "show all" on the backend (no filter param sent).
   const statusArray = useMemo(
-    () => statusFilters.size === STATUS_OPTIONS.length ? [] : Array.from(statusFilters),
+    () => Array.from(statusFilters),
     [statusFilters],
   )
 
