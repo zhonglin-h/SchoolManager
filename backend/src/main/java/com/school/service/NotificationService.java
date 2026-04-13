@@ -51,7 +51,10 @@ public class NotificationService {
         String body = type.body(event, student);
         String failureReason = null;
 
+        java.util.List<String> recipients = new java.util.ArrayList<>();
+
         if (type.toPrincipal) {
+            recipients.add(principalEmail);
             try {
                 emailClient.send(principalEmail, subject, body);
             } catch (Exception e) {
@@ -61,6 +64,7 @@ public class NotificationService {
         }
         if (type.toParent && student != null
                 && student.getParentEmail() != null && !student.getParentEmail().isBlank()) {
+            recipients.add(student.getParentEmail());
             try {
                 emailClient.send(student.getParentEmail(), subject, body);
             } catch (Exception e) {
@@ -78,6 +82,7 @@ public class NotificationService {
                 .message(body)
                 .sentAt(LocalDateTime.now())
                 .channel(NotificationChannel.EMAIL)
+                .recipient(String.join(", ", recipients))
                 .success(failureReason == null)
                 .failureReason(failureReason)
                 .build();
