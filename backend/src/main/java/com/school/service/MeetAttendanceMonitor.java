@@ -1,23 +1,5 @@
 package com.school.service;
 
-import com.school.entity.Attendance;
-import com.school.entity.AttendanceStatus;
-import com.school.entity.Student;
-import com.school.entity.Teacher;
-import com.school.integration.MeetClient;
-import com.school.integration.MeetParticipant;
-import com.school.model.CalendarEvent;
-import com.school.repository.AttendanceRepository;
-import com.school.repository.StudentRepository;
-import com.school.repository.TeacherRepository;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
-import org.springframework.stereotype.Service;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -35,6 +17,26 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.stereotype.Service;
+
+import com.school.entity.Attendance;
+import com.school.entity.AttendanceStatus;
+import com.school.entity.Student;
+import com.school.entity.Teacher;
+import com.school.integration.MeetClient;
+import com.school.integration.MeetParticipant;
+import com.school.model.CalendarEvent;
+import com.school.repository.AttendanceRepository;
+import com.school.repository.StudentRepository;
+import com.school.repository.TeacherRepository;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
@@ -301,6 +303,9 @@ public class MeetAttendanceMonitor {
         // Pre-seed from attendance already recorded before the restart
         attendanceRepository.findByCalendarEventIdAndDate(event.getId(), LocalDate.now())
                 .forEach(a -> {
+                    log.debug("Pre-seeding attendance for {}: studentId={}, teacherId={}, status={}",
+                            event.getId(), a.getStudent() != null ? a.getStudent().getId() : null,
+                            a.getTeacher() != null ? a.getTeacher().getId() : null, a.getStatus());
                     if (a.getStudent() != null) seenStudentIds.add(a.getStudent().getId());
                     if (a.getTeacher() != null) seenTeacherIds.add(a.getTeacher().getId());
                 });
@@ -316,6 +321,12 @@ public class MeetAttendanceMonitor {
         } catch (Exception e) {
             log.warn("Failed catch-up snapshot for {}: {}", event.getId(), e.getMessage());
         }
+        
+        // skip scheduling the periodic polling to avoid unnecessary work.
+        if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected) {
+            log.info("All participants already present for {}; skipping polling", event.getId());
+            return;
+        }
 
         futureRef.set(taskScheduler.scheduleAtFixedRate(() -> {
             try {
@@ -325,7 +336,7 @@ public class MeetAttendanceMonitor {
                 if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {
                     notificationService.notify(NotificationType.ALL_PRESENT, event, null);
                     ScheduledFuture<?> f = futureRef.get();
-                    if (f != null) f.cancel(false);
+                    if (f != null) f.cancel(true);
                 }
             } catch (Exception e) {
                 log.warn("Failed catch-up polling for {}: {}", event.getId(), e.getMessage());
