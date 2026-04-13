@@ -216,10 +216,15 @@ public class MeetAttendanceMonitor {
         try {
             List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
             ExpectedParticipants expected = getExpectedParticipants(event);
-            Set<Long> presentStudentIds = resolveAndAutoLearn(participants).studentIds();
+            ResolvedParticipants resolved = resolveAndAutoLearn(participants);
             for (Student student : expected.students()) {
-                if (!presentStudentIds.contains(student.getId())) {
+                if (!resolved.studentIds().contains(student.getId())) {
                     notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
+                }
+            }
+            for (Teacher teacher : expected.teachers()) {
+                if (!resolved.teacherIds().contains(teacher.getId())) {
+                    notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new TeacherRecipient(teacher));
                 }
             }
         } catch (Exception e) {
