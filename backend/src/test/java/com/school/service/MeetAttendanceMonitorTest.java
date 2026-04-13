@@ -506,6 +506,59 @@ class MeetAttendanceMonitorTest {
         verify(notificationService, never()).clearTodayLogsForEvent(anyString());
     }
 
+    // --- scheduleEventsForToday: partial future checkpoints ---
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_skipsT15ButSchedulesT3WhenMeetingIsMinutesAway() throws Exception {
+        // Meeting 4 minutes away: T-15 is already past, T-3 is 1 minute in the future.
+        // Only PRE_CLASS_JOINS, SESSION_START, and SESSION_FINALIZE should appear in upcomingChecks.
+        CalendarEvent soon = new CalendarEvent("evt-soon", "Imminent Class",
+                "https://meet.google.com/abc", "abc",
+                LocalDateTime.now().plusMinutes(4), LocalDateTime.now().plusMinutes(64),
+                List.of());
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(soon));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.scheduleEventsForToday();
+
+        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
+        List<String> types = checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
+        assertThat(types).doesNotContain("MEETING_NOT_STARTED_15");
+        assertThat(types).contains("PRE_CLASS_JOINS", "SESSION_START", "SESSION_FINALIZE");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_rescheduledToSoonStillGetsFreshT3Check() throws Exception {
+        // Simulate the "Refresh Live" bug: event initially far away (T-3 and T-15 both future),
+        // then rescheduled to 4 minutes from now (T-15 past, T-3 still future).
+        // After re-sync, a fresh PRE_CLASS_JOINS check must be registered.
+        CalendarEvent original = new CalendarEvent("evt-moved", "Math Class",
+                "https://meet.google.com/abc", "abc",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of());
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(original));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+        monitor.scheduleEventsForToday(); // initial schedule — T-15 and T-3 both far future
+
+        CalendarEvent moved = new CalendarEvent("evt-moved", "Math Class",
+                "https://meet.google.com/abc", "abc",
+                LocalDateTime.now().plusMinutes(4), LocalDateTime.now().plusMinutes(64),
+                List.of());
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(moved));
+        monitor.scheduleEventsForToday(); // re-sync after reschedule
+
+        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
+        List<String> types = checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
+        assertThat(types).doesNotContain("MEETING_NOT_STARTED_15");
+        assertThat(types).contains("PRE_CLASS_JOINS");
+        // Notification logs must have been cleared so the T-3 notification can re-fire
+        verify(notificationService).clearTodayLogsForEvent("evt-moved");
+    }
+
     // --- helper ---
 
     private static <T> T argThat(org.mockito.ArgumentMatcher<T> matcher) {
