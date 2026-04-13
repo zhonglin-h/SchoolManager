@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -70,6 +70,11 @@ export default function AttendanceRecords() {
     },
   })
 
+  const openEdit = useCallback((record: AttendanceRecord) => {
+    mutation.reset()
+    setEditModal({ record, selected: record.status as AttendanceStatus })
+  }, [mutation])
+
   const columns = useMemo<ColumnDef<AttendanceRecord>[]>(
     () => [
       {
@@ -115,7 +120,7 @@ export default function AttendanceRecords() {
               <span className={STATUS_STYLES[s] ?? 'text-gray-600'}>{s}</span>
               {canEdit && (
                 <button
-                  onClick={() => setEditModal({ record, selected: s as AttendanceStatus })}
+                  onClick={() => openEdit(record)}
                   title="Edit status"
                   className="text-gray-400 hover:text-blue-600 transition-colors"
                 >
@@ -134,7 +139,7 @@ export default function AttendanceRecords() {
         ),
       },
     ],
-    [],
+    [openEdit],
   )
 
   // eslint-disable-next-line react-hooks/incompatible-library
