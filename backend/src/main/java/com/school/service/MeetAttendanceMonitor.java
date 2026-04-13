@@ -109,6 +109,7 @@ public class MeetAttendanceMonitor {
         }
 
         // Cancel futures for events that were removed from or moved off today's calendar
+        // Copy keyset to avoid ConcurrentModificationException while removing stale entries
         for (String staleId : new ArrayList<>(oneTimeFutures.keySet())) {
             if (!freshEventIds.contains(staleId)) {
                 cancelOneTimeFutures(staleId);
@@ -183,6 +184,11 @@ public class MeetAttendanceMonitor {
         }
     }
 
+    /**
+     * Cancels all one-time scheduled check futures for the given event and removes them from
+     * the tracking map. Called before rescheduling an event and when an event is removed from
+     * today's calendar, to prevent stale tasks from firing at outdated times.
+     */
     private void cancelOneTimeFutures(String eventId) {
         List<ScheduledFuture<?>> futures = oneTimeFutures.remove(eventId);
         if (futures != null) {
