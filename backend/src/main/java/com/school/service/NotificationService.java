@@ -143,4 +143,38 @@ public class NotificationService {
             }
         }
     }
+
+    /**
+     * Sends a Telegram-only notification not tied to a student (e.g. teacher arrival/absence).
+     * Uses the student-null dedup key: one send per (eventId, date, typeKey, TELEGRAM).
+     */
+    @Transactional
+    public void notifyTelegram(String typeKey, CalendarEvent event, String message) {
+        if (!notificationsEnabled) return;
+
+        boolean alreadySent = notificationLogRepository
+                .existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
+                        event.getId(), LocalDate.now(), typeKey, NotificationChannel.TELEGRAM);
+        if (alreadySent) return;
+
+        String failureReason = null;
+        try {
+            telegramClient.send(message);
+        } catch (Exception e) {
+            failureReason = e.getMessage();
+            log.error("Failed to send {} Telegram notification: {}", typeKey, e.getMessage());
+        }
+
+        notificationLogRepository.save(NotificationLog.builder()
+                .calendarEventId(event.getId())
+                .date(LocalDate.now())
+                .type(typeKey)
+                .message(message)
+                .sentAt(LocalDateTime.now())
+                .channel(NotificationChannel.TELEGRAM)
+                .recipient(telegramChatId)
+                .success(failureReason == null)
+                .failureReason(failureReason)
+                .build());
+    }
 }

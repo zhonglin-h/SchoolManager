@@ -1,9 +1,9 @@
 package com.school.service;
 
+import java.util.function.BiFunction;
+
 import com.school.entity.Student;
 import com.school.model.CalendarEvent;
-
-import java.util.function.BiFunction;
 
 public enum NotificationType {
 
@@ -11,12 +11,12 @@ public enum NotificationType {
     MEETING_NOT_STARTED_15(
             (e, s) -> "Meeting Not Started: " + e.getTitle(),
             (e, s) -> "The Google Meet session for \"" + e.getTitle() + "\" has not been started yet.",
-            true, false, false
+            true, true, false
     ),
     NOT_YET_JOINED_3(
             (e, s) -> "Student Not Yet Joined: " + s.getName(),
             (e, s) -> s.getName() + " has not yet joined the Meet session for \"" + e.getTitle() + "\".",
-            true, false, true
+            true, true, true
     ),
     ARRIVAL(
             (e, s) -> "Student Arrived: " + s.getName(),

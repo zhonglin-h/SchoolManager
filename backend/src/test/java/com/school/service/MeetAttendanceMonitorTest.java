@@ -5,9 +5,7 @@ import com.school.entity.AttendanceStatus;
 import com.school.entity.Student;
 import com.school.integration.MeetClient;
 import com.school.integration.MeetParticipant;
-import com.school.integration.TelegramClient;
 import com.school.model.CalendarEvent;
-import com.school.service.NotificationType;
 import com.school.repository.AttendanceRepository;
 import com.school.repository.StudentRepository;
 import com.school.repository.TeacherRepository;
@@ -32,8 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -51,8 +49,6 @@ class MeetAttendanceMonitorTest {
     @Mock NotificationService notificationService;
     @Mock MeetClient meetClient;
     @Mock ThreadPoolTaskScheduler taskScheduler;
-    @Mock TelegramClient telegramClient;
-
     @InjectMocks
     MeetAttendanceMonitor monitor;
 
@@ -278,7 +274,7 @@ class MeetAttendanceMonitorTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void startSessionPolling_sendsTelegramReminderWhenMeetingNotActive() throws Exception {
+    void startSessionPolling_notifiesViaMeetingNotStarted15WhenMeetingNotActive() throws Exception {
         when(meetClient.isMeetingActive("abc-def")).thenReturn(false);
         when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
@@ -287,14 +283,13 @@ class MeetAttendanceMonitorTest {
 
         monitor.startSessionPolling(event);
 
-        verify(telegramClient).send(contains("Math Class"));
+        verify(notificationService).notify(eq(NotificationType.MEETING_NOT_STARTED_15), eq(event), isNull());
         verify(meetClient, never()).getActiveParticipants(anyString());
-        verify(notificationService, never()).notify(any(), any(), any());
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    void pollingTick_sendsTelegramReminderEachTickWhileMeetingInactive() throws Exception {
+    void pollingTick_notifiesViaMeetingNotStarted15EachTickWhileMeetingInactive() throws Exception {
         when(meetClient.isMeetingActive("abc-def")).thenReturn(false);
         when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
@@ -308,8 +303,8 @@ class MeetAttendanceMonitorTest {
         runnableCaptor.getValue().run();
         runnableCaptor.getValue().run();
 
-        // Initial snapshot + 2 ticks = 3 Telegram reminders total
-        verify(telegramClient, times(3)).send(anyString());
+        // Initial snapshot + 2 ticks = 3 notify calls (dedup enforced inside NotificationService, which is mocked here)
+        verify(notificationService, times(3)).notify(eq(NotificationType.MEETING_NOT_STARTED_15), eq(event), isNull());
         verify(meetClient, never()).getActiveParticipants(anyString());
     }
 
@@ -333,16 +328,15 @@ class MeetAttendanceMonitorTest {
 
         monitor.startSessionPolling(event);
         // Reminder sent for initial inactive state
-        verify(telegramClient).send(anyString());
+        verify(notificationService).notify(eq(NotificationType.MEETING_NOT_STARTED_15), eq(event), isNull());
 
         // First poll: meeting is now active — Alice is tracked, no more reminder
         runnableCaptor.getValue().run();
 
-        // No more reminders after meeting started
-        verify(telegramClient, times(1)).send(anyString());
+        // No more MEETING_NOT_STARTED_15 after meeting started
+        verify(notificationService, times(1)).notify(eq(NotificationType.MEETING_NOT_STARTED_15), eq(event), isNull());
         // Alice recorded (as LATE since lateBufferMinutes=5 and test runs instantly past threshold)
-        verify(notificationService).notify(
-                any(), eq(event), eq(alice));
+        verify(notificationService).notify(any(), eq(event), eq(alice));
     }
 
     // --- finalizeSession ---
