@@ -32,9 +32,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -284,7 +286,7 @@ class MeetAttendanceMonitorTest {
 
         monitor.startSessionPolling(event);
 
-        verify(telegramClient).send(org.mockito.ArgumentMatchers.contains("Math Class"));
+        verify(telegramClient).send(contains("Math Class"));
         verify(meetClient, never()).getActiveParticipants(anyString());
         verify(notificationService, never()).notify(any(), any(), any());
     }
@@ -306,7 +308,7 @@ class MeetAttendanceMonitorTest {
         runnableCaptor.getValue().run();
 
         // Initial snapshot + 2 ticks = 3 Telegram reminders total
-        verify(telegramClient, org.mockito.Mockito.times(3)).send(anyString());
+        verify(telegramClient, times(3)).send(anyString());
         verify(meetClient, never()).getActiveParticipants(anyString());
     }
 
@@ -336,10 +338,10 @@ class MeetAttendanceMonitorTest {
         runnableCaptor.getValue().run();
 
         // No more reminders after meeting started
-        verify(telegramClient, org.mockito.Mockito.times(1)).send(anyString());
+        verify(telegramClient, times(1)).send(anyString());
         // Alice recorded (as LATE since lateBufferMinutes=5 and test runs instantly past threshold)
         verify(notificationService).notify(
-                org.mockito.ArgumentMatchers.any(), eq(event), eq(alice));
+                any(), eq(event), eq(alice));
     }
 
     // --- finalizeSession ---
