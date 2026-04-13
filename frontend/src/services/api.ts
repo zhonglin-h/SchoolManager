@@ -206,10 +206,19 @@ export async function upsertAttendance(
 
 export async function getAttendanceRecords(
   personType: 'ALL' | 'STUDENT' | 'TEACHER' = 'ALL',
-  personId?: number
+  personId?: number,
+  dateFrom?: string,
+  dateTo?: string,
+  status?: string[]
 ): Promise<AttendanceRecord[]> {
   const { data } = await api.get<AttendanceRecord[]>('/attendance/records', {
-    params: { personType, ...(personId != null ? { personId } : {}) },
+    params: {
+      personType,
+      ...(personId != null ? { personId } : {}),
+      ...(dateFrom ? { dateFrom } : {}),
+      ...(dateTo ? { dateTo } : {}),
+      ...(status && status.length > 0 ? { status } : {}),
+    },
   })
   return data
 }
