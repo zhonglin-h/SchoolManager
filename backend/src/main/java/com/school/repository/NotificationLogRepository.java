@@ -12,6 +12,7 @@ public interface NotificationLogRepository extends JpaRepository<NotificationLog
     boolean existsByCalendarEventIdAndDateAndTypeAndStudentIsNullAndSuccessTrue(String calendarEventId, LocalDate date, String type);
     boolean existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(Long studentId, String calendarEventId, LocalDate date, String type, NotificationChannel channel);
     boolean existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(String calendarEventId, LocalDate date, String type, NotificationChannel channel);
+    boolean existsByTeacherIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(Long teacherId, String calendarEventId, LocalDate date, String type, NotificationChannel channel);
     List<NotificationLog> findAllByOrderBySentAtDesc();
     void deleteByCalendarEventIdAndDate(String calendarEventId, LocalDate date);
 }

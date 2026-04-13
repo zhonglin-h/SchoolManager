@@ -100,7 +100,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.EMAIL))).thenReturn(false);
 
-        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, student);
+        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
 
         ArgumentCaptor<String> toCaptor = ArgumentCaptor.forClass(String.class);
         verify(emailClient, times(2)).send(toCaptor.capture(), anyString(), anyString());
@@ -114,7 +114,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.EMAIL))).thenReturn(true);
 
-        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, student);
+        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
 
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
         verify(telegramClient, never()).send(anyString());
@@ -127,7 +127,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(false);
 
-        notificationService.notify(NotificationType.ARRIVAL, event, student);
+        notificationService.notify(NotificationType.ARRIVAL, event, new StudentRecipient(student));
 
         verify(telegramClient).send(anyString());
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
@@ -138,7 +138,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(true);
 
-        notificationService.notify(NotificationType.ARRIVAL, event, student);
+        notificationService.notify(NotificationType.ARRIVAL, event, new StudentRecipient(student));
 
         verify(telegramClient, never()).send(anyString());
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
@@ -177,7 +177,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(false);
 
-        notificationService.notify(NotificationType.LATE, event, student);
+        notificationService.notify(NotificationType.LATE, event, new StudentRecipient(student));
 
         verify(telegramClient).send(anyString());
         ArgumentCaptor<String> toCaptor = ArgumentCaptor.forClass(String.class);
@@ -193,7 +193,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(true);
 
-        notificationService.notify(NotificationType.LATE, event, student);
+        notificationService.notify(NotificationType.LATE, event, new StudentRecipient(student));
 
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
         verify(telegramClient, never()).send(anyString());
@@ -208,7 +208,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(false);
 
-        notificationService.notify(NotificationType.ABSENT, event, student);
+        notificationService.notify(NotificationType.ABSENT, event, new StudentRecipient(student));
 
         verify(telegramClient).send(anyString());
         ArgumentCaptor<String> toCaptor = ArgumentCaptor.forClass(String.class);
@@ -224,7 +224,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(true);
 
-        notificationService.notify(NotificationType.ABSENT, event, student);
+        notificationService.notify(NotificationType.ABSENT, event, new StudentRecipient(student));
 
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
         verify(telegramClient, never()).send(anyString());
@@ -240,7 +240,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(true);
 
-        notificationService.notify(NotificationType.ABSENT, event, student);
+        notificationService.notify(NotificationType.ABSENT, event, new StudentRecipient(student));
 
         // Email path still proceeds
         verify(emailClient, times(1)).send(eq("alice-parent@test.com"), anyString(), anyString());
@@ -256,7 +256,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(false);
 
-        notificationService.notify(NotificationType.ABSENT, event, student);
+        notificationService.notify(NotificationType.ABSENT, event, new StudentRecipient(student));
 
         // Telegram path still proceeds
         verify(telegramClient).send(anyString());
@@ -274,7 +274,7 @@ class NotificationServiceTest {
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(false);
         org.mockito.Mockito.doThrow(new RuntimeException("network error")).when(telegramClient).send(anyString());
 
-        notificationService.notify(NotificationType.ABSENT, event, student);
+        notificationService.notify(NotificationType.ABSENT, event, new StudentRecipient(student));
 
         // Email to parent still sent
         verify(emailClient).send(eq("alice-parent@test.com"), anyString(), anyString());
@@ -298,7 +298,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(false);
 
-        notificationService.notify(NotificationType.ARRIVAL, event, student);
+        notificationService.notify(NotificationType.ARRIVAL, event, new StudentRecipient(student));
 
         ArgumentCaptor<NotificationLog> logCaptor = ArgumentCaptor.forClass(NotificationLog.class);
         verify(notificationLogRepository).save(logCaptor.capture());
@@ -317,7 +317,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.EMAIL))).thenReturn(false);
 
-        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, student);
+        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
 
         ArgumentCaptor<NotificationLog> logCaptor = ArgumentCaptor.forClass(NotificationLog.class);
         verify(notificationLogRepository).save(logCaptor.capture());
