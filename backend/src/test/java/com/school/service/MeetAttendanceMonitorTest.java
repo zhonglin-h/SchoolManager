@@ -114,8 +114,8 @@ class MeetAttendanceMonitorTest {
 
         monitor.checkPreClassJoins(event);
 
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(event), eq(alice));
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, event, bob);
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(event), eq(new StudentRecipient(alice)));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(bob));
     }
 
     @Test
@@ -128,8 +128,8 @@ class MeetAttendanceMonitorTest {
 
         monitor.checkPreClassJoins(event);
 
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(event), eq(alice));
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, event, bob);
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(event), eq(new StudentRecipient(alice)));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(bob));
     }
 
     @Test
@@ -170,8 +170,8 @@ class MeetAttendanceMonitorTest {
 
         monitor.checkPreClassJoins(event);
 
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, event, bob);
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(event), eq(alice));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(bob));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(event), eq(new StudentRecipient(alice)));
     }
 
     // --- startSessionPolling (initial snapshot) ---
@@ -244,7 +244,7 @@ class MeetAttendanceMonitorTest {
         verify(attendanceRepository, org.mockito.Mockito.atLeastOnce()).save(attendanceCaptor.capture());
         assertThat(attendanceCaptor.getAllValues())
                 .anyMatch(a -> a.getStudent().equals(alice) && a.getStatus() == AttendanceStatus.LATE);
-        verify(notificationService).notify(NotificationType.LATE, event, alice);
+        verify(notificationService).notify(NotificationType.LATE, event, new StudentRecipient(alice));
     }
 
     @Test
@@ -336,7 +336,7 @@ class MeetAttendanceMonitorTest {
         // No more MEETING_NOT_STARTED_15 after meeting started
         verify(notificationService, times(1)).notify(eq(NotificationType.MEETING_NOT_STARTED_15), eq(event), isNull());
         // Alice recorded (as LATE since lateBufferMinutes=5 and test runs instantly past threshold)
-        verify(notificationService).notify(any(), eq(event), eq(alice));
+        verify(notificationService).notify(any(), eq(event), eq(new StudentRecipient(alice)));
     }
 
     // --- finalizeSession ---
@@ -354,8 +354,8 @@ class MeetAttendanceMonitorTest {
         ArgumentCaptor<Attendance> captor = ArgumentCaptor.forClass(Attendance.class);
         verify(attendanceRepository, org.mockito.Mockito.times(2)).save(captor.capture());
         assertThat(captor.getAllValues()).allMatch(a -> a.getStatus() == AttendanceStatus.ABSENT);
-        verify(notificationService).notify(NotificationType.ABSENT, event, alice);
-        verify(notificationService).notify(NotificationType.ABSENT, event, bob);
+        verify(notificationService).notify(NotificationType.ABSENT, event, new StudentRecipient(alice));
+        verify(notificationService).notify(NotificationType.ABSENT, event, new StudentRecipient(bob));
     }
 
     @Test
@@ -372,8 +372,8 @@ class MeetAttendanceMonitorTest {
 
         monitor.finalizeSession(event);
 
-        verify(notificationService, never()).notify(eq(NotificationType.ABSENT), eq(event), eq(alice));
-        verify(notificationService).notify(NotificationType.ABSENT, event, bob);
+        verify(notificationService, never()).notify(eq(NotificationType.ABSENT), eq(event), eq(new StudentRecipient(alice)));
+        verify(notificationService).notify(NotificationType.ABSENT, event, new StudentRecipient(bob));
     }
 
     // --- getUpcomingChecks ---

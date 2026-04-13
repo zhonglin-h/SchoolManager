@@ -3,12 +3,14 @@ package com.school.service;
 import com.school.entity.NotificationChannel;
 import com.school.entity.NotificationLog;
 import com.school.entity.Student;
+import com.school.entity.Teacher;
 import com.school.integration.EmailClient;
 import com.school.integration.TelegramClient;
 import com.school.model.CalendarEvent;
 import com.school.repository.NotificationLogRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -54,20 +56,20 @@ public class NotificationService {
         log.info("Cleared today's notification logs for rescheduled event {}", calendarEventId);
     }
 
-    public void notify(NotificationType type, CalendarEvent event, Student student) {
+    @Transactional
+    public void notify(NotificationType type, CalendarEvent event, @Nullable Recipient recipient) {
         if (!notificationsEnabled) return;
+
+        Student student = recipient instanceof StudentRecipient sr ? sr.student() : null;
+        Teacher teacher = recipient instanceof TeacherRecipient tr ? tr.teacher() : null;
 
         // --- Email path ---
         if (type.shouldSendEmail()) {
-            boolean emailAlreadySent = student != null
-                    ? notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
-                            student.getId(), event.getId(), LocalDate.now(), type.name(), NotificationChannel.EMAIL)
-                    : notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
-                            event.getId(), LocalDate.now(), type.name(), NotificationChannel.EMAIL);
+            boolean emailAlreadySent = dedupCheck(recipient, event, type, NotificationChannel.EMAIL);
 
             if (!emailAlreadySent) {
-                String subject = type.subject(event, student);
-                String body = type.body(event, student);
+                String subject = type.subject(event, recipient);
+                String body = type.body(event, recipient);
                 String failureReason = null;
                 List<String> recipients = new ArrayList<>();
 
@@ -94,6 +96,7 @@ public class NotificationService {
 
                 NotificationLog emailEntry = NotificationLog.builder()
                         .student(student)
+                        .teacher(teacher)
                         .calendarEventId(event.getId())
                         .date(LocalDate.now())
                         .type(type.name())
@@ -110,14 +113,10 @@ public class NotificationService {
 
         // --- Telegram path ---
         if (type.toPrincipalViaTelegram) {
-            boolean telegramAlreadySent = student != null
-                    ? notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
-                            student.getId(), event.getId(), LocalDate.now(), type.name(), NotificationChannel.TELEGRAM)
-                    : notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
-                            event.getId(), LocalDate.now(), type.name(), NotificationChannel.TELEGRAM);
+            boolean telegramAlreadySent = dedupCheck(recipient, event, type, NotificationChannel.TELEGRAM);
 
             if (!telegramAlreadySent) {
-                String body = type.body(event, student);
+                String body = type.body(event, recipient);
                 String failureReason = null;
 
                 try {
@@ -129,6 +128,7 @@ public class NotificationService {
 
                 NotificationLog telegramEntry = NotificationLog.builder()
                         .student(student)
+                        .teacher(teacher)
                         .calendarEventId(event.getId())
                         .date(LocalDate.now())
                         .type(type.name())
@@ -144,37 +144,21 @@ public class NotificationService {
         }
     }
 
-    /**
-     * Sends a Telegram-only notification not tied to a student (e.g. teacher arrival/absence).
-     * Uses the student-null dedup key: one send per (eventId, date, typeKey, TELEGRAM).
-     */
-    @Transactional
-    public void notifyTelegram(String typeKey, CalendarEvent event, String message) {
-        if (!notificationsEnabled) return;
-
-        boolean alreadySent = notificationLogRepository
-                .existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
-                        event.getId(), LocalDate.now(), typeKey, NotificationChannel.TELEGRAM);
-        if (alreadySent) return;
-
-        String failureReason = null;
-        try {
-            telegramClient.send(message);
-        } catch (Exception e) {
-            failureReason = e.getMessage();
-            log.error("Failed to send {} Telegram notification: {}", typeKey, e.getMessage());
+    private boolean dedupCheck(@Nullable Recipient recipient, CalendarEvent event,
+                               NotificationType type, NotificationChannel channel) {
+        if (recipient instanceof StudentRecipient sr) {
+            return notificationLogRepository
+                    .existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
+                            sr.getId(), event.getId(), LocalDate.now(), type.name(), channel);
+        } else if (recipient instanceof TeacherRecipient tr) {
+            return notificationLogRepository
+                    .existsByTeacherIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
+                            tr.getId(), event.getId(), LocalDate.now(), type.name(), channel);
+        } else {
+            return notificationLogRepository
+                    .existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
+                            event.getId(), LocalDate.now(), type.name(), channel);
         }
-
-        notificationLogRepository.save(NotificationLog.builder()
-                .calendarEventId(event.getId())
-                .date(LocalDate.now())
-                .type(typeKey)
-                .message(message)
-                .sentAt(LocalDateTime.now())
-                .channel(NotificationChannel.TELEGRAM)
-                .recipient(telegramChatId)
-                .success(failureReason == null)
-                .failureReason(failureReason)
-                .build());
     }
 }
+

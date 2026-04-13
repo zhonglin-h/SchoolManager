@@ -215,7 +215,7 @@ public class MeetAttendanceMonitor {
             Set<Long> presentStudentIds = resolveAndAutoLearn(participants).studentIds();
             for (Student student : expected.students()) {
                 if (!presentStudentIds.contains(student.getId())) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, student);
+                    notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
                 }
             }
         } catch (Exception e) {
@@ -293,7 +293,7 @@ public class MeetAttendanceMonitor {
                 seenStudentIds.add(student.getId());
                 AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 recordStudentAttendance(student, event, status);
-                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL, event, student);
+                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL, event, new StudentRecipient(student));
             }
         }
         for (Teacher teacher : expected.teachers()) {
@@ -301,9 +301,8 @@ public class MeetAttendanceMonitor {
                 seenTeacherIds.add(teacher.getId());
                 AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 recordTeacherAttendance(teacher, event, status);
-                String typeKey = isLate ? "TEACHER_LATE" : "TEACHER_ARRIVED";
-                String msg = teacher.getName() + (isLate ? " joined the Meet session late for \"" : " has joined the Meet session for \"") + event.getTitle() + "\".";
-                notificationService.notifyTelegram(typeKey, event, msg);
+                NotificationType teacherType = isLate ? NotificationType.TEACHER_LATE : NotificationType.TEACHER_ARRIVED;
+                notificationService.notify(teacherType, event, new TeacherRecipient(teacher));
             }
         }
     }
@@ -343,13 +342,13 @@ public class MeetAttendanceMonitor {
                         student.getName(), joinTimeByUserId, joinTimeByDisplayName);
                 if (joinTime == null) {
                     recordStudentAttendance(student, event, AttendanceStatus.ABSENT);
-                    notificationService.notify(NotificationType.ABSENT, event, student);
+                    notificationService.notify(NotificationType.ABSENT, event, new StudentRecipient(student));
                 } else if (joinTime.isAfter(classStart.plusSeconds(lateBufferMinutes * 60L))) {
                     recordStudentAttendance(student, event, AttendanceStatus.LATE);
-                    notificationService.notify(NotificationType.LATE, event, student);
+                    notificationService.notify(NotificationType.LATE, event, new StudentRecipient(student));
                 } else {
                     recordStudentAttendance(student, event, AttendanceStatus.PRESENT);
-                    notificationService.notify(NotificationType.ARRIVAL, event, student);
+                    notificationService.notify(NotificationType.ARRIVAL, event, new StudentRecipient(student));
                 }
             }
         }
@@ -361,16 +360,13 @@ public class MeetAttendanceMonitor {
                         teacher.getName(), joinTimeByUserId, joinTimeByDisplayName);
                 if (joinTime == null) {
                     recordTeacherAttendance(teacher, event, AttendanceStatus.ABSENT);
-                    notificationService.notifyTelegram("TEACHER_ABSENT", event,
-                            teacher.getName() + " was absent from the Meet session for \"" + event.getTitle() + "\".");
+                    notificationService.notify(NotificationType.TEACHER_ABSENT, event, new TeacherRecipient(teacher));
                 } else if (joinTime.isAfter(classStart.plusSeconds(lateBufferMinutes * 60L))) {
                     recordTeacherAttendance(teacher, event, AttendanceStatus.LATE);
-                    notificationService.notifyTelegram("TEACHER_LATE", event,
-                            teacher.getName() + " joined the Meet session late for \"" + event.getTitle() + "\".");
+                    notificationService.notify(NotificationType.TEACHER_LATE, event, new TeacherRecipient(teacher));
                 } else {
                     recordTeacherAttendance(teacher, event, AttendanceStatus.PRESENT);
-                    notificationService.notifyTelegram("TEACHER_ARRIVED", event,
-                            teacher.getName() + " has joined the Meet session for \"" + event.getTitle() + "\".");
+                    notificationService.notify(NotificationType.TEACHER_ARRIVED, event, new TeacherRecipient(teacher));
                 }
             }
         }
