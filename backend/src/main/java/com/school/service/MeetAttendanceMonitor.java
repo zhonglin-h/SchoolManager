@@ -172,7 +172,11 @@ public class MeetAttendanceMonitor {
                     upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("SESSION_START"));
                     startSessionPolling(event);
                 }, start));
+            } else if (end.isAfter(now)) {
+                // Session already started but not yet ended: catch up on any missed polling
+                resumeSessionPolling(event);
             }
+
             if (end.isAfter(now)) {
                 upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "SESSION_FINALIZE", end));
                 futures.add(taskScheduler.schedule(() -> {
@@ -272,6 +276,54 @@ public class MeetAttendanceMonitor {
                 }
             } catch (Exception e) {
                 log.warn("Failed polling for {}: {}", event.getId(), e.getMessage());
+            }
+        }, Duration.ofSeconds(60)));
+
+        pollingFutures.put(event.getId(), futureRef.get());
+    }
+
+    /**
+     * Called on startup when a session is already in progress (start &le; now &lt; end).
+     * Pre-seeds seen-sets from existing DB attendance records so we never double-notify,
+     * then immediately takes a participant snapshot and starts the 60-second polling loop.
+     */
+    public void resumeSessionPolling(CalendarEvent event) {
+        ExpectedParticipants expected = getExpectedParticipants(event);
+        int totalExpected = expected.students().size() + expected.teachers().size();
+        Set<Long> seenStudentIds = new HashSet<>();
+        Set<Long> seenTeacherIds = new HashSet<>();
+
+        // Pre-seed from attendance already recorded before the restart
+        attendanceRepository.findByCalendarEventIdAndDate(event.getId(), LocalDate.now())
+                .forEach(a -> {
+                    if (a.getStudent() != null) seenStudentIds.add(a.getStudent().getId());
+                    if (a.getTeacher() != null) seenTeacherIds.add(a.getTeacher().getId());
+                });
+
+        Instant lateThreshold = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant()
+                .plusSeconds(lateBufferMinutes * 60L);
+        AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
+
+        // Immediate snapshot
+        try {
+            List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
+            processParticipants(event, participants, expected, seenStudentIds, seenTeacherIds, lateThreshold);
+        } catch (Exception e) {
+            log.warn("Failed catch-up snapshot for {}: {}", event.getId(), e.getMessage());
+        }
+
+        futureRef.set(taskScheduler.scheduleAtFixedRate(() -> {
+            try {
+                processParticipants(event, googleMeetClient.getActiveParticipants(event.getSpaceCode()),
+                        expected, seenStudentIds, seenTeacherIds, lateThreshold);
+
+                if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {
+                    notificationService.notify(NotificationType.ALL_PRESENT, event, null);
+                    ScheduledFuture<?> f = futureRef.get();
+                    if (f != null) f.cancel(false);
+                }
+            } catch (Exception e) {
+                log.warn("Failed catch-up polling for {}: {}", event.getId(), e.getMessage());
             }
         }, Duration.ofSeconds(60)));
 
