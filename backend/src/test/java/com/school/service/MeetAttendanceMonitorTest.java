@@ -5,6 +5,7 @@ import com.school.entity.AttendanceStatus;
 import com.school.entity.Student;
 import com.school.integration.MeetClient;
 import com.school.integration.MeetParticipant;
+import com.school.integration.TelegramClient;
 import com.school.model.CalendarEvent;
 import com.school.service.NotificationType;
 import com.school.repository.AttendanceRepository;
@@ -47,6 +48,7 @@ class MeetAttendanceMonitorTest {
     @Mock NotificationService notificationService;
     @Mock MeetClient meetClient;
     @Mock ThreadPoolTaskScheduler taskScheduler;
+    @Mock TelegramClient telegramClient;
 
     @InjectMocks
     MeetAttendanceMonitor monitor;
@@ -178,6 +180,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void startSessionPolling_recordsPresentForStudentsAlreadyInMeeting() throws Exception {
+        when(meetClient.isMeetingActive("abc-def")).thenReturn(true);
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
         when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
@@ -198,6 +201,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void startSessionPolling_doesNotDuplicateAttendanceIfAlreadyRecorded() throws Exception {
+        when(meetClient.isMeetingActive("abc-def")).thenReturn(true);
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT));
         when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
@@ -220,6 +224,7 @@ class MeetAttendanceMonitorTest {
     @SuppressWarnings("unchecked")
     void pollingTick_marksLateAndNotifiesForDelayedJoiner() throws Exception {
         ReflectionTestUtils.setField(monitor, "lateBufferMinutes", 0);
+        when(meetClient.isMeetingActive("abc-def")).thenReturn(true);
         when(meetClient.getActiveParticipants("abc-def"))
                 .thenReturn(List.of())                                   // initial snapshot: empty
                 .thenReturn(List.of(ALICE_PARTICIPANT));                  // first poll: Alice joins
@@ -246,6 +251,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void pollingTick_notifiesAllPresentWhenEveryoneAccountedFor() throws Exception {
+        when(meetClient.isMeetingActive("abc-def")).thenReturn(true);
         when(meetClient.getActiveParticipants("abc-def"))
                 .thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
         when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
@@ -263,6 +269,77 @@ class MeetAttendanceMonitorTest {
         runnableCaptor.getValue().run();
 
         verify(notificationService).notify(NotificationType.ALL_PRESENT, event, null);
+    }
+
+    // --- meeting-not-started Telegram reminders ---
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void startSessionPolling_sendsTelegramReminderWhenMeetingNotActive() throws Exception {
+        when(meetClient.isMeetingActive("abc-def")).thenReturn(false);
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(taskScheduler.scheduleAtFixedRate(any(Runnable.class), any(Duration.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.startSessionPolling(event);
+
+        verify(telegramClient).send(org.mockito.ArgumentMatchers.contains("Math Class"));
+        verify(meetClient, never()).getActiveParticipants(anyString());
+        verify(notificationService, never()).notify(any(), any(), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void pollingTick_sendsTelegramReminderEachTickWhileMeetingInactive() throws Exception {
+        when(meetClient.isMeetingActive("abc-def")).thenReturn(false);
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        when(taskScheduler.scheduleAtFixedRate(runnableCaptor.capture(), any(Duration.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.startSessionPolling(event);
+        // Run two consecutive poll ticks while still inactive
+        runnableCaptor.getValue().run();
+        runnableCaptor.getValue().run();
+
+        // Initial snapshot + 2 ticks = 3 Telegram reminders total
+        verify(telegramClient, org.mockito.Mockito.times(3)).send(anyString());
+        verify(meetClient, never()).getActiveParticipants(anyString());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void pollingTick_proceedsWithAttendanceTrackingOnceMeetingBecomesActive() throws Exception {
+        // Meeting not active at class start, then becomes active on first poll tick
+        when(meetClient.isMeetingActive("abc-def"))
+                .thenReturn(false)    // initial snapshot
+                .thenReturn(true);    // first poll tick
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
+        when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
+                .thenReturn(Optional.empty());
+
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        when(taskScheduler.scheduleAtFixedRate(runnableCaptor.capture(), any(Duration.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.startSessionPolling(event);
+        // Reminder sent for initial inactive state
+        verify(telegramClient).send(anyString());
+
+        // First poll: meeting is now active — Alice is tracked, no more reminder
+        runnableCaptor.getValue().run();
+
+        // No more reminders after meeting started
+        verify(telegramClient, org.mockito.Mockito.times(1)).send(anyString());
+        // Alice recorded (as LATE since lateBufferMinutes=5 and test runs instantly past threshold)
+        verify(notificationService).notify(
+                org.mockito.ArgumentMatchers.any(), eq(event), eq(alice));
     }
 
     // --- finalizeSession ---

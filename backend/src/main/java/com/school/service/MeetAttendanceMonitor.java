@@ -6,6 +6,7 @@ import com.school.entity.Student;
 import com.school.entity.Teacher;
 import com.school.integration.MeetClient;
 import com.school.integration.MeetParticipant;
+import com.school.integration.TelegramClient;
 import com.school.model.CalendarEvent;
 import com.school.repository.AttendanceRepository;
 import com.school.repository.StudentRepository;
@@ -42,6 +43,7 @@ public class MeetAttendanceMonitor {
     private final NotificationService notificationService;
     private final MeetClient googleMeetClient;
     private final ThreadPoolTaskScheduler taskScheduler;
+    private final TelegramClient telegramClient;
 
     @Value("${app.attendance.late-buffer-minutes}")
     private int lateBufferMinutes;
@@ -60,7 +62,8 @@ public class MeetAttendanceMonitor {
                                   AttendanceRepository attendanceRepository,
                                   NotificationService notificationService,
                                   MeetClient googleMeetClient,
-                                  ThreadPoolTaskScheduler taskScheduler) {
+                                  ThreadPoolTaskScheduler taskScheduler,
+                                  TelegramClient telegramClient) {
         this.calendarSyncService = calendarSyncService;
         this.studentRepository = studentRepository;
         this.teacherRepository = teacherRepository;
@@ -68,6 +71,7 @@ public class MeetAttendanceMonitor {
         this.notificationService = notificationService;
         this.googleMeetClient = googleMeetClient;
         this.taskScheduler = taskScheduler;
+        this.telegramClient = telegramClient;
     }
 
     public List<ScheduledCheck> getUpcomingChecks() {
@@ -174,25 +178,32 @@ public class MeetAttendanceMonitor {
         Set<Long> seenTeacherIds = new HashSet<>();
         Instant classStart = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant();
         Instant lateThreshold = classStart.plusSeconds(lateBufferMinutes * 60L);
+        boolean[] meetingActive = {false};
 
+        // Initial snapshot at class start time
         try {
-            List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-            Set<PersonRef> presentRefs = resolveAndAutoLearn(participants);
-            Set<Long> presentStudentIds = resolveStudentIds(presentRefs);
-            Set<Long> presentTeacherIds = resolveTeacherIds(presentRefs);
+            if (googleMeetClient.isMeetingActive(event.getSpaceCode())) {
+                meetingActive[0] = true;
+                List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
+                Set<PersonRef> presentRefs = resolveAndAutoLearn(participants);
+                Set<Long> presentStudentIds = resolveStudentIds(presentRefs);
+                Set<Long> presentTeacherIds = resolveTeacherIds(presentRefs);
 
-            for (Student student : expectedStudents) {
-                if (presentStudentIds.contains(student.getId())) {
-                    seenStudentIds.add(student.getId());
-                    recordStudentAttendance(student, event, AttendanceStatus.PRESENT);
-                    notificationService.notify(NotificationType.ARRIVAL, event, student);
+                for (Student student : expectedStudents) {
+                    if (presentStudentIds.contains(student.getId())) {
+                        seenStudentIds.add(student.getId());
+                        recordStudentAttendance(student, event, AttendanceStatus.PRESENT);
+                        notificationService.notify(NotificationType.ARRIVAL, event, student);
+                    }
                 }
-            }
-            for (Teacher teacher : expectedTeachers) {
-                if (presentTeacherIds.contains(teacher.getId())) {
-                    seenTeacherIds.add(teacher.getId());
-                    recordTeacherAttendance(teacher, event, AttendanceStatus.PRESENT);
+                for (Teacher teacher : expectedTeachers) {
+                    if (presentTeacherIds.contains(teacher.getId())) {
+                        seenTeacherIds.add(teacher.getId());
+                        recordTeacherAttendance(teacher, event, AttendanceStatus.PRESENT);
+                    }
                 }
+            } else {
+                sendMeetingStartReminder(event);
             }
         } catch (Exception e) {
             log.warn("Failed session start poll for {}: {}", event.getId(), e.getMessage());
@@ -201,6 +212,20 @@ public class MeetAttendanceMonitor {
         ScheduledFuture<?>[] futureHolder = new ScheduledFuture<?>[1];
         futureHolder[0] = taskScheduler.scheduleAtFixedRate(() -> {
             try {
+                // While meeting not yet started, check every tick and remind via Telegram
+                if (!meetingActive[0]) {
+                    try {
+                        if (!googleMeetClient.isMeetingActive(event.getSpaceCode())) {
+                            sendMeetingStartReminder(event);
+                            return;
+                        }
+                        meetingActive[0] = true;
+                    } catch (Exception e) {
+                        log.warn("Failed to check meeting active for {}: {}", event.getId(), e.getMessage());
+                        return;
+                    }
+                }
+
                 List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
                 Set<PersonRef> presentRefs = resolveAndAutoLearn(participants);
                 Set<Long> presentStudentIds = resolveStudentIds(presentRefs);
@@ -239,6 +264,18 @@ public class MeetAttendanceMonitor {
         }, java.time.Duration.ofSeconds(60));
 
         pollingFutures.put(event.getId(), futureHolder[0]);
+    }
+
+    private void sendMeetingStartReminder(CalendarEvent event) {
+        String message = "⚠️ Reminder: The Google Meet session for \"" + event.getTitle()
+                + "\" has not been started yet. Please start the meeting.";
+        try {
+            telegramClient.send(message);
+            log.info("Sent meeting-not-started Telegram reminder for event '{}'", event.getTitle());
+        } catch (Exception e) {
+            log.warn("Failed to send meeting-not-started Telegram reminder for {}: {}",
+                    event.getId(), e.getMessage());
+        }
     }
 
     public void finalizeSession(CalendarEvent event) {
