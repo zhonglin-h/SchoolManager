@@ -1,0 +1,1 @@
+- [ ] Replace ad-hoc `personType` strings with a `PersonType` enum (STUDENT, TEACHER).
