@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -24,17 +26,20 @@ public class NotificationService {
 
     private final String principalEmail;
     private final boolean notificationsEnabled;
+    private final String telegramChatId;
 
     public NotificationService(NotificationLogRepository notificationLogRepository,
                                EmailClient emailClient,
                                TelegramClient telegramClient,
                                @Value("${app.principal.email}") String principalEmail,
-                               @Value("${app.notifications.enabled:true}") boolean notificationsEnabled) {
+                               @Value("${app.notifications.enabled:true}") boolean notificationsEnabled,
+                               @Value("${telegram.chat-id}") String telegramChatId) {
         this.notificationLogRepository = notificationLogRepository;
         this.emailClient = emailClient;
         this.telegramClient = telegramClient;
         this.principalEmail = principalEmail;
         this.notificationsEnabled = notificationsEnabled;
+        this.telegramChatId = telegramChatId;
     }
 
     public boolean isNotificationsEnabled() {
@@ -56,8 +61,10 @@ public class NotificationService {
                 String subject = type.subject(event, student);
                 String body = type.body(event, student);
                 String failureReason = null;
+                List<String> recipients = new ArrayList<>();
 
                 if (type.toPrincipalViaEmail) {
+                    recipients.add(principalEmail);
                     try {
                         emailClient.send(principalEmail, subject, body);
                     } catch (Exception e) {
@@ -67,6 +74,7 @@ public class NotificationService {
                 }
                 if (type.toParentViaEmail && student != null
                         && student.getParentEmail() != null && !student.getParentEmail().isBlank()) {
+                    recipients.add(student.getParentEmail());
                     try {
                         emailClient.send(student.getParentEmail(), subject, body);
                     } catch (Exception e) {
@@ -84,6 +92,7 @@ public class NotificationService {
                         .message(body)
                         .sentAt(LocalDateTime.now())
                         .channel(NotificationChannel.EMAIL)
+                        .recipient(String.join(", ", recipients))
                         .success(failureReason == null)
                         .failureReason(failureReason)
                         .build();
@@ -118,6 +127,7 @@ public class NotificationService {
                         .message(body)
                         .sentAt(LocalDateTime.now())
                         .channel(NotificationChannel.TELEGRAM)
+                        .recipient(telegramChatId)
                         .success(failureReason == null)
                         .failureReason(failureReason)
                         .build();

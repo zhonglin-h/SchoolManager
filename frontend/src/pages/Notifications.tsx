@@ -53,7 +53,7 @@ export default function Notifications() {
                     <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{n.sentAt}</td>
                     <td className="px-4 py-2 text-gray-800 font-medium">{n.type}</td>
                     <td className="px-4 py-2 text-gray-800">
-                      {n.studentId !== null ? `Student #${n.studentId}` : 'Principal'}
+                      {n.recipient || '—'}
                     </td>
                     <td className="px-4 py-2 text-gray-700 max-w-xs">
                       <p className="truncate" title={n.message}>{n.message}</p>

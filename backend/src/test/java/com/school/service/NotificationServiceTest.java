@@ -40,6 +40,7 @@ class NotificationServiceTest {
     TelegramClient telegramClient;
 
     private static final String PRINCIPAL = "principal@test.com";
+    private static final String TELEGRAM_CHAT_ID = "test-chat-id";
 
     NotificationService notificationService;
 
@@ -48,7 +49,7 @@ class NotificationServiceTest {
 
     @BeforeEach
     void setUp() {
-        notificationService = new NotificationService(notificationLogRepository, emailClient, telegramClient, PRINCIPAL, true);
+        notificationService = new NotificationService(notificationLogRepository, emailClient, telegramClient, PRINCIPAL, true, TELEGRAM_CHAT_ID);
 
         event = new CalendarEvent("evt-1", "Math Class", "https://meet.google.com/abc",
                 "abc", LocalDateTime.now(), LocalDateTime.now().plusHours(1), List.of());
@@ -302,6 +303,32 @@ class NotificationServiceTest {
         assertThat(log.getDate()).isEqualTo(LocalDate.now());
         assertThat(log.getChannel()).isEqualTo(NotificationChannel.TELEGRAM);
         assertThat(log.isSuccess()).isTrue();
+        assertThat(log.getRecipient()).isEqualTo(TELEGRAM_CHAT_ID);
+    }
+
+    @Test
+    void savedEmailLog_recipientContainsPrincipalAndParent() {
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
+                anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.EMAIL))).thenReturn(false);
+
+        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, student);
+
+        ArgumentCaptor<NotificationLog> logCaptor = ArgumentCaptor.forClass(NotificationLog.class);
+        verify(notificationLogRepository).save(logCaptor.capture());
+        assertThat(logCaptor.getValue().getRecipient())
+                .isEqualTo(PRINCIPAL + ", " + "alice-parent@test.com");
+    }
+
+    @Test
+    void savedTelegramLog_recipientIsTheChatId() {
+        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
+                anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(false);
+
+        notificationService.notify(NotificationType.ALL_PRESENT, event, null);
+
+        ArgumentCaptor<NotificationLog> logCaptor = ArgumentCaptor.forClass(NotificationLog.class);
+        verify(notificationLogRepository).save(logCaptor.capture());
+        assertThat(logCaptor.getValue().getRecipient()).isEqualTo(TELEGRAM_CHAT_ID);
     }
 
     @Test
