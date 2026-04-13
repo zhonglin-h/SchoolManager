@@ -67,24 +67,28 @@ class NotificationServiceTest {
         verify(notificationLogRepository).deleteByCalendarEventIdAndDate("evt-1", LocalDate.now());
     }
 
-    // --- MEETING_NOT_STARTED_15 (email to principal, no Telegram) ---
+    // --- MEETING_NOT_STARTED_15 (email to principal + Telegram) ---
 
     @Test
-    void notifyMeetingNotStarted_sendsEmailAndSavesLog() {
+    void notifyMeetingNotStarted_sendsEmailAndTelegramAndSavesLogs() {
         when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
                 anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.EMAIL))).thenReturn(false);
+        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
+                anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(false);
 
         notificationService.notify(NotificationType.MEETING_NOT_STARTED_15, event, null);
 
         verify(emailClient).send(eq(PRINCIPAL), anyString(), anyString());
-        verify(telegramClient, never()).send(anyString());
-        verify(notificationLogRepository).save(any(NotificationLog.class));
+        verify(telegramClient).send(anyString());
+        verify(notificationLogRepository, times(2)).save(any(NotificationLog.class));
     }
 
     @Test
     void notifyMeetingNotStarted_skipsDuplicate() {
         when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
                 anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.EMAIL))).thenReturn(true);
+        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
+                anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(true);
 
         notificationService.notify(NotificationType.MEETING_NOT_STARTED_15, event, null);
 
@@ -93,26 +97,30 @@ class NotificationServiceTest {
         verify(notificationLogRepository, never()).save(any());
     }
 
-    // --- NOT_YET_JOINED_3 (email to principal + parent, no Telegram) ---
+    // --- NOT_YET_JOINED_3 (email to principal + parent, Telegram) ---
 
     @Test
-    void notifyNotYetJoined_sendsToPrincipalAndParentViaEmail() {
+    void notifyNotYetJoined_sendsToPrincipalAndParentViaEmailAndTelegram() {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.EMAIL))).thenReturn(false);
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
+                anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(false);
 
         notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
 
         ArgumentCaptor<String> toCaptor = ArgumentCaptor.forClass(String.class);
         verify(emailClient, times(2)).send(toCaptor.capture(), anyString(), anyString());
         assertThat(toCaptor.getAllValues()).containsExactlyInAnyOrder(PRINCIPAL, "alice-parent@test.com");
-        verify(telegramClient, never()).send(anyString());
-        verify(notificationLogRepository).save(any(NotificationLog.class));
+        verify(telegramClient).send(anyString());
+        verify(notificationLogRepository, times(2)).save(any(NotificationLog.class));
     }
 
     @Test
     void notifyNotYetJoined_skipsDuplicate() {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.EMAIL))).thenReturn(true);
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
+                anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(true);
 
         notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
 
@@ -316,12 +324,17 @@ class NotificationServiceTest {
     void savedEmailLog_recipientContainsPrincipalAndParent() {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.EMAIL))).thenReturn(false);
+        when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
+                anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(false);
 
         notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
 
         ArgumentCaptor<NotificationLog> logCaptor = ArgumentCaptor.forClass(NotificationLog.class);
-        verify(notificationLogRepository).save(logCaptor.capture());
-        assertThat(logCaptor.getValue().getRecipient())
+        verify(notificationLogRepository, times(2)).save(logCaptor.capture());
+        NotificationLog emailLog = logCaptor.getAllValues().stream()
+                .filter(l -> l.getChannel() == NotificationChannel.EMAIL)
+                .findFirst().orElseThrow();
+        assertThat(emailLog.getRecipient())
                 .isEqualTo(PRINCIPAL + ", " + "alice-parent@test.com");
     }
 
