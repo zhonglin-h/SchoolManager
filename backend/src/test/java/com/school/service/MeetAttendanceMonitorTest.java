@@ -714,7 +714,7 @@ class MeetAttendanceMonitorTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void scheduleEventsForToday_callsResumeSessionPollingForInProgressEvent() throws Exception {
+    void onStartup_callsResumeSessionPollingForInProgressEvent() throws Exception {
         // Event started 10 minutes ago, ends in 50 minutes → in progress
         CalendarEvent inProgress = new CalendarEvent("evt-inprogress", "In-Progress Class",
                 "https://meet.google.com/abc-def", "abc-def",
@@ -733,7 +733,7 @@ class MeetAttendanceMonitorTest {
                 .thenReturn(List.of());
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of());
 
-        monitor.scheduleEventsForToday();
+        monitor.onStartup();
 
         // Polling future must be registered (resumeSessionPolling was called)
         verify(taskScheduler).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
@@ -742,6 +742,28 @@ class MeetAttendanceMonitorTest {
         assertThat(checks).anyMatch(c -> c.eventId().equals("evt-inprogress") && c.checkType().equals("SESSION_FINALIZE"));
         // SESSION_START must NOT be scheduled (start is in the past)
         assertThat(checks).noneMatch(c -> c.eventId().equals("evt-inprogress") && c.checkType().equals("SESSION_START"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_doesNotCallResumeSessionPollingForInProgressEventOnResync() throws Exception {
+        // Event started 10 minutes ago, ends in 50 minutes → in progress
+        CalendarEvent inProgress = new CalendarEvent("evt-inprogress", "In-Progress Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now().minusMinutes(10), LocalDateTime.now().plusMinutes(50),
+                List.of("alice@meet.com", "bob@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(inProgress));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        // Call scheduleEventsForToday() directly (simulates a manual sync, not startup)
+        monitor.scheduleEventsForToday();
+
+        // resumeSessionPolling must NOT be called on a manual re-sync
+        verify(taskScheduler, never()).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
+        // SESSION_FINALIZE must still be scheduled
+        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
+        assertThat(checks).anyMatch(c -> c.eventId().equals("evt-inprogress") && c.checkType().equals("SESSION_FINALIZE"));
     }
 
     @Test
@@ -779,8 +801,9 @@ class MeetAttendanceMonitorTest {
         when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-bob")).thenReturn(Optional.of(bob));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
-        when(taskScheduler.scheduleAtFixedRate(any(Runnable.class), any(Duration.class)))
-                .thenReturn(mock(ScheduledFuture.class));
+        // Note: both students are accounted for after the snapshot (alice pre-seeded, bob
+        // in snapshot = totalExpected), so the early-exit path is taken and scheduleAtFixedRate
+        // is not called.
 
         monitor.resumeSessionPolling(event);
 
@@ -788,5 +811,7 @@ class MeetAttendanceMonitorTest {
         verify(attendanceRepository, never()).save(argThat(a -> a.getStudent() != null && a.getStudent().equals(alice)));
         // Bob was NOT pre-seeded → attendance recorded
         verify(attendanceRepository).save(argThat(a -> a.getStudent() != null && a.getStudent().equals(bob)));
+        // All present after snapshot → no periodic polling scheduled
+        verify(taskScheduler, never()).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
     }
 }

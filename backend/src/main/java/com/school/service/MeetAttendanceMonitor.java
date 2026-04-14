@@ -58,6 +58,10 @@ public class MeetAttendanceMonitor {
     private final Map<String, Instant> lastScheduledStartTime = new ConcurrentHashMap<>();
     private final List<ScheduledCheck> upcomingChecks = new CopyOnWriteArrayList<>();
 
+    // True only while onStartup() is executing scheduleEventsForToday().
+    // Used to gate resumeSessionPolling so it fires exactly once, at boot.
+    private volatile boolean isStartupSync = false;
+
     public record ScheduledCheck(String eventId, String eventTitle, String checkType, Instant scheduledAt) {}
 
     private record ResolvedParticipants(Set<Long> studentIds, Set<Long> teacherIds) {}
@@ -94,7 +98,12 @@ public class MeetAttendanceMonitor {
 
     @EventListener(ApplicationReadyEvent.class)
     public void onStartup() {
-        scheduleEventsForToday();
+        isStartupSync = true;
+        try {
+            scheduleEventsForToday();
+        } finally {
+            isStartupSync = false;
+        }
     }
 
     public void scheduleEventsForToday() {
@@ -129,29 +138,32 @@ public class MeetAttendanceMonitor {
             // Cancel any existing one-shot futures for this event (prevents duplicates on re-sync)
             cancelOneTimeFutures(event.getId());
 
-            // Cancel active polling future — will be restarted by the new SESSION_START task
-            ScheduledFuture<?> existingPolling = pollingFutures.remove(event.getId());
-            if (existingPolling != null) existingPolling.cancel(false);
+            Instant start = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant();
+            Instant end = event.getEndTime().atZone(ZoneId.systemDefault()).toInstant();
+            boolean sessionInProgress = !start.isAfter(now) && end.isAfter(now);
+
+            // Cancel active polling future only when the session has not yet started, or this is
+            // the startup sync (pollingFutures is empty at boot anyway). For in-progress sessions
+            // on a re-sync, leave the existing polling running to avoid interrupting it.
+            if (!sessionInProgress || isStartupSync) {
+                ScheduledFuture<?> existingPolling = pollingFutures.remove(event.getId());
+                if (existingPolling != null) existingPolling.cancel(false);
+            }
 
             // Detect reschedule: if the start time changed, clear today's notification logs
             // so notifications can re-fire at the correct new time
-            Instant newStart = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant();
             Instant previousStart = lastScheduledStartTime.get(event.getId());
-            if (previousStart != null && !previousStart.equals(newStart)) {
+            if (previousStart != null && !previousStart.equals(start)) {
                 notificationService.clearTodayLogsForEvent(event.getId());
                 log.info("Event '{}' rescheduled; cleared today's notification logs", event.getTitle());
             }
-            lastScheduledStartTime.put(event.getId(), newStart);
+            lastScheduledStartTime.put(event.getId(), start);
 
             List<ScheduledFuture<?>> futures = new ArrayList<>();
 
             Instant minus15 = event.getStartTime().minusMinutes(15)
                     .atZone(ZoneId.systemDefault()).toInstant();
             Instant minus3 = event.getStartTime().minusMinutes(3)
-                    .atZone(ZoneId.systemDefault()).toInstant();
-            Instant start = event.getStartTime()
-                    .atZone(ZoneId.systemDefault()).toInstant();
-            Instant end = event.getEndTime()
                     .atZone(ZoneId.systemDefault()).toInstant();
 
             if (minus15.isAfter(now)) {
@@ -174,9 +186,12 @@ public class MeetAttendanceMonitor {
                     upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("SESSION_START"));
                     startSessionPolling(event);
                 }, start));
-            } else if (end.isAfter(now)) {
-                // Session already started but not yet ended: catch up on any missed polling
-                resumeSessionPolling(event);
+            } else if (sessionInProgress) {
+                // Session already started but not yet ended: resume polling only on startup to
+                // avoid reactivating polling that was intentionally stopped by a later re-sync.
+                if (isStartupSync) {
+                    resumeSessionPolling(event);
+                }
             }
 
             if (end.isAfter(now)) {
