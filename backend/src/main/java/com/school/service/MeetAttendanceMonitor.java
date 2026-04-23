@@ -38,6 +38,20 @@ import com.school.repository.TeacherRepository;
 
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Monitors Google Meet attendance for scheduled classes.
+ *
+ * <p>On startup and at midnight each day, schedules four one-shot tasks per calendar event:
+ * <ol>
+ *   <li>T−15 min — check that the meeting room has been opened by the teacher</li>
+ *   <li>T−3 min — check which expected participants have already joined</li>
+ *   <li>T+0 (class start) — begin 60-second polling to record arrivals in real time</li>
+ *   <li>T+duration (class end) — finalize attendance for anyone not caught by live polling</li>
+ * </ol>
+ *
+ * <p>All attendance records and notifications are deduplicated via {@link NotificationService}
+ * and {@link com.school.repository.AttendanceRepository}.
+ */
 @Slf4j
 @Service
 public class MeetAttendanceMonitor {
@@ -79,6 +93,7 @@ public class MeetAttendanceMonitor {
         this.taskScheduler = taskScheduler;
     }
 
+    /** Returns all checks whose scheduled time is still in the future, sorted ascending. */
     public List<ScheduledCheck> getUpcomingChecks() {
         Instant now = Instant.now();
         return upcomingChecks.stream()
@@ -87,16 +102,22 @@ public class MeetAttendanceMonitor {
                 .toList();
     }
 
+    /** Triggers a full reschedule at midnight so the new day's events are picked up. */
     @Scheduled(cron = "0 0 0 * * *")
     public void scheduleDailyRefresh() {
         scheduleEventsForToday();
     }
 
+    /** Schedules today's events immediately after the application context is fully initialized. */
     @EventListener(ApplicationReadyEvent.class)
     public void onStartup() {
         scheduleEventsForToday();
     }
 
+    /**
+     * Fetches today's calendar events and schedules (or reschedules) all monitoring tasks.
+     * Safe to call repeatedly — stale futures are cancelled before new ones are registered.
+     */
     public void scheduleEventsForToday() {
         List<CalendarEvent> events;
         try {
@@ -203,6 +224,10 @@ public class MeetAttendanceMonitor {
         }
     }
 
+    /**
+     * Checks whether the Meet room is open; sends a {@code type} notification if it is not.
+     * Used for both the T−15 and any repeat reminders while the meeting hasn't started.
+     */
     public void checkMeetingStarted(CalendarEvent event, NotificationType type) {
         try {
             boolean active = googleMeetClient.isMeetingActive(event.getSpaceCode());
@@ -214,6 +239,10 @@ public class MeetAttendanceMonitor {
         }
     }
 
+    /**
+     * At T−3 min, notifies every expected participant (student or teacher) who has not yet joined.
+     * Uses the live participant list, so anyone already in the room is silently skipped.
+     */
     public void checkPreClassJoins(CalendarEvent event) {
         try {
             List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
@@ -234,6 +263,12 @@ public class MeetAttendanceMonitor {
         }
     }
 
+    /**
+     * Begins the 60-second attendance polling loop at class start time.
+     * Takes an immediate snapshot, then polls every minute until all expected participants
+     * have been seen or {@link #finalizeSession} cancels the future.
+     * If the meeting room isn't open yet, keeps sending reminders on each tick until it is.
+     */
     public void startSessionPolling(CalendarEvent event) {
         ExpectedParticipants expected = getExpectedParticipants(event);
         int totalExpected = expected.students().size() + expected.teachers().size();
@@ -375,10 +410,16 @@ public class MeetAttendanceMonitor {
         }
     }
 
+    /** Fires a MEETING_NOT_STARTED_15 notification without a specific recipient (broadcast). */
     private void sendMeetingStartReminder(CalendarEvent event) {
         notificationService.notify(NotificationType.MEETING_NOT_STARTED_15, event, null);
     }
 
+    /**
+     * Stops live polling and reconciles attendance for everyone not already recorded.
+     * Fetches the full participant history (including people who left mid-session) and
+     * uses join times to determine PRESENT / LATE / ABSENT for any remaining gaps.
+     */
     public void finalizeSession(CalendarEvent event) {
         ScheduledFuture<?> future = pollingFutures.remove(event.getId());
         if (future != null) future.cancel(false);
@@ -440,6 +481,7 @@ public class MeetAttendanceMonitor {
         }
     }
 
+    /** Returns the earliest join time for a person, trying googleUserId → displayName → name. */
     private Instant resolveJoinTime(String googleUserId, String meetDisplayName, String name,
                                     Map<String, Instant> byUserId, Map<String, Instant> byDisplayName) {
         if (googleUserId != null && byUserId.containsKey(googleUserId)) return byUserId.get(googleUserId);
@@ -522,6 +564,7 @@ public class MeetAttendanceMonitor {
         return changed;
     }
 
+    /** Looks up the enrolled students and assigned teacher for an event via their Meet email addresses. */
     private ExpectedParticipants getExpectedParticipants(CalendarEvent event) {
         List<Student> students = new ArrayList<>();
         List<Teacher> teachers = new ArrayList<>();
@@ -533,6 +576,7 @@ public class MeetAttendanceMonitor {
         return new ExpectedParticipants(students, teachers);
     }
 
+    /** Persists a student attendance record only if one does not already exist for today's session. */
     private void recordStudentAttendance(Student student, CalendarEvent event, AttendanceStatus status) {
         LocalDate today = LocalDate.now();
         Optional<Attendance> existing = attendanceRepository
@@ -548,6 +592,7 @@ public class MeetAttendanceMonitor {
         }
     }
 
+    /** Persists a teacher attendance record only if one does not already exist for today's session. */
     private void recordTeacherAttendance(Teacher teacher, CalendarEvent event, AttendanceStatus status) {
         LocalDate today = LocalDate.now();
         Optional<Attendance> existing = attendanceRepository
