@@ -180,6 +180,7 @@ public class MeetSessionHandler {
         }
 
         notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
+        
         schedulePollingLoop(event, expected, seenStudentIds, seenTeacherIds, lateThreshold, meetingActive);
     }
 
