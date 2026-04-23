@@ -1,5 +1,5 @@
 package com.school.entity;
 
 public enum NotificationChannel {
-    EMAIL, SMS
+    EMAIL, SMS, TELEGRAM
 }

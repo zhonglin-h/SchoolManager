@@ -2,6 +2,37 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Backend: Debug bootRun",
+      "type": "shell",
+      "command": "gradlew",
+      "args": ["bootRun"],
+      "options": {
+        "cwd": "${workspaceFolder}/backend",
+        "shell": {
+          "executable": "cmd.exe",
+          "args": ["/d", "/c"]
+        },
+        "env": {
+          "JAVA_TOOL_OPTIONS": "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005"
+        }
+      },
+      "isBackground": true,
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      },
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Listening for transport dt_socket",
+          "endsPattern": "Listening for transport dt_socket"
+        }
+      }
+    },
+    {
       "label": "Backend: Gradle Build",
       "type": "shell",
       "command": "${workspaceFolder:SchoolManager}/backend/gradlew",

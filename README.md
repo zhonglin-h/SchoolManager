@@ -74,3 +74,19 @@ cd frontend && pnpm dev
 ```
 
 Visit http://localhost:3000
+
+---
+
+Note on tests
+-
+By default `./gradlew test` skips long-running or integration-style tests that are tagged with `@Tag("manual")`.
+To run those explicitly (for example the Telegram config integration test), run:
+
+```bash
+cd backend
+./gradlew manualTest
+```
+
+This keeps the regular test suite fast while still allowing manual/integration tests to be executed when needed.
+
+

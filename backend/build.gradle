@@ -39,7 +39,21 @@ dependencies {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        // Exclude tests annotated with @Tag("manual") from the default test task
+        excludeTags 'manual'
+    }
+}
+
+// Run manual/integration-style tests explicitly with `./gradlew manualTest`
+tasks.register('manualTest', Test) {
+    group = 'verification'
+    description = 'Run tests tagged with @Tag("manual")'
+    useJUnitPlatform {
+        includeTags 'manual'
+    }
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
 }
 
 bootRun {

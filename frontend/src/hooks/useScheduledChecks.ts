@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { getScheduledChecks } from '../services/api'
+import { getScheduledChecks, type ScheduledChecksResponse } from '../services/api'
 
 export function useScheduledChecks() {
-  return useQuery({
+  return useQuery<ScheduledChecksResponse>({
     queryKey: ['scheduledChecks'],
     queryFn: getScheduledChecks,
     refetchInterval: 30_000,

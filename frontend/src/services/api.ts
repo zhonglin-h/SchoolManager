@@ -132,6 +132,12 @@ export interface ScheduledCheck {
   scheduledAt: string
 }
 
+export interface ScheduledChecksResponse {
+  checks: ScheduledCheck[]
+  total: number
+  limit: number
+}
+
 // ── Students ───────────────────────────────────────────────────────────────
 
 export async function getStudents(): Promise<StudentResponse[]> {
@@ -243,7 +249,7 @@ export async function syncCalendar(): Promise<void> {
   await api.post('/calendar/sync')
 }
 
-export async function getScheduledChecks(): Promise<ScheduledCheck[]> {
-  const { data } = await api.get<ScheduledCheck[]>('/calendar/scheduled-checks')
+export async function getScheduledChecks(): Promise<ScheduledChecksResponse> {
+  const { data } = await api.get<ScheduledChecksResponse>('/calendar/scheduled-checks')
   return data
 }
