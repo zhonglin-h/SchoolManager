@@ -113,8 +113,8 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(event);
 
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(event), eq(new StudentRecipient(alice)));
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(bob));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(event), eq(new StudentRecipient(alice)));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(bob));
     }
 
     @Test
@@ -127,8 +127,8 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(event);
 
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(event), eq(new StudentRecipient(alice)));
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(bob));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(event), eq(new StudentRecipient(alice)));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(bob));
     }
 
     @Test
@@ -157,7 +157,7 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(event);
 
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), any(), any());
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), any(), any());
     }
 
     @Test
@@ -168,8 +168,8 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(event);
 
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(bob));
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(event), eq(new StudentRecipient(alice)));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(bob));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(event), eq(new StudentRecipient(alice)));
     }
 
     @Test
@@ -186,7 +186,7 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(teacherEvent);
 
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, teacherEvent, new TeacherRecipient(carol));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, teacherEvent, new TeacherRecipient(carol));
     }
 
     @Test
@@ -204,7 +204,7 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(teacherEvent);
 
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(teacherEvent), eq(new TeacherRecipient(carol)));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(teacherEvent), eq(new TeacherRecipient(carol)));
     }
 
     @Test
@@ -226,9 +226,9 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(teacherEvent);
 
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED_3, teacherEvent, new StudentRecipient(bob));
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(teacherEvent), eq(new StudentRecipient(alice)));
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED_3), eq(teacherEvent), eq(new TeacherRecipient(carol)));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, teacherEvent, new StudentRecipient(bob));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(teacherEvent), eq(new StudentRecipient(alice)));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(teacherEvent), eq(new TeacherRecipient(carol)));
     }
 
     // --- startSessionPolling (initial snapshot) ---

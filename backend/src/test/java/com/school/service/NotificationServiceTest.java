@@ -106,7 +106,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(false);
 
-        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
+        notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(student));
 
         ArgumentCaptor<String> toCaptor = ArgumentCaptor.forClass(String.class);
         verify(emailClient, times(2)).send(toCaptor.capture(), anyString(), anyString());
@@ -122,7 +122,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(true);
 
-        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
+        notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(student));
 
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
         verify(telegramClient, never()).send(anyString());
@@ -327,7 +327,7 @@ class NotificationServiceTest {
         when(notificationLogRepository.existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                 anyLong(), anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM))).thenReturn(false);
 
-        notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
+        notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(student));
 
         ArgumentCaptor<NotificationLog> logCaptor = ArgumentCaptor.forClass(NotificationLog.class);
         verify(notificationLogRepository, times(2)).save(logCaptor.capture());

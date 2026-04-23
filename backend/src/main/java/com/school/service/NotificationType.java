@@ -12,8 +12,8 @@ public enum NotificationType {
             (e, r) -> "The Google Meet session for \"" + e.getTitle() + "\" has not been started yet.",
             true, true, false
     ),
-    NOT_YET_JOINED_3(
-            (e, r) -> "Student Not Yet Joined: " + r.getName(),
+    NOT_YET_JOINED(
+            (e, r) -> "Person Not Yet Joined: " + r.getName(),
             (e, r) -> r.getName() + " has not yet joined the Meet session for \"" + e.getTitle() + "\".",
             true, true, true
     ),

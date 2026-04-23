@@ -93,12 +93,12 @@ public class MeetSessionHandler {
             ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
             for (Student student : expected.students()) {
                 if (!resolved.studentIds().contains(student.getId())) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new StudentRecipient(student));
+                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(student));
                 }
             }
             for (Teacher teacher : expected.teachers()) {
                 if (!resolved.teacherIds().contains(teacher.getId())) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED_3, event, new TeacherRecipient(teacher));
+                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, new TeacherRecipient(teacher));
                 }
             }
         } catch (Exception e) {
@@ -153,6 +153,7 @@ public class MeetSessionHandler {
 
                 attendanceHelper.processParticipants(event, googleMeetClient.getActiveParticipants(event.getSpaceCode()),
                         expected, seenStudentIds, seenTeacherIds, lateThreshold);
+                notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
 
                 if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {
                     notificationService.notify(NotificationType.ALL_PRESENT, event, null);
@@ -222,6 +223,20 @@ public class MeetSessionHandler {
         }, Duration.ofSeconds(60)));
 
         pollingFutures.put(event.getId(), futureRef.get());
+    }
+
+    private void notifyMissing(CalendarEvent event, ExpectedParticipants expected,
+                               Set<Long> seenStudentIds, Set<Long> seenTeacherIds) {
+        for (Student student : expected.students()) {
+            if (!seenStudentIds.contains(student.getId())) {
+                notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(student));
+            }
+        }
+        for (Teacher teacher : expected.teachers()) {
+            if (!seenTeacherIds.contains(teacher.getId())) {
+                notificationService.notify(NotificationType.NOT_YET_JOINED, event, new TeacherRecipient(teacher));
+            }
+        }
     }
 
     /** Fires a MEETING_NOT_STARTED_15 notification without a specific recipient (broadcast). */
