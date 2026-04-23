@@ -520,6 +520,7 @@ class MeetSessionHandlerTest {
                 .thenReturn(List.of(aliceAttendance));
         when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(meetClient.isMeetingActive("abc-def")).thenReturn(true);
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
         when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
         when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-bob")).thenReturn(Optional.of(bob));
@@ -530,6 +531,45 @@ class MeetSessionHandlerTest {
 
         verify(attendanceRepository, never()).save(argThat(a -> a.getStudent() != null && a.getStudent().equals(alice)));
         verify(attendanceRepository).save(argThat(a -> a.getStudent() != null && a.getStudent().equals(bob)));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void resumeSessionPolling_sendsReminderWhenMeetingNotActiveAtStartup() throws Exception {
+        when(attendanceRepository.findByCalendarEventIdAndDate(eq("evt-1"), any(LocalDate.class)))
+                .thenReturn(List.of());
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(meetClient.isMeetingActive("abc-def")).thenReturn(false);
+        when(taskScheduler.scheduleAtFixedRate(any(Runnable.class), any(Duration.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        sessionHandler.resumeSessionPolling(event);
+
+        verify(notificationService).notify(eq(NotificationType.MEETING_NOT_STARTED_15), eq(event), isNull());
+        verify(meetClient, never()).getActiveParticipants(anyString());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void resumeSessionPolling_pollingTickSendsReminderEachTickWhileMeetingInactive() throws Exception {
+        when(attendanceRepository.findByCalendarEventIdAndDate(eq("evt-1"), any(LocalDate.class)))
+                .thenReturn(List.of());
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(meetClient.isMeetingActive("abc-def")).thenReturn(false);
+
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        when(taskScheduler.scheduleAtFixedRate(runnableCaptor.capture(), any(Duration.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        sessionHandler.resumeSessionPolling(event);
+        runnableCaptor.getValue().run();
+        runnableCaptor.getValue().run();
+
+        // initial snapshot + 2 ticks = 3 reminders
+        verify(notificationService, times(3)).notify(eq(NotificationType.MEETING_NOT_STARTED_15), eq(event), isNull());
+        verify(meetClient, never()).getActiveParticipants(anyString());
     }
 
     // --- helper ---
