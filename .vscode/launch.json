@@ -6,16 +6,34 @@
       "name": "Backend: Spring Boot",
       "request": "launch",
       "mainClass": "com.school.SchoolManagerApp",
-      "cwd": "${workspaceFolder:SchoolManager}/backend",
+      "projectName": "backend",
+      "cwd": "${workspaceFolder}/backend",
+      "console": "integratedTerminal",
+      "preLaunchTask": "Backend: Gradle Build",
       "vmArgs": "-Dspring.profiles.active=local",
       "env": {}
+    },
+    {
+      "type": "java",
+      "name": "Attach to JVM (5005)",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5005
+    },
+    {
+      "type": "java",
+      "name": "Backend: Debug (gradlew + JDWP)",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5005,
+      "preLaunchTask": "Backend: Debug bootRun"
     },
     {
       "type": "chrome",
       "name": "Frontend: Chrome",
       "request": "launch",
       "url": "http://localhost:3000",
-      "webRoot": "${workspaceFolder:SchoolManager}/frontend/src",
+      "webRoot": "${workspaceFolder}/frontend/src",
       "preLaunchTask": "Frontend: Dev Server"
     }
   ],
@@ -23,6 +41,11 @@
     {
       "name": "Full Stack",
       "configurations": ["Backend: Spring Boot", "Frontend: Chrome"],
+      "stopAll": true
+    },
+    {
+      "name": "Backend: Debug (launch + attach)",
+      "configurations": ["Backend: Debug (gradlew + JDWP)", "Attach to JVM (5005)"],
       "stopAll": true
     }
   ]
