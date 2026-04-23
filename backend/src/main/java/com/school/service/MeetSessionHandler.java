@@ -128,6 +128,7 @@ public class MeetSessionHandler {
                 meetingActive.set(true);
                 attendanceHelper.processParticipants(event, googleMeetClient.getActiveParticipants(event.getSpaceCode()),
                         expected, seenStudentIds, seenTeacherIds, lateThreshold);
+                notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
             } else {
                 sendMeetingStartReminder(event);
             }
@@ -206,6 +207,8 @@ public class MeetSessionHandler {
             log.info("All participants already present for {}; skipping polling", event.getId());
             return;
         }
+
+        notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
 
         futureRef.set(taskScheduler.scheduleAtFixedRate(() -> {
             try {
