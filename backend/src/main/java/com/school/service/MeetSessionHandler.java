@@ -144,7 +144,7 @@ public class MeetSessionHandler {
      */
     public void resumeSessionPolling(CalendarEvent event) {
         ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
-        int totalExpected = expected.students().size() + expected.teachers().size();
+        int totalExpected = event.getAttendeeEmails().size();
         Set<Long> seenStudentIds = new HashSet<>();
         Set<Long> seenTeacherIds = new HashSet<>();
 
@@ -192,7 +192,7 @@ public class MeetSessionHandler {
     private void schedulePollingLoop(CalendarEvent event, ExpectedParticipants expected,
             Set<Long> seenStudentIds, Set<Long> seenTeacherIds,
             Instant lateThreshold, AtomicBoolean meetingActive) {
-        int totalExpected = expected.students().size() + expected.teachers().size();
+        int totalExpected = event.getAttendeeEmails().size();
         AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
 
         futureRef.set(taskScheduler.scheduleAtFixedRate(() -> {
@@ -217,7 +217,7 @@ public class MeetSessionHandler {
                 if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {
                     notificationService.notify(NotificationType.ALL_PRESENT, event, null);
                     ScheduledFuture<?> f = futureRef.get();
-                    if (f != null) f.cancel(false);
+                    if (f != null) f.cancel(true);
                 }
             } catch (Exception e) {
                 log.warn("Failed polling for {}: {}", event.getId(), e.getMessage());
