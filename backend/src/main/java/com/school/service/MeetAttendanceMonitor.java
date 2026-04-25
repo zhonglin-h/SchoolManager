@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledFuture;
 
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -43,29 +42,30 @@ public class MeetAttendanceMonitor {
     private final MeetSessionHandler sessionHandler;
     private final NotificationService notificationService;
     private final ThreadPoolTaskScheduler taskScheduler;
+    private final UpcomingChecksRegistry upcomingChecksRegistry;
 
     private final Map<String, List<ScheduledFuture<?>>> oneTimeFutures = new ConcurrentHashMap<>();
     private final Map<String, Instant> lastScheduledStartTime = new ConcurrentHashMap<>();
-    private final List<ScheduledCheck> upcomingChecks = new CopyOnWriteArrayList<>();
 
+    /** @deprecated Use {@link com.school.service.ScheduledCheck} directly. Kept for API compatibility with {@link com.school.controller.CalendarController}. */
     public record ScheduledCheck(String eventId, String eventTitle, String checkType, Instant scheduledAt) {}
 
     public MeetAttendanceMonitor(CalendarSyncService calendarSyncService,
                                   MeetSessionHandler sessionHandler,
                                   NotificationService notificationService,
-                                  ThreadPoolTaskScheduler taskScheduler) {
+                                  ThreadPoolTaskScheduler taskScheduler,
+                                  UpcomingChecksRegistry upcomingChecksRegistry) {
         this.calendarSyncService = calendarSyncService;
         this.sessionHandler = sessionHandler;
         this.notificationService = notificationService;
         this.taskScheduler = taskScheduler;
+        this.upcomingChecksRegistry = upcomingChecksRegistry;
     }
 
     /** Returns all checks whose scheduled time is still in the future, sorted ascending. */
-    public List<ScheduledCheck> getUpcomingChecks() {
-        Instant now = Instant.now();
-        return upcomingChecks.stream()
-                .filter(c -> c.scheduledAt().isAfter(now))
-                .sorted((a, b) -> a.scheduledAt().compareTo(b.scheduledAt()))
+    public List<MeetAttendanceMonitor.ScheduledCheck> getUpcomingChecks() {
+        return upcomingChecksRegistry.getUpcoming().stream()
+                .map(c -> new MeetAttendanceMonitor.ScheduledCheck(c.eventId(), c.eventTitle(), c.checkType(), c.scheduledAt()))
                 .toList();
     }
 
@@ -109,7 +109,7 @@ public class MeetAttendanceMonitor {
             }
         }
 
-        upcomingChecks.clear();
+        upcomingChecksRegistry.clear();
         Instant now = Instant.now();
 
         for (CalendarEvent event : events) {
@@ -141,34 +141,36 @@ public class MeetAttendanceMonitor {
                     .atZone(ZoneId.systemDefault()).toInstant();
 
             if (minus15.isAfter(now)) {
-                upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "MEETING_NOT_STARTED_15", minus15));
+                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "MEETING_NOT_STARTED_15", minus15));
                 futures.add(taskScheduler.schedule(() -> {
-                    upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("MEETING_NOT_STARTED_15"));
+                    upcomingChecksRegistry.remove(event.getId(), "MEETING_NOT_STARTED_15");
                     sessionHandler.checkMeetingStarted(event, NotificationType.MEETING_NOT_STARTED_15);
                 }, minus15));
             }
             if (minus3.isAfter(now)) {
-                upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "PRE_CLASS_JOINS", minus3));
+                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "PRE_CLASS_JOINS", minus3));
                 futures.add(taskScheduler.schedule(() -> {
-                    upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("PRE_CLASS_JOINS"));
+                    upcomingChecksRegistry.remove(event.getId(), "PRE_CLASS_JOINS");
                     sessionHandler.checkPreClassJoins(event);
                 }, minus3));
             }
             if (start.isAfter(now)) {
-                upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "SESSION_START", start));
+                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_START", start));
                 futures.add(taskScheduler.schedule(() -> {
-                    upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("SESSION_START"));
+                    upcomingChecksRegistry.remove(event.getId(), "SESSION_START");
+                    upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_POLLING", end));
                     sessionHandler.startSessionPolling(event);
                 }, start));
             } else if (end.isAfter(now)) {
                 // Session already started but not yet ended: catch up on any missed polling
+                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_POLLING", end));
                 sessionHandler.resumeSessionPolling(event);
             }
 
             if (end.isAfter(now)) {
-                upcomingChecks.add(new ScheduledCheck(event.getId(), event.getTitle(), "SESSION_FINALIZE", end));
+                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_FINALIZE", end));
                 futures.add(taskScheduler.schedule(() -> {
-                    upcomingChecks.removeIf(c -> c.eventId().equals(event.getId()) && c.checkType().equals("SESSION_FINALIZE"));
+                    upcomingChecksRegistry.remove(event.getId(), "SESSION_FINALIZE");
                     sessionHandler.finalizeSession(event);
                 }, end));
             }
@@ -187,5 +189,6 @@ public class MeetAttendanceMonitor {
         if (futures != null) {
             futures.forEach(f -> f.cancel(false));
         }
+        upcomingChecksRegistry.removePollingEntry(eventId);
     }
 }

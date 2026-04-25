@@ -51,6 +51,11 @@ public enum NotificationType {
             (e, r) -> "Teacher Absent: " + r.getName(),
             (e, r) -> r.getName() + " was absent from the Meet session for \"" + e.getTitle() + "\".",
             false, true, false
+    ),
+    UNMATCHED_GUESTS(
+            (e, r) -> "Unknown People in Session: " + e.getTitle(),
+            (e, r) -> "",
+            true, true, false
     );
 
     private final BiFunction<CalendarEvent, Recipient, String> subjectFn;

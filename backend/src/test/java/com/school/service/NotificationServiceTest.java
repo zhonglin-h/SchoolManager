@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -270,6 +271,24 @@ class NotificationServiceTest {
         verify(telegramClient).send(anyString());
         // Email is skipped due to dedup
         verify(emailClient, never()).send(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void notifyUnmatchedGuests_sendsEachTimeWithoutDedup() {
+        GuestRecipient guestRecipient = new GuestRecipient(
+                List.of("unknown@meet.com", "external@meet.com"),
+                List.of("Mystery Person"));
+
+        notificationService.notify(NotificationType.UNMATCHED_GUESTS, event, guestRecipient);
+        notificationService.notify(NotificationType.UNMATCHED_GUESTS, event, guestRecipient);
+
+        verify(notificationLogRepository, never())
+                .existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
+                        anyString(), any(LocalDate.class), anyString(), any());
+        verify(emailClient, times(2)).send(eq(PRINCIPAL), eq("Unknown People in Session: Math Class"),
+                contains("unknown@meet.com"));
+        verify(telegramClient, times(2)).send(contains("In room but not found in system: Mystery Person"));
+        verify(notificationLogRepository, times(4)).save(any(NotificationLog.class));
     }
 
     // --- Telegram failure: logged with success=false, does not prevent email ---

@@ -142,6 +142,14 @@ Serena is available as an MCP server and provides semantic coding tools for code
 
 Feature plans are stored in `./Plans/`. When asked to plan a feature or enhancement, save the plan as a Markdown file there.
 
+## Code Review Output
+
+- For code review findings, always include direct file references with line numbers for each issue.
+- Prefer clickable path+line references (for example: `backend/src/main/java/com/school/service/MeetSessionHandler.java:186`) so findings are easy to jump to in-editor.
+- To make links clickable in Codex responses, use Markdown links with an absolute workspace path as the target, optionally including a line suffix.
+- Format: `[short-label](/absolute/path/to/File.ext:line)` or `[short-label](C:/absolute/path/to/File.ext:line)`.
+- Example: `[MeetAttendanceMonitor.java:187](C:/Users/Zhong/Programming/SchoolManager/backend/src/main/java/com/school/service/MeetAttendanceMonitor.java:187)`.
+
 ## Development Phases
 
 See `Build Phases.md` for the full incremental delivery plan. Summary:

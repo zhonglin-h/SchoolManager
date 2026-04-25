@@ -65,11 +65,12 @@ public class NotificationService {
 
         // --- Email path ---
         if (type.shouldSendEmail()) {
-            boolean emailAlreadySent = dedupCheck(recipient, event, type, NotificationChannel.EMAIL);
+            boolean emailAlreadySent = shouldDedup(type)
+                    && dedupCheck(recipient, event, type, NotificationChannel.EMAIL);
 
             if (!emailAlreadySent) {
                 String subject = type.subject(event, recipient);
-                String body = type.body(event, recipient);
+                String body = resolveBody(type, event, recipient);
                 String failureReason = null;
                 List<String> recipients = new ArrayList<>();
 
@@ -113,10 +114,11 @@ public class NotificationService {
 
         // --- Telegram path ---
         if (type.toPrincipalViaTelegram) {
-            boolean telegramAlreadySent = dedupCheck(recipient, event, type, NotificationChannel.TELEGRAM);
+            boolean telegramAlreadySent = shouldDedup(type)
+                    && dedupCheck(recipient, event, type, NotificationChannel.TELEGRAM);
 
             if (!telegramAlreadySent) {
-                String body = type.body(event, recipient);
+                String body = resolveBody(type, event, recipient);
                 String failureReason = null;
 
                 try {
@@ -144,6 +146,26 @@ public class NotificationService {
         }
     }
 
+    private boolean shouldDedup(NotificationType type) {
+        return type != NotificationType.UNMATCHED_GUESTS;
+    }
+
+    private String resolveBody(NotificationType type, CalendarEvent event, @Nullable Recipient recipient) {
+        if (type == NotificationType.UNMATCHED_GUESTS && recipient instanceof GuestRecipient guestRecipient) {
+            List<String> sections = new ArrayList<>();
+            if (!guestRecipient.unmatchedInvitees().isEmpty()) {
+                sections.add("Invited but not found in system: "
+                        + String.join(", ", guestRecipient.unmatchedInvitees()));
+            }
+            if (!guestRecipient.unmatchedParticipants().isEmpty()) {
+                sections.add("In room but not found in system: "
+                        + String.join(", ", guestRecipient.unmatchedParticipants()));
+            }
+            return String.join("\n", sections);
+        }
+        return type.body(event, recipient);
+    }
+
     private boolean dedupCheck(@Nullable Recipient recipient, CalendarEvent event,
                                NotificationType type, NotificationChannel channel) {
         if (recipient instanceof StudentRecipient sr) {
@@ -161,4 +183,3 @@ public class NotificationService {
         }
     }
 }
-
