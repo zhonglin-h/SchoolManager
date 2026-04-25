@@ -50,7 +50,7 @@ class MeetSessionHandlerTest {
 
     @BeforeEach
     void setUp() {
-        attendanceHelper = new MeetAttendanceHelper(personRepository, attendanceRepository, notificationService);
+        attendanceHelper = new MeetAttendanceHelper(personRepository, attendanceRepository);
         sessionHandler = new MeetSessionHandler(attendanceHelper, notificationService,
                 meetClient, taskScheduler, attendanceRepository, upcomingChecksRegistry);
         ReflectionTestUtils.setField(sessionHandler, "lateBufferMinutes", 5);
@@ -128,7 +128,7 @@ class MeetSessionHandlerTest {
     }
 
     @Test
-    void checkPreClassJoins_registeredTeacherNotFlaggedAsUnmatchedParticipant() throws Exception {
+    void checkPreClassJoins_registeredTeacherStillFlaggedWhenNotExpectedAttendee() throws Exception {
         event.setAttendeeEmails(List.of("victoriasupereducation.com"));
         Person victoria = Person.builder().id(3L).personType(PersonType.TEACHER)
                 .name("Victoria Yin").meetEmail("victoria@supereducation.com").build();
@@ -150,6 +150,6 @@ class MeetSessionHandlerTest {
         verify(notificationService).notify(eq(NotificationType.UNMATCHED_GUESTS), eq(event), subjectCaptor.capture());
         GuestSubject guestSubject = (GuestSubject) subjectCaptor.getValue();
         assertThat(guestSubject.unmatchedInvitees()).containsExactly("victoriasupereducation.com");
-        assertThat(guestSubject.unmatchedParticipants()).isEmpty();
+        assertThat(guestSubject.unmatchedParticipants()).containsExactly("Victoria Yin");
     }
 }
