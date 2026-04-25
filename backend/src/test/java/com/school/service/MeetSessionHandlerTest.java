@@ -75,8 +75,8 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(event);
 
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new StudentSubject(student));
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new TeacherSubject(teacher));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(student));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(teacher));
     }
 
     @Test
@@ -91,8 +91,8 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(event);
 
-        verify(notificationService, never()).notify(NotificationType.NOT_YET_JOINED, event, new StudentSubject(student));
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new TeacherSubject(teacher));
+        verify(notificationService, never()).notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(student));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(teacher));
     }
 
     @Test
@@ -113,8 +113,8 @@ class MeetSessionHandlerTest {
         verify(attendanceRepository, org.mockito.Mockito.times(2)).save(captor.capture());
         assertThat(captor.getAllValues()).extracting(a -> a.getPerson().getPersonType())
                 .containsExactlyInAnyOrder(PersonType.STUDENT, PersonType.TEACHER);
-        verify(notificationService).notify(NotificationType.ABSENT, event, new StudentSubject(student));
-        verify(notificationService).notify(NotificationType.ABSENT, event, new TeacherSubject(teacher));
+        verify(notificationService).notify(NotificationType.ABSENT, event, new PersonSubject(student));
+        verify(notificationService).notify(NotificationType.ABSENT, event, new PersonSubject(teacher));
     }
 
     @Test

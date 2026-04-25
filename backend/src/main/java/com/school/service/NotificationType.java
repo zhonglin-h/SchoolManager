@@ -2,6 +2,7 @@ package com.school.service;
 
 import java.util.function.BiFunction;
 
+import com.school.entity.PersonType;
 import com.school.model.CalendarEvent;
 
 public enum NotificationType {
@@ -70,7 +71,10 @@ public enum NotificationType {
     }
 
     public boolean shouldSendParentEmail(NotificationSubject subject) {
-        return toParentViaEmail && subject instanceof StudentSubject;
+        if (!(subject instanceof PersonSubject personSubject)) {
+            return false;
+        }
+        return toParentViaEmail && personSubject.person().getPersonType() == PersonType.STUDENT;
     }
 
     public String subject(CalendarEvent event, NotificationSubject subject) {
@@ -82,11 +86,14 @@ public enum NotificationType {
     }
 
     private static String roleLabel(NotificationSubject subject) {
-        if (subject instanceof TeacherSubject) {
-            return "Teacher";
+        if (!(subject instanceof PersonSubject personSubject)) {
+            return "Person";
         }
-        if (subject instanceof StudentSubject) {
+        if (personSubject.person().getPersonType() == PersonType.STUDENT) {
             return "Student";
+        }
+        if (personSubject.person().getPersonType() == PersonType.TEACHER) {
+            return "Teacher";
         }
         return "Person";
     }

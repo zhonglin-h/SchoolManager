@@ -66,9 +66,7 @@ public class NotificationService {
     public void notify(NotificationType type, CalendarEvent event, @Nullable NotificationSubject subject) {
         if (!notificationsEnabled) return;
 
-        Person person = subject instanceof StudentSubject ss ? ss.student()
-                : subject instanceof TeacherSubject ts ? ts.teacher()
-                : null;
+        Person person = subject instanceof PersonSubject ps ? ps.person() : null;
 
         // --- Email path ---
         if (emailNotificationsEnabled && type.shouldSendEmail(subject)) {
@@ -174,14 +172,10 @@ public class NotificationService {
 
     private boolean dedupCheck(@Nullable NotificationSubject subject, CalendarEvent event,
                                NotificationType type, NotificationChannel channel) {
-        if (subject instanceof StudentSubject ss) {
+        if (subject instanceof PersonSubject ps) {
             return notificationLogRepository
                     .existsByPersonIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
-                            ss.getId(), event.getId(), LocalDate.now(), type.name(), channel);
-        } else if (subject instanceof TeacherSubject ts) {
-            return notificationLogRepository
-                    .existsByPersonIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
-                            ts.getId(), event.getId(), LocalDate.now(), type.name(), channel);
+                            ps.getId(), event.getId(), LocalDate.now(), type.name(), channel);
         } else {
             return notificationLogRepository
                     .existsByCalendarEventIdAndDateAndTypeAndChannelAndPersonIsNullAndSuccessTrue(

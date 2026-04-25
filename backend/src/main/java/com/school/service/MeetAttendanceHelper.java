@@ -50,7 +50,7 @@ class MeetAttendanceHelper {
                 seenStudentIds.add(student.getId());
                 AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 recordAttendance(student, event, status);
-                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL, event, new StudentSubject(student));
+                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL, event, new PersonSubject(student));
             }
         }
         for (Person teacher : expected.teachers()) {
@@ -58,7 +58,7 @@ class MeetAttendanceHelper {
                 seenTeacherIds.add(teacher.getId());
                 AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 recordAttendance(teacher, event, status);
-                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL, event, new TeacherSubject(teacher));
+                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL, event, new PersonSubject(teacher));
             }
         }
     }

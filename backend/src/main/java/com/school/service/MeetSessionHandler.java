@@ -99,9 +99,7 @@ public class MeetSessionHandler {
             ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
             forEachExpectedPerson(expected, (person, personType) -> {
                 Set<Long> resolvedIds = personType == PersonType.STUDENT ? resolved.studentIds() : resolved.teacherIds();
-                NotificationSubject subject = personType == PersonType.STUDENT
-                        ? new StudentSubject(person)
-                        : new TeacherSubject(person);
+                NotificationSubject subject = new PersonSubject(person);
                 if (!resolvedIds.contains(person.getId())) {
                     notificationService.notify(NotificationType.NOT_YET_JOINED, event, subject);
                 }
@@ -269,9 +267,7 @@ public class MeetSessionHandler {
                                Set<Long> seenStudentIds, Set<Long> seenTeacherIds) {
         forEachExpectedPerson(expected, (person, personType) -> {
             Set<Long> seenIds = personType == PersonType.STUDENT ? seenStudentIds : seenTeacherIds;
-            NotificationSubject subject = personType == PersonType.STUDENT
-                    ? new StudentSubject(person)
-                    : new TeacherSubject(person);
+            NotificationSubject subject = new PersonSubject(person);
             if (!seenIds.contains(person.getId())) {
                 notificationService.notify(NotificationType.NOT_YET_JOINED, event, subject);
             }
@@ -312,9 +308,7 @@ public class MeetSessionHandler {
         ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
 
         forEachExpectedPerson(expected, (person, personType) -> {
-            NotificationSubject subject = personType == PersonType.STUDENT
-                    ? new StudentSubject(person)
-                    : new TeacherSubject(person);
+            NotificationSubject subject = new PersonSubject(person);
             Optional<Attendance> existing = attendanceRepository
                     .findByPersonIdAndCalendarEventIdAndDate(person.getId(), event.getId(), today);
             if (existing.isPresent()) {
