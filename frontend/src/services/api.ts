@@ -138,6 +138,17 @@ export interface ScheduledChecksResponse {
   limit: number
 }
 
+export interface JoinAttemptLogResponse {
+  id: number
+  calendarEventId: string
+  scheduledStart: string
+  attemptedAt: string
+  triggerType: string
+  status: string
+  reasonCode: string | null
+  detailMessage: string | null
+}
+
 // ── Students ───────────────────────────────────────────────────────────────
 
 export async function getStudents(): Promise<StudentResponse[]> {
@@ -267,5 +278,15 @@ export async function syncCalendar(): Promise<void> {
 
 export async function getScheduledChecks(): Promise<ScheduledChecksResponse> {
   const { data } = await api.get<ScheduledChecksResponse>('/calendar/scheduled-checks')
+  return data
+}
+
+export async function getTodayJoinAttempts(): Promise<JoinAttemptLogResponse[]> {
+  const { data } = await api.get<JoinAttemptLogResponse[]>('/calendar/join-attempts/today')
+  return data
+}
+
+export async function triggerJoinAttempt(eventId: string): Promise<JoinAttemptLogResponse> {
+  const { data } = await api.post<JoinAttemptLogResponse>(`/calendar/${eventId}/join`)
   return data
 }

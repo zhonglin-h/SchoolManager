@@ -40,6 +40,7 @@ class MeetSessionHandlerTest {
     @Mock MeetClient meetClient;
     @Mock ThreadPoolTaskScheduler taskScheduler;
     @Mock UpcomingChecksRegistry upcomingChecksRegistry;
+    @Mock MeetJoinService meetJoinService;
 
     private MeetAttendanceHelper attendanceHelper;
     private MeetSessionHandler sessionHandler;
@@ -52,7 +53,7 @@ class MeetSessionHandlerTest {
     void setUp() {
         attendanceHelper = new MeetAttendanceHelper(personRepository, attendanceRepository);
         sessionHandler = new MeetSessionHandler(attendanceHelper, notificationService,
-                meetClient, taskScheduler, attendanceRepository, upcomingChecksRegistry);
+                meetClient, taskScheduler, attendanceRepository, upcomingChecksRegistry, meetJoinService);
         ReflectionTestUtils.setField(sessionHandler, "lateBufferMinutes", 5);
 
         event = new CalendarEvent("evt-1", "Math Class",
@@ -151,5 +152,11 @@ class MeetSessionHandlerTest {
         GuestSubject guestSubject = (GuestSubject) subjectCaptor.getValue();
         assertThat(guestSubject.unmatchedInvitees()).containsExactly("victoriasupereducation.com");
         assertThat(guestSubject.unmatchedParticipants()).containsExactly("Victoria Yin");
+    }
+
+    @Test
+    void attemptAutoJoin_delegatesToMeetJoinService() {
+        sessionHandler.attemptAutoJoin(event);
+        verify(meetJoinService).attemptScheduledJoin(event);
     }
 }

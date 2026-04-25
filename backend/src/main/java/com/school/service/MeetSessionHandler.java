@@ -45,6 +45,7 @@ public class MeetSessionHandler {
     private final ThreadPoolTaskScheduler taskScheduler;
     private final AttendanceRepository attendanceRepository;
     private final UpcomingChecksRegistry upcomingChecksRegistry;
+    private final MeetJoinService meetJoinService;
 
     @Value("${app.attendance.late-buffer-minutes}")
     private int lateBufferMinutes;
@@ -56,13 +57,15 @@ public class MeetSessionHandler {
                                MeetClient googleMeetClient,
                                ThreadPoolTaskScheduler taskScheduler,
                                AttendanceRepository attendanceRepository,
-                               UpcomingChecksRegistry upcomingChecksRegistry) {
+                               UpcomingChecksRegistry upcomingChecksRegistry,
+                               MeetJoinService meetJoinService) {
         this.attendanceHelper = attendanceHelper;
         this.notificationService = notificationService;
         this.googleMeetClient = googleMeetClient;
         this.taskScheduler = taskScheduler;
         this.attendanceRepository = attendanceRepository;
         this.upcomingChecksRegistry = upcomingChecksRegistry;
+        this.meetJoinService = meetJoinService;
     }
 
     /** Stops and removes any active polling loop for the given event, and clears its registry entry. */
@@ -107,6 +110,14 @@ public class MeetSessionHandler {
             processUnmatchedGuests(event, expected, participants);
         } catch (Exception e) {
             log.warn("Failed pre-class join check for {}: {}", event.getId(), e.getMessage());
+        }
+    }
+
+    public void attemptAutoJoin(CalendarEvent event) {
+        try {
+            meetJoinService.attemptScheduledJoin(event);
+        } catch (Exception e) {
+            log.warn("Failed auto-join attempt for {}: {}", event.getId(), e.getMessage());
         }
     }
 

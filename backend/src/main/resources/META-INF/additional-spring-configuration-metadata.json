@@ -40,6 +40,70 @@
       "description": "Comma-separated list of display names treated as active participants in mock mode."
     },
     {
+      "name": "app.autojoin.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Enable automatic Google Meet join attempts.",
+      "defaultValue": false
+    },
+    {
+      "name": "app.autojoin.provider",
+      "type": "java.lang.String",
+      "description": "Auto-join provider implementation to use (noop or playwright).",
+      "defaultValue": "noop"
+    },
+    {
+      "name": "app.autojoin.trigger-offset-seconds",
+      "type": "java.lang.Integer",
+      "description": "Seconds before class start when auto-join should trigger.",
+      "defaultValue": 60
+    },
+    {
+      "name": "app.autojoin.join-timeout-seconds",
+      "type": "java.lang.Integer",
+      "description": "Timeout for waiting on auto-join completion.",
+      "defaultValue": 30
+    },
+    {
+      "name": "app.autojoin.chrome-profile-dir",
+      "type": "java.lang.String",
+      "description": "Chrome user-data directory used by auto-join automation."
+    },
+    {
+      "name": "app.autojoin.chrome-path",
+      "type": "java.lang.String",
+      "description": "Optional override path to chrome executable."
+    },
+    {
+      "name": "app.autojoin.retry-max-attempts",
+      "type": "java.lang.Integer",
+      "description": "Maximum auto-join attempts per trigger.",
+      "defaultValue": 2
+    },
+    {
+      "name": "app.autojoin.retry-backoff-ms",
+      "type": "java.lang.Integer",
+      "description": "Backoff in milliseconds between auto-join retries.",
+      "defaultValue": 500
+    },
+    {
+      "name": "app.autojoin.notify-on-success",
+      "type": "java.lang.Boolean",
+      "description": "Notify principal when auto-join succeeds.",
+      "defaultValue": false
+    },
+    {
+      "name": "app.autojoin.require-principal-profile-signed-in",
+      "type": "java.lang.Boolean",
+      "description": "Require principal Chrome profile readiness before auto-join.",
+      "defaultValue": true
+    },
+    {
+      "name": "app.autojoin.skip-if-meeting-active",
+      "type": "java.lang.Boolean",
+      "description": "Skip auto-join when the room is already active.",
+      "defaultValue": false
+    },
+    {
       "name": "google.calendar.id",
       "type": "java.lang.String",
       "description": "Google Calendar ID to sync events from."

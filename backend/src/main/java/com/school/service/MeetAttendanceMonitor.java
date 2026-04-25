@@ -16,6 +16,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Service;
 
+import com.school.config.AutoJoinProperties;
 import com.school.model.CalendarEvent;
 
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +44,7 @@ public class MeetAttendanceMonitor {
     private final NotificationService notificationService;
     private final ThreadPoolTaskScheduler taskScheduler;
     private final UpcomingChecksRegistry upcomingChecksRegistry;
+    private final AutoJoinProperties autoJoinProperties;
 
     private final Map<String, List<ScheduledFuture<?>>> oneTimeFutures = new ConcurrentHashMap<>();
     private final Map<String, Instant> lastScheduledStartTime = new ConcurrentHashMap<>();
@@ -54,12 +56,14 @@ public class MeetAttendanceMonitor {
                                   MeetSessionHandler sessionHandler,
                                   NotificationService notificationService,
                                   ThreadPoolTaskScheduler taskScheduler,
-                                  UpcomingChecksRegistry upcomingChecksRegistry) {
+                                  UpcomingChecksRegistry upcomingChecksRegistry,
+                                  AutoJoinProperties autoJoinProperties) {
         this.calendarSyncService = calendarSyncService;
         this.sessionHandler = sessionHandler;
         this.notificationService = notificationService;
         this.taskScheduler = taskScheduler;
         this.upcomingChecksRegistry = upcomingChecksRegistry;
+        this.autoJoinProperties = autoJoinProperties;
     }
 
     /** Returns all checks whose scheduled time is still in the future, sorted ascending. */
@@ -139,6 +143,7 @@ public class MeetAttendanceMonitor {
                     .atZone(ZoneId.systemDefault()).toInstant();
             Instant end = event.getEndTime()
                     .atZone(ZoneId.systemDefault()).toInstant();
+            Instant autoJoinTrigger = start.minusSeconds(Math.max(0, autoJoinProperties.getTriggerOffsetSeconds()));
 
             if (minus15.isAfter(now)) {
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "MEETING_NOT_STARTED_15", minus15));
@@ -155,6 +160,14 @@ public class MeetAttendanceMonitor {
                 }, minus3));
             }
             if (start.isAfter(now)) {
+                if (autoJoinProperties.isEnabled()) {
+                    Instant triggerTime = autoJoinTrigger.isAfter(now) ? autoJoinTrigger : Instant.now().plusSeconds(1);
+                    upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "AUTO_JOIN", triggerTime));
+                    futures.add(taskScheduler.schedule(() -> {
+                        upcomingChecksRegistry.remove(event.getId(), "AUTO_JOIN");
+                        sessionHandler.attemptAutoJoin(event);
+                    }, triggerTime));
+                }
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_START", start));
                 futures.add(taskScheduler.schedule(() -> {
                     upcomingChecksRegistry.remove(event.getId(), "SESSION_START");

@@ -19,6 +19,7 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
+import com.school.config.AutoJoinProperties;
 import com.school.model.CalendarEvent;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,12 +32,13 @@ class MeetAttendanceMonitorTest {
 
     // Use a real registry so getUpcomingChecks() works correctly
     private final UpcomingChecksRegistry upcomingChecksRegistry = new UpcomingChecksRegistry();
+    private final AutoJoinProperties autoJoinProperties = new AutoJoinProperties();
     private MeetAttendanceMonitor monitor;
 
     @BeforeEach
     void setUp() {
         monitor = new MeetAttendanceMonitor(calendarSyncService, sessionHandler,
-                notificationService, taskScheduler, upcomingChecksRegistry);
+                notificationService, taskScheduler, upcomingChecksRegistry, autoJoinProperties);
     }
 
     // --- scheduleEventsForToday: upcoming checks ---
@@ -44,6 +46,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_addsUpcomingChecksForFutureEvents() throws Exception {
+        autoJoinProperties.setEnabled(false);
         CalendarEvent future = new CalendarEvent("evt-future", "Future Class",
                 "https://meet.google.com/xyz", "xyz",
                 LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
@@ -64,6 +67,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_clearsOldChecksOnRefresh() throws Exception {
+        autoJoinProperties.setEnabled(false);
         CalendarEvent future = new CalendarEvent("evt-a", "Class A",
                 "https://meet.google.com/aaa", "aaa",
                 LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
@@ -87,6 +91,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_cancelsExistingOneTimeFuturesOnReSyncOfSameEvent() throws Exception {
+        autoJoinProperties.setEnabled(false);
         CalendarEvent futureEvent = new CalendarEvent("evt-resync", "Resync Class",
                 "https://meet.google.com/xyz", "xyz",
                 LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
@@ -107,6 +112,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_cancelsOneTimeFuturesForRemovedEvents() throws Exception {
+        autoJoinProperties.setEnabled(false);
         CalendarEvent futureEvent = new CalendarEvent("evt-gone", "Gone Class",
                 "https://meet.google.com/xyz", "xyz",
                 LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
@@ -126,6 +132,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_clearsNotificationLogsWhenEventStartTimeChanges() throws Exception {
+        autoJoinProperties.setEnabled(false);
         CalendarEvent original = new CalendarEvent("evt-rescheduled", "Math Class",
                 "https://meet.google.com/xyz", "xyz",
                 LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
@@ -148,6 +155,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_doesNotClearLogsWhenStartTimeUnchanged() throws Exception {
+        autoJoinProperties.setEnabled(false);
         CalendarEvent sameEvent = new CalendarEvent("evt-same", "Math Class",
                 "https://meet.google.com/xyz", "xyz",
                 LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
@@ -167,6 +175,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_skipsT15ButSchedulesT3WhenMeetingIsMinutesAway() throws Exception {
+        autoJoinProperties.setEnabled(false);
         // Meeting 4 minutes away: T-15 is already past, T-3 is 1 minute in the future.
         // Only PRE_CLASS_JOINS, SESSION_START, and SESSION_FINALIZE should appear in upcomingChecks.
         CalendarEvent soon = new CalendarEvent("evt-soon", "Imminent Class",
@@ -188,6 +197,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_rescheduledToSoonStillGetsFreshT3Check() throws Exception {
+        autoJoinProperties.setEnabled(false);
         // Simulate the "Refresh Live" bug: event initially far away (T-3 and T-15 both future),
         // then rescheduled to 4 minutes from now (T-15 past, T-3 still future).
         // After re-sync, a fresh PRE_CLASS_JOINS check must be registered.
@@ -219,6 +229,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_callsResumeSessionPollingForInProgressEvent() throws Exception {
+        autoJoinProperties.setEnabled(false);
         CalendarEvent inProgress = new CalendarEvent("evt-inprogress", "In-Progress Class",
                 "https://meet.google.com/abc-def", "abc-def",
                 LocalDateTime.now().minusMinutes(10), LocalDateTime.now().plusMinutes(50),
@@ -238,6 +249,7 @@ class MeetAttendanceMonitorTest {
 
     @Test
     void scheduleEventsForToday_doesNotCallResumeSessionPollingForAlreadyEndedEvent() throws Exception {
+        autoJoinProperties.setEnabled(false);
         CalendarEvent ended = new CalendarEvent("evt-ended", "Ended Class",
                 "https://meet.google.com/abc-def", "abc-def",
                 LocalDateTime.now().minusMinutes(65), LocalDateTime.now().minusMinutes(5),
@@ -255,6 +267,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_sessionPollingEntryRemovedOnResync() throws Exception {
+        autoJoinProperties.setEnabled(false);
         // After a resync, the old SESSION_POLLING entry is cleared and replaced
         CalendarEvent inProgress = new CalendarEvent("evt-poll", "Poll Class",
                 "https://meet.google.com/abc", "abc",
@@ -280,6 +293,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_sessionPollingEntryRemovedWhenEventDisappears() throws Exception {
+        autoJoinProperties.setEnabled(false);
         CalendarEvent inProgress = new CalendarEvent("evt-vanish", "Vanish Class",
                 "https://meet.google.com/abc", "abc",
                 LocalDateTime.now().minusMinutes(5), LocalDateTime.now().plusMinutes(55),
@@ -295,5 +309,26 @@ class MeetAttendanceMonitorTest {
 
         assertThat(monitor.getUpcomingChecks())
                 .noneMatch(c -> "SESSION_POLLING".equals(c.checkType()));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_schedulesAutoJoinWhenEnabled() throws Exception {
+        autoJoinProperties.setEnabled(true);
+        autoJoinProperties.setTriggerOffsetSeconds(60);
+        CalendarEvent future = new CalendarEvent("evt-auto", "Auto Join Class",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusMinutes(10), LocalDateTime.now().plusMinutes(70),
+                List.of("alice@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(future));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.scheduleEventsForToday();
+
+        List<String> types = monitor.getUpcomingChecks().stream()
+                .map(MeetAttendanceMonitor.ScheduledCheck::checkType)
+                .toList();
+        assertThat(types).contains("AUTO_JOIN");
     }
 }

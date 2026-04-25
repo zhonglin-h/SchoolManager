@@ -7,6 +7,7 @@ import type { AttendanceEntry, GuestEntry, AttendanceSummaryResponse } from '../
 const CHECK_TYPE_LABELS: Record<string, string> = {
   MEETING_NOT_STARTED_15: 'Meeting-started check (T−15)',
   PRE_CLASS_JOINS: 'Pre-class join check (T−3)',
+  AUTO_JOIN: 'Auto-join attempt',
   SESSION_START: 'Session start poll',
   SESSION_FINALIZE: 'Session finalize',
 }

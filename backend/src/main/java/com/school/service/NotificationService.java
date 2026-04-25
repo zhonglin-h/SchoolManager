@@ -172,6 +172,11 @@ public class NotificationService {
 
     private boolean dedupCheck(@Nullable NotificationSubject subject, CalendarEvent event,
                                NotificationType type, NotificationChannel channel) {
+        if (subject instanceof JoinAttemptSubject joinAttemptSubject && type == NotificationType.AUTO_JOIN_FAILED) {
+            return notificationLogRepository
+                    .existsByCalendarEventIdAndDateAndTypeAndChannelAndPersonIsNullAndMessageContainingAndSuccessTrue(
+                            event.getId(), LocalDate.now(), type.name(), channel, "Reason: " + joinAttemptSubject.reasonCode());
+        }
         if (subject instanceof PersonSubject ps) {
             return notificationLogRepository
                     .existsByPersonIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
