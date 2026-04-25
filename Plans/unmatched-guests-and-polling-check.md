@@ -46,7 +46,7 @@ Only sections that are non-empty are included.
 - Takes `event.getAttendeeEmails()`
 - For each email, checks if any student has `meetEmail` matching it, or if the teacher has `meetEmail` matching it (using the same student/teacher repositories already injected)
 - Returns `List<String>` of emails that matched nothing in the DB
-- This is a static check (calendar attendees don't change mid-session)
+- Re-fetched fresh on every polling tick
 
 **`findUnmatchedParticipants(List<MeetParticipant> participants, ExpectedParticipants expected)`**
 - For each `MeetParticipant`, tries to match against `expected.students()` and `expected.teacher()` using the existing priority chain (`googleUserId` → `meetDisplayName` → `name`)
@@ -55,7 +55,7 @@ Only sections that are non-empty are included.
 
 ### No Deduplication
 
-Notify on **every polling trigger** (T-3 and each 60-second tick) if either unmatched list is non-empty. No local set tracking, no DB dedup. The principal receives a notification on each tick until the unmatched people are either accounted for or leave.
+Notify on **every polling trigger** (T-3 and each 60-second tick) if `unmatchedInvitees` is non-empty. No local set tracking, no DB dedup. The principal receives a notification on each tick until every invited-but-unknown email is either added to the DB or removed from the event. Unknown people who show up in the room but weren't on the invite list are not a concern and do not trigger notifications.
 
 ### Sending the Notification
 
@@ -65,10 +65,9 @@ Add:
 ```java
 public void sendUnmatchedGuestsNotification(
     List<String> unmatchedInvitees,   // emails
-    List<String> unmatchedParticipants, // display names
     CalendarEvent event)
 ```
-- Builds body combining both lists (omit a section if its list is empty)
+- Body lists the unmatched invitee emails
 - Sends email + Telegram to principal
 - Persists `NotificationLog` with `student = null`, `teacher = null`
 - Does **not** call `dedupCheck()`
@@ -77,20 +76,23 @@ public void sendUnmatchedGuestsNotification(
 
 **File:** [service/MeetSessionHandler.java](backend/src/main/java/com/school/service/MeetSessionHandler.java)
 
-**`checkPreClassJoins(CalendarEvent event)` (T-3):**
+`findUnmatchedInvitees` is called inside **`processParticipants`**. `findUnmatchedParticipants` is still called for the existing attendance/ALL_PRESENT logic but does not drive notifications.
+
+**`processParticipants(CalendarEvent event, ExpectedParticipants expected, List<MeetParticipant> activeParticipants)`:**
 ```java
 List<String> unmatchedInvitees = attendanceHelper.findUnmatchedInvitees(event);
-List<MeetParticipant> activeParticipants = meetClient.getActiveParticipants(event.getSpaceCode());
-List<String> unmatchedParticipants = attendanceHelper.findUnmatchedParticipants(activeParticipants, expected);
-if (!unmatchedInvitees.isEmpty() || !unmatchedParticipants.isEmpty()) {
-    notificationService.sendUnmatchedGuestsNotification(unmatchedInvitees, unmatchedParticipants, event);
+if (!unmatchedInvitees.isEmpty()) {
+    notificationService.sendUnmatchedGuestsNotification(unmatchedInvitees, event);
 }
+// ... existing attendance / ALL_PRESENT logic ...
 ```
 
-**`schedulePollingLoop(...)` (each 60-second tick):**
-- `unmatchedInvitees` is fetched once before the loop starts (static — calendar attendees don't change) and captured in the loop closure
-- On each tick, call `attendanceHelper.findUnmatchedParticipants(activeParticipants, expected)` with the current participant snapshot
-- If either list is non-empty, call `notificationService.sendUnmatchedGuestsNotification(...)`
+**`checkPreClassJoins(CalendarEvent event)` (T-3):**
+- Fetches `activeParticipants`, then calls `processParticipants(event, expected, activeParticipants)` — unmatched-guest handling happens inside.
+
+**`schedulePollingLoop(CalendarEvent event)`:**
+- Takes only the event; re-derives `ExpectedParticipants` and fetches `activeParticipants` fresh on every 60-second tick.
+- Calls `processParticipants(event, expected, activeParticipants)` each tick — no parameters pre-computed at loop-start time.
 
 ---
 
@@ -116,6 +118,8 @@ public class UpcomingChecksRegistry {
                           && "SESSION_POLLING".equals(c.checkType()));
     }
 
+    public void clear() { checks.clear(); }
+
     public List<ScheduledCheck> getUpcoming() {
         return checks.stream()
             .filter(c -> c.scheduledAt().isAfter(Instant.now()))
@@ -138,6 +142,7 @@ Both `MeetAttendanceMonitor` and `MeetSessionHandler` inject this bean — no ci
       event.getId(), event.getTitle(), "SESSION_POLLING",
       event.getEndTime().toInstant()));
   ```
+- In `resumeSessionPolling`, there is a branch that returns early (e.g., session already ended or cancelled before polling begins). That early-exit branch must call `upcomingChecksRegistry.removePollingEntry(eventId)` to undo the entry just added above.
 - In `cancelOneTimeFutures(eventId)`, also call `upcomingChecksRegistry.removePollingEntry(eventId)`
 - `getUpcomingChecks()` delegates to `upcomingChecksRegistry.getUpcoming()`
 
@@ -146,9 +151,9 @@ Both `MeetAttendanceMonitor` and `MeetSessionHandler` inject this bean — no ci
 **File:** [service/MeetSessionHandler.java](backend/src/main/java/com/school/service/MeetSessionHandler.java)
 
 Inject `UpcomingChecksRegistry`. Call `upcomingChecksRegistry.removePollingEntry(event.getId())` inside `cancelPollingFor(eventId)` — this covers all termination paths:
-- Loop self-cancels when all participants are seen
 - `finalizeSession()` calls `cancelPollingFor()`
 - External reschedule/removal calls `cancelPollingFor()` via `MeetAttendanceMonitor`
+- **`ALL_PRESENT` path must also go through `cancelPollingFor`** — the loop must not simply cancel its own `ScheduledFuture` directly, otherwise the registry entry is never removed. Ensure the `ALL_PRESENT` branch calls `cancelPollingFor(eventId)` rather than cancelling the future in-place.
 
 The `SESSION_POLLING` entry uses `scheduledAt = event.endTime` so it also naturally expires from the filtered view at class end, but the explicit removal in `cancelPollingFor` ensures it disappears immediately when the loop stops early.
 
