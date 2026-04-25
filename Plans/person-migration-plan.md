@@ -1,7 +1,7 @@
 # Person-Centric Migration Plan (Future-Proof for `student_profile` / `teacher_profile`)
 
 ## Summary
-Perform a single-cutover migration from separate `Student`/`Teacher` models to a unified `Person` model, while keeping existing `/students` and `/teachers` APIs unchanged. Use Flyway for controlled schema/data migration. Design v1 schema so role-specific fields can be moved later into `student_profile` and `teacher_profile` with minimal API/service churn.
+Perform a single-cutover migration from separate `Student`/`Teacher` models to a unified `Person` model, and introduce `/people` as the canonical endpoint for unified logic. Keep existing `/students` and `/teachers` APIs as compatibility wrappers. Use Flyway for controlled schema/data migration. Design v1 schema so role-specific fields can be moved later into `student_profile` and `teacher_profile` with minimal API/service churn.
 
 ## Key Implementation Changes
 1. Domain model refactor
@@ -20,12 +20,14 @@ Perform a single-cutover migration from separate `Student`/`Teacher` models to a
   - Add stricter role-field checks in a follow-up Flyway migration after data cleanup/verification.
 
 3. Service/controller compatibility layer
-- Keep `/students` and `/teachers` controller contracts unchanged.
+- Add first-class `/people` endpoints (list/get/create/update/soft-delete) with `personType` filtering support.
+- Keep `/students` and `/teachers` controller contracts unchanged as compatibility wrappers over the `Person` service.
 - Internally map:
   - `/students` to `PersonType.STUDENT`
   - `/teachers` to `PersonType.TEACHER`
 - Preserve existing DTO shapes (`StudentRequest/Response`, `TeacherRequest/Response`) in v1.
-- Refactor attendance + notification logic to single-person flows with `personType`-aware notification routing (parent-email behavior still only for students).
+- Refactor attendance + notification logic to single-person flows, and prefer `/people`-based internal query paths to eliminate student/teacher branching.
+- Keep `personType`-aware notification routing (parent-email behavior still only for students).
 
 4. Future profile-ready abstraction
 - Add an internal profile-access seam now (service-level methods), so role-specific reads/writes are not scattered.
@@ -67,7 +69,8 @@ Perform a single-cutover migration from separate `Student`/`Teacher` models to a
   - Parent email only for `STUDENT`.
 
 3. API regression tests
-- Existing `/students`, `/teachers`, `/attendance`, notification flows remain behaviorally equivalent.
+- New `/people` endpoints return correct cross-role and filtered results.
+- Existing `/students`, `/teachers`, `/attendance`, notification flows remain behaviorally equivalent (wrapping `Person` logic).
 - Attendance record filtering by `PersonType` still works.
 
 4. Migration verification tests
@@ -80,5 +83,5 @@ Perform a single-cutover migration from separate `Student`/`Teacher` models to a
 ## Assumptions and Defaults
 - Chosen: single cutover, keep existing APIs, soft + progressive constraints, adopt Flyway now.
 - Database is primarily H2 today; migration SQL will be written to remain deterministic and portable where practical.
-- No public API contract break in this migration; any `/people` API introduction is deferred.
+- No public API contract break in this migration; `/people` is added now, and legacy endpoints remain supported.
 - `student_profile` / `teacher_profile` split is a planned later step, enabled by the new internal profile seam and Flyway baseline.
