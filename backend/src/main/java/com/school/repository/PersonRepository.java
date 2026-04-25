@@ -10,6 +10,11 @@ import java.util.Optional;
 public interface PersonRepository extends JpaRepository<Person, Long> {
     List<Person> findByPersonTypeAndActiveTrue(PersonType personType);
     List<Person> findByActiveTrue();
+    boolean existsByMeetEmail(String meetEmail);
+    boolean existsByMeetEmailAndIdNot(String meetEmail, Long id);
+
+    Optional<Person> findByMeetEmail(String meetEmail);
+    Optional<Person> findByMeetEmailAndActiveTrue(String meetEmail);
 
     Optional<Person> findByPersonTypeAndMeetEmail(PersonType personType, String meetEmail);
     Optional<Person> findByPersonTypeAndMeetEmailAndActiveTrue(PersonType personType, String meetEmail);

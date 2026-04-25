@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS person (
     active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
+ALTER TABLE person DROP CONSTRAINT IF EXISTS uk_person_meet_email;
+ALTER TABLE person ADD CONSTRAINT uk_person_meet_email UNIQUE (meet_email);
+
 CREATE TABLE IF NOT EXISTS student (
     id BIGINT PRIMARY KEY,
     name VARCHAR(255),

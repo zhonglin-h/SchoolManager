@@ -32,6 +32,7 @@ public class TeacherService {
     }
 
     public TeacherResponse create(TeacherRequest req) {
+        validateUniqueMeetEmailForCreate(req.meetEmail());
         Person teacher = Person.builder()
                 .personType(PersonType.TEACHER)
                 .name(req.name())
@@ -47,6 +48,7 @@ public class TeacherService {
         Person teacher = personRepository.findById(id)
                 .filter(p -> p.getPersonType() == PersonType.TEACHER)
                 .orElseThrow(() -> new RuntimeException("Teacher not found: " + id));
+        validateUniqueMeetEmailForUpdate(req.meetEmail(), id);
         teacher.setName(req.name());
         teacher.setMeetEmail(req.meetEmail());
         teacher.setMeetDisplayName(req.meetDisplayName());
@@ -61,5 +63,19 @@ public class TeacherService {
                 .orElseThrow(() -> new RuntimeException("Teacher not found: " + id));
         teacher.setActive(false);
         personRepository.save(teacher);
+    }
+
+    private void validateUniqueMeetEmailForCreate(String meetEmail) {
+        if (meetEmail == null || meetEmail.isBlank()) return;
+        if (personRepository.existsByMeetEmail(meetEmail)) {
+            throw new RuntimeException("Duplicate meetEmail not allowed: " + meetEmail);
+        }
+    }
+
+    private void validateUniqueMeetEmailForUpdate(String meetEmail, Long id) {
+        if (meetEmail == null || meetEmail.isBlank()) return;
+        if (personRepository.existsByMeetEmailAndIdNot(meetEmail, id)) {
+            throw new RuntimeException("Duplicate meetEmail not allowed: " + meetEmail);
+        }
     }
 }

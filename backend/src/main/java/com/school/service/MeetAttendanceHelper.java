@@ -136,8 +136,7 @@ class MeetAttendanceHelper {
         List<String> unmatched = new ArrayList<>();
         for (String email : event.getAttendeeEmails()) {
             if (email == null || email.isBlank()) continue;
-            boolean found = personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.STUDENT, email).isPresent()
-                    || personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.TEACHER, email).isPresent();
+            boolean found = personRepository.findByMeetEmailAndActiveTrue(email).isPresent();
             if (!found) unmatched.add(email);
         }
         return unmatched;
@@ -178,8 +177,13 @@ class MeetAttendanceHelper {
         List<Person> teachers = new ArrayList<>();
         if (event.getAttendeeEmails() == null) return new ExpectedParticipants(students, teachers);
         for (String email : event.getAttendeeEmails()) {
-            personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.STUDENT, email).ifPresent(students::add);
-            personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.TEACHER, email).ifPresent(teachers::add);
+            personRepository.findByMeetEmailAndActiveTrue(email).ifPresent(person -> {
+                if (person.getPersonType() == PersonType.STUDENT) {
+                    students.add(person);
+                } else if (person.getPersonType() == PersonType.TEACHER) {
+                    teachers.add(person);
+                }
+            });
         }
         return new ExpectedParticipants(students, teachers);
     }

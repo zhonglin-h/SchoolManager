@@ -109,8 +109,7 @@ public class AttendanceController {
             if (event.getAttendeeEmails() != null) {
                 for (String email : event.getAttendeeEmails()) {
                     if (email.equalsIgnoreCase(principalEmail)) continue;
-                    Person person = personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.STUDENT, email)
-                            .or(() -> personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.TEACHER, email))
+                    Person person = personRepository.findByMeetEmailAndActiveTrue(email)
                             .orElse(null);
                     if (person != null) {
                         Attendance att = byPersonId.get(person.getId());
@@ -142,10 +141,8 @@ public class AttendanceController {
                     coveredRefs.add(entry.personType().name() + ":" + entry.personId());
                 }
             }
-            personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.STUDENT, principalEmail)
-                    .ifPresent(s -> coveredRefs.add(PersonType.STUDENT.name() + ":" + s.getId()));
-            personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.TEACHER, principalEmail)
-                    .ifPresent(t -> coveredRefs.add(PersonType.TEACHER.name() + ":" + t.getId()));
+            personRepository.findByMeetEmailAndActiveTrue(principalEmail)
+                    .ifPresent(p -> coveredRefs.add(p.getPersonType().name() + ":" + p.getId()));
 
             List<AttendanceSummaryResponse.GuestEntry> guests = new ArrayList<>();
             for (MeetParticipant p : liveParticipants) {
@@ -288,8 +285,7 @@ public class AttendanceController {
                 for (String email : event.getAttendeeEmails()) {
                     Map<String, Object> ae = new LinkedHashMap<>();
                     ae.put("email", email);
-                    Person person = personRepository.findByPersonTypeAndMeetEmail(PersonType.STUDENT, email)
-                            .or(() -> personRepository.findByPersonTypeAndMeetEmail(PersonType.TEACHER, email))
+                    Person person = personRepository.findByMeetEmail(email)
                             .orElse(null);
                     if (person != null) {
                         ae.put("registeredAs", person.getPersonType().name());
