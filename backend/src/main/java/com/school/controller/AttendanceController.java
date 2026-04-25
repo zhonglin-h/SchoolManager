@@ -1,27 +1,5 @@
 package com.school.controller;
 
-import com.school.dto.AttendanceSummaryResponse;
-import com.school.entity.Attendance;
-import com.school.entity.AttendanceStatus;
-import com.school.entity.Person;
-import com.school.entity.PersonType;
-import com.school.integration.MeetClient;
-import com.school.integration.MeetParticipant;
-import com.school.model.CalendarEvent;
-import com.school.repository.AttendanceRepository;
-import com.school.repository.PersonRepository;
-import com.school.service.CalendarSyncService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -36,6 +14,30 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.school.dto.AttendanceSummaryResponse;
+import com.school.entity.Attendance;
+import com.school.entity.AttendanceStatus;
+import com.school.entity.Person;
+import com.school.entity.PersonType;
+import com.school.integration.MeetClient;
+import com.school.integration.MeetParticipant;
+import com.school.model.CalendarEvent;
+import com.school.repository.AttendanceRepository;
+import com.school.repository.PersonRepository;
+import com.school.service.CalendarSyncService;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestController
@@ -123,9 +125,6 @@ public class AttendanceController {
                         }
                         entries.add(new AttendanceSummaryResponse.AttendanceEntry(
                                 person.getId(), person.getPersonType(), person.getName(), email, status, true, inMeetNow));
-                    } else {
-                        entries.add(new AttendanceSummaryResponse.AttendanceEntry(
-                                null, null, email, email, null, false, false));
                     }
                 }
             }
@@ -266,7 +265,8 @@ public class AttendanceController {
                         entry.put("resolvedName", person.getName());
                         entry.put("resolvedId", person.getId());
                     } else {
-                        entry.put("resolvedAs", "UNREGISTERED");
+                        log.warn("Unregistered participant in debug view for space {}: googleUserId={}, displayName={}",
+                                spaceCode, p.googleUserId(), p.displayName());
                     }
                     rawParticipants.add(entry);
                 }
