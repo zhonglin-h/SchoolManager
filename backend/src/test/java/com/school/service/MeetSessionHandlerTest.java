@@ -26,6 +26,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -124,5 +125,31 @@ class MeetSessionHandlerTest {
         sessionHandler.checkMeetingStarted(event, NotificationType.MEETING_NOT_STARTED_15);
 
         verify(notificationService).notify(NotificationType.MEETING_NOT_STARTED_15, event, null);
+    }
+
+    @Test
+    void checkPreClassJoins_registeredTeacherNotFlaggedAsUnmatchedParticipant() throws Exception {
+        event.setAttendeeEmails(List.of("victoriasupereducation.com"));
+        Person victoria = Person.builder().id(3L).personType(PersonType.TEACHER)
+                .name("Victoria Yin").meetEmail("victoria@supereducation.com").build();
+
+        when(meetClient.getActiveParticipants("abc-def"))
+                .thenReturn(List.of(new MeetParticipant(null, "Victoria Yin", null)));
+        when(personRepository.findByMeetEmailAndActiveTrue("victoriasupereducation.com"))
+                .thenReturn(Optional.empty());
+        when(personRepository.findByPersonTypeAndMeetDisplayNameIgnoreCaseAndActiveTrue(PersonType.STUDENT, "Victoria Yin"))
+                .thenReturn(Optional.empty());
+        when(personRepository.findByPersonTypeAndNameIgnoreCaseAndActiveTrue(PersonType.STUDENT, "Victoria Yin"))
+                .thenReturn(Optional.empty());
+        when(personRepository.findByPersonTypeAndMeetDisplayNameIgnoreCaseAndActiveTrue(PersonType.TEACHER, "Victoria Yin"))
+                .thenReturn(Optional.of(victoria));
+
+        sessionHandler.checkPreClassJoins(event);
+
+        ArgumentCaptor<NotificationSubject> subjectCaptor = ArgumentCaptor.forClass(NotificationSubject.class);
+        verify(notificationService).notify(eq(NotificationType.UNMATCHED_GUESTS), eq(event), subjectCaptor.capture());
+        GuestSubject guestSubject = (GuestSubject) subjectCaptor.getValue();
+        assertThat(guestSubject.unmatchedInvitees()).containsExactly("victoriasupereducation.com");
+        assertThat(guestSubject.unmatchedParticipants()).isEmpty();
     }
 }

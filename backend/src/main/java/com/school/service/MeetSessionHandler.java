@@ -125,7 +125,7 @@ public class MeetSessionHandler {
             upcomingChecksRegistry.removePollingEntry(event.getId());
             return;
         }
-        schedulePollingLoop(event, context.expected(), context.seenStudentIds(), context.seenTeacherIds(),
+        schedulePollingLoop(event, context.seenStudentIds(), context.seenTeacherIds(),
                 context.lateThreshold(), context.meetingActive());
     }
 
@@ -147,7 +147,7 @@ public class MeetSessionHandler {
             return;
         }
 
-        schedulePollingLoop(event, context.expected(), context.seenStudentIds(), context.seenTeacherIds(),
+        schedulePollingLoop(event, context.seenStudentIds(), context.seenTeacherIds(),
                 context.lateThreshold(), context.meetingActive());
     }
 
@@ -156,7 +156,7 @@ public class MeetSessionHandler {
      * If the meeting room isn't open yet ({@code meetingActive} is false), each tick sends a
      * reminder and skips participant processing until the room goes live.
      */
-    private void schedulePollingLoop(CalendarEvent event, ExpectedParticipants expected,
+    private void schedulePollingLoop(CalendarEvent event,
             Set<Long> seenStudentIds, Set<Long> seenTeacherIds,
             Instant lateThreshold, AtomicBoolean meetingActive) {
         int totalExpected = getTotalExpectedParticipants(event);
@@ -178,6 +178,7 @@ public class MeetSessionHandler {
                 }
 
                 List<MeetParticipant> activeParticipants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
+                ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
                 attendanceHelper.processParticipants(event, activeParticipants,
                         expected, seenStudentIds, seenTeacherIds, lateThreshold);
                 notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
@@ -196,13 +197,12 @@ public class MeetSessionHandler {
     }
 
     private PollingContext createPollingContext(CalendarEvent event) {
-        ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
         Set<Long> seenStudentIds = new HashSet<>();
         Set<Long> seenTeacherIds = new HashSet<>();
         Instant lateThreshold = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant()
                 .plusSeconds(lateBufferMinutes * 60L);
         AtomicBoolean meetingActive = new AtomicBoolean(false);
-        return new PollingContext(expected, seenStudentIds, seenTeacherIds, lateThreshold, meetingActive);
+        return new PollingContext(seenStudentIds, seenTeacherIds, lateThreshold, meetingActive);
     }
 
     private void preSeedSeenAttendance(CalendarEvent event, Set<Long> seenStudentIds, Set<Long> seenTeacherIds) {
@@ -226,10 +226,11 @@ public class MeetSessionHandler {
             if (googleMeetClient.isMeetingActive(event.getSpaceCode())) {
                 context.meetingActive().set(true);
                 List<MeetParticipant> activeParticipants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
+                ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
                 attendanceHelper.processParticipants(event, activeParticipants,
-                        context.expected(), context.seenStudentIds(), context.seenTeacherIds(), context.lateThreshold());
-                notifyMissing(event, context.expected(), context.seenStudentIds(), context.seenTeacherIds());
-                processUnmatchedGuests(event, context.expected(), activeParticipants);
+                        expected, context.seenStudentIds(), context.seenTeacherIds(), context.lateThreshold());
+                notifyMissing(event, expected, context.seenStudentIds(), context.seenTeacherIds());
+                processUnmatchedGuests(event, expected, activeParticipants);
             } else {
                 sendMeetingStartReminder(event);
             }
@@ -340,7 +341,6 @@ public class MeetSessionHandler {
     }
 
     private record PollingContext(
-            ExpectedParticipants expected,
             Set<Long> seenStudentIds,
             Set<Long> seenTeacherIds,
             Instant lateThreshold,
