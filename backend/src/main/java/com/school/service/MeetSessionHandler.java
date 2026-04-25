@@ -157,7 +157,7 @@ public class MeetSessionHandler {
      */
     public void resumeSessionPolling(CalendarEvent event) {
         ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
-        int totalExpected = event.getAttendeeEmails().size();
+        int totalExpected = getTotalExpectedParticipants(event);
         Set<Long> seenStudentIds = new HashSet<>();
         Set<Long> seenTeacherIds = new HashSet<>();
 
@@ -180,20 +180,18 @@ public class MeetSessionHandler {
                 meetingActive.set(true);
                 attendanceHelper.processParticipants(event, googleMeetClient.getActiveParticipants(event.getSpaceCode()),
                         expected, seenStudentIds, seenTeacherIds, lateThreshold);
+                if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected) {
+                    log.info("All participants already present for {}; skipping polling", event.getId());
+                    upcomingChecksRegistry.removePollingEntry(event.getId());
+                    return;
+                }
+                notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
             } else {
                 sendMeetingStartReminder(event);
             }
         } catch (Exception e) {
             log.warn("Failed catch-up snapshot for {}: {}", event.getId(), e.getMessage());
         }
-
-        if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected) {
-            log.info("All participants already present for {}; skipping polling", event.getId());
-            upcomingChecksRegistry.removePollingEntry(event.getId());
-            return;
-        }
-
-        notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
         
         schedulePollingLoop(event, expected, seenStudentIds, seenTeacherIds, lateThreshold, meetingActive);
     }
@@ -206,7 +204,7 @@ public class MeetSessionHandler {
     private void schedulePollingLoop(CalendarEvent event, ExpectedParticipants expected,
             Set<Long> seenStudentIds, Set<Long> seenTeacherIds,
             Instant lateThreshold, AtomicBoolean meetingActive) {
-        int totalExpected = event.getAttendeeEmails().size() - 1; // subtract 1 for the principal
+        int totalExpected = getTotalExpectedParticipants(event);
         AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
 
         futureRef.set(taskScheduler.scheduleAtFixedRate(() -> {
@@ -248,6 +246,15 @@ public class MeetSessionHandler {
         }, Duration.ofSeconds(60)));
 
         pollingFutures.put(event.getId(), futureRef.get());
+    }
+
+    /**
+     * Returns the number of expected participants excluding the principal attendee.
+     * Applies the same rule everywhere this count is used.
+     */
+    private int getTotalExpectedParticipants(CalendarEvent event) {
+        int attendeeCount = event.getAttendeeEmails() != null ? event.getAttendeeEmails().size() : 0;
+        return Math.max(0, attendeeCount - 1);
     }
 
     private void notifyMissing(CalendarEvent event, ExpectedParticipants expected,
