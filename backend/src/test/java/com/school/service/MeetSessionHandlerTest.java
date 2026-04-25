@@ -576,7 +576,7 @@ class MeetSessionHandlerTest {
     // --- unmatched invitees ---
 
     @Test
-    void checkPreClassJoins_sendsUnmatchedGuestsNotificationForUnknownInvitee() throws Exception {
+    void checkPreClassJoins_notifiesUnmatchedGuestsForUnknownInvitee() throws Exception {
         // Event has "unknown@meet.com" which is not in student or teacher repository
         CalendarEvent eventWithUnknown = new CalendarEvent("evt-u", "Math Class",
                 "https://meet.google.com/abc-def", "abc-def",
@@ -590,23 +590,26 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(eventWithUnknown);
 
-        verify(notificationService).sendUnmatchedGuestsNotification(List.of("unknown@meet.com"), eventWithUnknown);
+        verify(notificationService).notify(
+                NotificationType.UNMATCHED_GUESTS,
+                eventWithUnknown,
+                new GuestRecipient(List.of("unknown@meet.com")));
     }
 
     @Test
-    void checkPreClassJoins_doesNotSendUnmatchedGuestsNotificationWhenAllInviteesKnown() throws Exception {
+    void checkPreClassJoins_doesNotNotifyUnmatchedGuestsWhenAllInviteesKnown() throws Exception {
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of());
         when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
 
         sessionHandler.checkPreClassJoins(event);
 
-        verify(notificationService, never()).sendUnmatchedGuestsNotification(any(), any());
+        verify(notificationService, never()).notify(eq(NotificationType.UNMATCHED_GUESTS), any(), any());
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    void pollingTick_sendsUnmatchedGuestsNotificationEachTickForUnknownInvitee() throws Exception {
+    void pollingTick_notifiesUnmatchedGuestsEachTickForUnknownInvitee() throws Exception {
         CalendarEvent eventWithUnknown = new CalendarEvent("evt-u", "Math Class",
                 "https://meet.google.com/abc-def", "abc-def",
                 LocalDateTime.now(), LocalDateTime.now().plusHours(1),
@@ -629,8 +632,11 @@ class MeetSessionHandlerTest {
         runnableCaptor.getValue().run();
         runnableCaptor.getValue().run();
 
-        // Fired twice (once per tick) — no dedup
-        verify(notificationService, times(2)).sendUnmatchedGuestsNotification(List.of("unknown@meet.com"), eventWithUnknown);
+        // Fired twice (once per tick) - no dedup
+        verify(notificationService, times(2)).notify(
+                NotificationType.UNMATCHED_GUESTS,
+                eventWithUnknown,
+                new GuestRecipient(List.of("unknown@meet.com")));
     }
 
     // --- ALL_PRESENT calls cancelPollingFor (removes registry entry) ---

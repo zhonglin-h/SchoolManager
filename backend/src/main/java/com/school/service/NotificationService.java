@@ -65,11 +65,12 @@ public class NotificationService {
 
         // --- Email path ---
         if (type.shouldSendEmail()) {
-            boolean emailAlreadySent = dedupCheck(recipient, event, type, NotificationChannel.EMAIL);
+            boolean emailAlreadySent = shouldDedup(type)
+                    && dedupCheck(recipient, event, type, NotificationChannel.EMAIL);
 
             if (!emailAlreadySent) {
                 String subject = type.subject(event, recipient);
-                String body = type.body(event, recipient);
+                String body = resolveBody(type, event, recipient);
                 String failureReason = null;
                 List<String> recipients = new ArrayList<>();
 
@@ -113,10 +114,11 @@ public class NotificationService {
 
         // --- Telegram path ---
         if (type.toPrincipalViaTelegram) {
-            boolean telegramAlreadySent = dedupCheck(recipient, event, type, NotificationChannel.TELEGRAM);
+            boolean telegramAlreadySent = shouldDedup(type)
+                    && dedupCheck(recipient, event, type, NotificationChannel.TELEGRAM);
 
             if (!telegramAlreadySent) {
-                String body = type.body(event, recipient);
+                String body = resolveBody(type, event, recipient);
                 String failureReason = null;
 
                 try {
@@ -144,57 +146,16 @@ public class NotificationService {
         }
     }
 
-    /**
-     * Sends an unmatched-guests notification (email + Telegram) to the principal for every
-     * invitee email that has no matching student or teacher record in the database.
-     * No deduplication is applied — fires on every polling trigger until the issue is resolved.
-     */
-    @Transactional
-    public void sendUnmatchedGuestsNotification(List<String> unmatchedInvitees, CalendarEvent event) {
-        if (!notificationsEnabled) return;
+    private boolean shouldDedup(NotificationType type) {
+        return type != NotificationType.UNMATCHED_GUESTS;
+    }
 
-        String body = "Invited but not found in system: " + String.join(", ", unmatchedInvitees);
-        String subject = NotificationType.UNMATCHED_GUESTS.subject(event, null);
-
-        // Email
-        String emailFailure = null;
-        try {
-            emailClient.send(principalEmail, subject, body);
-        } catch (Exception e) {
-            emailFailure = e.getMessage();
-            log.error("Failed to send UNMATCHED_GUESTS email to principal: {}", e.getMessage());
+    private String resolveBody(NotificationType type, CalendarEvent event, @Nullable Recipient recipient) {
+        if (type == NotificationType.UNMATCHED_GUESTS && recipient instanceof GuestRecipient guestRecipient) {
+            return "Invited but not found in system: "
+                    + String.join(", ", guestRecipient.unmatchedInvitees());
         }
-        notificationLogRepository.save(NotificationLog.builder()
-                .calendarEventId(event.getId())
-                .date(LocalDate.now())
-                .type(NotificationType.UNMATCHED_GUESTS.name())
-                .message(body)
-                .sentAt(LocalDateTime.now())
-                .channel(NotificationChannel.EMAIL)
-                .recipient(principalEmail)
-                .success(emailFailure == null)
-                .failureReason(emailFailure)
-                .build());
-
-        // Telegram
-        String telegramFailure = null;
-        try {
-            telegramClient.send(body);
-        } catch (Exception e) {
-            telegramFailure = e.getMessage();
-            log.error("Failed to send UNMATCHED_GUESTS Telegram notification: {}", e.getMessage());
-        }
-        notificationLogRepository.save(NotificationLog.builder()
-                .calendarEventId(event.getId())
-                .date(LocalDate.now())
-                .type(NotificationType.UNMATCHED_GUESTS.name())
-                .message(body)
-                .sentAt(LocalDateTime.now())
-                .channel(NotificationChannel.TELEGRAM)
-                .recipient(telegramChatId)
-                .success(telegramFailure == null)
-                .failureReason(telegramFailure)
-                .build());
+        return type.body(event, recipient);
     }
 
     private boolean dedupCheck(@Nullable Recipient recipient, CalendarEvent event,
@@ -214,4 +175,3 @@ public class NotificationService {
         }
     }
 }
-

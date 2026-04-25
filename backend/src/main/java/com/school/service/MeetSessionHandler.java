@@ -108,7 +108,10 @@ public class MeetSessionHandler {
             }
             List<String> unmatchedInvitees = attendanceHelper.findUnmatchedInvitees(event);
             if (!unmatchedInvitees.isEmpty()) {
-                notificationService.sendUnmatchedGuestsNotification(unmatchedInvitees, event);
+                notificationService.notify(
+                        NotificationType.UNMATCHED_GUESTS,
+                        event,
+                        new GuestRecipient(unmatchedInvitees));
             }
         } catch (Exception e) {
             log.warn("Failed pre-class join check for {}: {}", event.getId(), e.getMessage());
@@ -226,7 +229,10 @@ public class MeetSessionHandler {
 
                 List<String> unmatchedInvitees = attendanceHelper.findUnmatchedInvitees(event);
                 if (!unmatchedInvitees.isEmpty()) {
-                    notificationService.sendUnmatchedGuestsNotification(unmatchedInvitees, event);
+                    notificationService.notify(
+                            NotificationType.UNMATCHED_GUESTS,
+                            event,
+                            new GuestRecipient(unmatchedInvitees));
                 }
 
                 if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {
