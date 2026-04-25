@@ -47,7 +47,7 @@ public class MeetAttendanceMonitor {
     private final Map<String, List<ScheduledFuture<?>>> oneTimeFutures = new ConcurrentHashMap<>();
     private final Map<String, Instant> lastScheduledStartTime = new ConcurrentHashMap<>();
 
-    /** @deprecated Use {@link ScheduledCheck} directly. Kept for API compatibility with {@link com.school.controller.CalendarController}. */
+    /** @deprecated Use {@link com.school.service.ScheduledCheck} directly. Kept for API compatibility with {@link com.school.controller.CalendarController}. */
     public record ScheduledCheck(String eventId, String eventTitle, String checkType, Instant scheduledAt) {}
 
     public MeetAttendanceMonitor(CalendarSyncService calendarSyncService,

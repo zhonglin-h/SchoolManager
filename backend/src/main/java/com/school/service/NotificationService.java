@@ -153,11 +153,7 @@ public class NotificationService {
     public void sendUnmatchedGuestsNotification(List<String> unmatchedInvitees, CalendarEvent event) {
         if (!notificationsEnabled) return;
 
-        StringBuilder sb = new StringBuilder();
-        if (!unmatchedInvitees.isEmpty()) {
-            sb.append("Invited but not found in system: ").append(String.join(", ", unmatchedInvitees));
-        }
-        String body = sb.toString();
+        String body = "Invited but not found in system: " + String.join(", ", unmatchedInvitees);
         String subject = NotificationType.UNMATCHED_GUESTS.subject(event, null);
 
         // Email
