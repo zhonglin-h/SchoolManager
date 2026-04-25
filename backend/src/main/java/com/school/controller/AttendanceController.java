@@ -125,6 +125,10 @@ public class AttendanceController {
                         }
                         entries.add(new AttendanceSummaryResponse.AttendanceEntry(
                                 person.getId(), person.getPersonType(), person.getName(), email, status, true, inMeetNow));
+                    } else {
+                        // Keep unregistered invitees visible in the dashboard so they can be quick-added.
+                        entries.add(new AttendanceSummaryResponse.AttendanceEntry(
+                                null, null, email, email, null, false, false));
                     }
                 }
             }
