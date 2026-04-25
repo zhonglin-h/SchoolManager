@@ -7,3 +7,4 @@
 
 NEW FEATURES
 - [ ] principal can ask the bot to give her the currently missing students. 
+- [ ] use Pub/Sub topic + subscription + Google Cloud project 
