@@ -205,7 +205,7 @@ public class MeetSessionHandler {
     private void schedulePollingLoop(CalendarEvent event, ExpectedParticipants expected,
             Set<Long> seenStudentIds, Set<Long> seenTeacherIds,
             Instant lateThreshold, AtomicBoolean meetingActive) {
-        int totalExpected = event.getAttendeeEmails().size();
+        int totalExpected = event.getAttendeeEmails().size() - 1; // subtract 1 for the principal
         AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
 
         futureRef.set(taskScheduler.scheduleAtFixedRate(() -> {

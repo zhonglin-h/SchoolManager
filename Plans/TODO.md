@@ -1,4 +1,5 @@
 - [X] deeper analysis on AttendanceMonitor
+- [ ] the missing invitee one does not ignore the principal
 - [ ] implementation does NOT follow the idea that the unmatched invitee messages have to include also the participants that aren't matched yet
 - [ ] refactor the student/teacher split in MeetAttendanceHelper. Simplify
 - [ ] separate the refresh. Clicking refresh button should refresh everything. Otherwise, only thing that needs to be refreshed is the meet participants, current meeting status. No need to rebuild all checks again.
