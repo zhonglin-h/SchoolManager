@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
@@ -96,16 +97,15 @@ public class MeetSessionHandler {
             List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
             ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
             ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
-            for (Person student : expected.students()) {
-                if (!resolved.studentIds().contains(student.getId())) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentSubject(student));
+            forEachExpectedPerson(expected, (person, personType) -> {
+                Set<Long> resolvedIds = personType == PersonType.STUDENT ? resolved.studentIds() : resolved.teacherIds();
+                NotificationSubject subject = personType == PersonType.STUDENT
+                        ? new StudentSubject(person)
+                        : new TeacherSubject(person);
+                if (!resolvedIds.contains(person.getId())) {
+                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, subject);
                 }
-            }
-            for (Person teacher : expected.teachers()) {
-                if (!resolved.teacherIds().contains(teacher.getId())) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, new TeacherSubject(teacher));
-                }
-            }
+            });
             processUnmatchedGuests(event, expected, participants);
         } catch (Exception e) {
             log.warn("Failed pre-class join check for {}: {}", event.getId(), e.getMessage());
@@ -267,16 +267,15 @@ public class MeetSessionHandler {
 
     private void notifyMissing(CalendarEvent event, ExpectedParticipants expected,
                                Set<Long> seenStudentIds, Set<Long> seenTeacherIds) {
-        for (Person student : expected.students()) {
-            if (!seenStudentIds.contains(student.getId())) {
-                notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentSubject(student));
+        forEachExpectedPerson(expected, (person, personType) -> {
+            Set<Long> seenIds = personType == PersonType.STUDENT ? seenStudentIds : seenTeacherIds;
+            NotificationSubject subject = personType == PersonType.STUDENT
+                    ? new StudentSubject(person)
+                    : new TeacherSubject(person);
+            if (!seenIds.contains(person.getId())) {
+                notificationService.notify(NotificationType.NOT_YET_JOINED, event, subject);
             }
-        }
-        for (Person teacher : expected.teachers()) {
-            if (!seenTeacherIds.contains(teacher.getId())) {
-                notificationService.notify(NotificationType.NOT_YET_JOINED, event, new TeacherSubject(teacher));
-            }
-        }
+        });
     }
 
     /** Fires a MEETING_NOT_STARTED_15 notification without a specific recipient (broadcast). */
@@ -293,6 +292,7 @@ public class MeetSessionHandler {
         cancelPollingFor(event.getId());
 
         Instant classStart = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant();
+        Instant lateThreshold = classStart.plusSeconds(lateBufferMinutes * 60L);
         LocalDate today = LocalDate.now();
 
         // Build a join-time map from the full participant history (including those who left)
@@ -311,41 +311,37 @@ public class MeetSessionHandler {
 
         ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
 
-        for (Person student : expected.students()) {
+        forEachExpectedPerson(expected, (person, personType) -> {
+            NotificationSubject subject = personType == PersonType.STUDENT
+                    ? new StudentSubject(person)
+                    : new TeacherSubject(person);
             Optional<Attendance> existing = attendanceRepository
-                    .findByPersonIdAndCalendarEventIdAndDate(student.getId(), event.getId(), today);
-            if (existing.isEmpty()) {
-                Instant joinTime = attendanceHelper.resolveJoinTime(student.getGoogleUserId(), student.getMeetDisplayName(),
-                        student.getName(), joinTimeByUserId, joinTimeByDisplayName);
-                if (joinTime == null) {
-                    attendanceHelper.recordAttendance(student, event, AttendanceStatus.ABSENT);
-                    notificationService.notify(NotificationType.ABSENT, event, new StudentSubject(student));
-                } else if (joinTime.isAfter(classStart.plusSeconds(lateBufferMinutes * 60L))) {
-                    attendanceHelper.recordAttendance(student, event, AttendanceStatus.LATE);
-                    notificationService.notify(NotificationType.LATE, event, new StudentSubject(student));
-                } else {
-                    attendanceHelper.recordAttendance(student, event, AttendanceStatus.PRESENT);
-                    notificationService.notify(NotificationType.ARRIVAL, event, new StudentSubject(student));
-                }
+                    .findByPersonIdAndCalendarEventIdAndDate(person.getId(), event.getId(), today);
+            if (existing.isPresent()) {
+                return;
             }
+
+            Instant joinTime = attendanceHelper.resolveJoinTime(person.getGoogleUserId(), person.getMeetDisplayName(),
+                    person.getName(), joinTimeByUserId, joinTimeByDisplayName);
+            if (joinTime == null) {
+                attendanceHelper.recordAttendance(person, event, AttendanceStatus.ABSENT);
+                notificationService.notify(NotificationType.ABSENT, event, subject);
+            } else if (joinTime.isAfter(lateThreshold)) {
+                attendanceHelper.recordAttendance(person, event, AttendanceStatus.LATE);
+                notificationService.notify(NotificationType.LATE, event, subject);
+            } else {
+                attendanceHelper.recordAttendance(person, event, AttendanceStatus.PRESENT);
+                notificationService.notify(NotificationType.ARRIVAL, event, subject);
+            }
+        });
+    }
+
+    private void forEachExpectedPerson(ExpectedParticipants expected, BiConsumer<Person, PersonType> consumer) {
+        for (Person student : expected.students()) {
+            consumer.accept(student, PersonType.STUDENT);
         }
         for (Person teacher : expected.teachers()) {
-            Optional<Attendance> existing = attendanceRepository
-                    .findByPersonIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), today);
-            if (existing.isEmpty()) {
-                Instant joinTime = attendanceHelper.resolveJoinTime(teacher.getGoogleUserId(), teacher.getMeetDisplayName(),
-                        teacher.getName(), joinTimeByUserId, joinTimeByDisplayName);
-                if (joinTime == null) {
-                    attendanceHelper.recordAttendance(teacher, event, AttendanceStatus.ABSENT);
-                    notificationService.notify(NotificationType.TEACHER_ABSENT, event, new TeacherSubject(teacher));
-                } else if (joinTime.isAfter(classStart.plusSeconds(lateBufferMinutes * 60L))) {
-                    attendanceHelper.recordAttendance(teacher, event, AttendanceStatus.LATE);
-                    notificationService.notify(NotificationType.TEACHER_LATE, event, new TeacherSubject(teacher));
-                } else {
-                    attendanceHelper.recordAttendance(teacher, event, AttendanceStatus.PRESENT);
-                    notificationService.notify(NotificationType.TEACHER_ARRIVED, event, new TeacherSubject(teacher));
-                }
-            }
+            consumer.accept(teacher, PersonType.TEACHER);
         }
     }
 

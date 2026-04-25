@@ -71,7 +71,7 @@ public class NotificationService {
                 : null;
 
         // --- Email path ---
-        if (emailNotificationsEnabled && type.shouldSendEmail()) {
+        if (emailNotificationsEnabled && type.shouldSendEmail(subject)) {
             boolean emailAlreadySent = shouldDedup(type)
                     && dedupCheck(subject, event, type, NotificationChannel.EMAIL);
 
@@ -90,7 +90,7 @@ public class NotificationService {
                         log.error("Failed to send {} email to principal: {}", type.name(), e.getMessage());
                     }
                 }
-                if (type.toParentViaEmail && person != null
+                if (type.shouldSendParentEmail(subject) && person != null
                         && person.getParentEmail() != null && !person.getParentEmail().isBlank()) {
                     recipients.add(person.getParentEmail());
                     try {

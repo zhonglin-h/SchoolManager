@@ -114,7 +114,7 @@ class MeetSessionHandlerTest {
         assertThat(captor.getAllValues()).extracting(a -> a.getPerson().getPersonType())
                 .containsExactlyInAnyOrder(PersonType.STUDENT, PersonType.TEACHER);
         verify(notificationService).notify(NotificationType.ABSENT, event, new StudentSubject(student));
-        verify(notificationService).notify(NotificationType.TEACHER_ABSENT, event, new TeacherSubject(teacher));
+        verify(notificationService).notify(NotificationType.ABSENT, event, new TeacherSubject(teacher));
     }
 
     @Test

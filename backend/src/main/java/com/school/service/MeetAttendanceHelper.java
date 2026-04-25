@@ -58,8 +58,7 @@ class MeetAttendanceHelper {
                 seenTeacherIds.add(teacher.getId());
                 AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 recordAttendance(teacher, event, status);
-                NotificationType teacherType = isLate ? NotificationType.TEACHER_LATE : NotificationType.TEACHER_ARRIVED;
-                notificationService.notify(teacherType, event, new TeacherSubject(teacher));
+                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL, event, new TeacherSubject(teacher));
             }
         }
     }

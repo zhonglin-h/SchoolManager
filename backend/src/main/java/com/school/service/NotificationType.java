@@ -13,44 +13,29 @@ public enum NotificationType {
             true, true, false
     ),
     NOT_YET_JOINED(
-            (e, r) -> "Person Not Yet Joined: " + r.getName(),
+            (e, r) -> roleLabel(r) + " Not Yet Joined: " + r.getName(),
             (e, r) -> r.getName() + " has not yet joined the Meet session for \"" + e.getTitle() + "\".",
             true, true, true
     ),
     ARRIVAL(
-            (e, r) -> "Student Arrived: " + r.getName(),
+            (e, r) -> roleLabel(r) + " Arrived: " + r.getName(),
             (e, r) -> r.getName() + " has joined the Meet session for \"" + e.getTitle() + "\".",
             false, true, false
     ),
     ALL_PRESENT(
             (e, r) -> "All People Present: " + e.getTitle(),
-            (e, r) -> "✅ All expected people have joined the Meet session for \"" + e.getTitle() + "\".",
+            (e, r) -> "All expected people have joined the Meet session for \"" + e.getTitle() + "\".",
             false, true, false
     ),
     LATE(
-            (e, r) -> "Student Late: " + r.getName(),
+            (e, r) -> roleLabel(r) + " Late: " + r.getName(),
             (e, r) -> r.getName() + " joined the Meet session late for \"" + e.getTitle() + "\".",
             false, true, true
     ),
     ABSENT(
-            (e, r) -> "Student Absent: " + r.getName(),
+            (e, r) -> roleLabel(r) + " Absent: " + r.getName(),
             (e, r) -> r.getName() + " was absent from the Meet session for \"" + e.getTitle() + "\".",
             false, true, true
-    ),
-    TEACHER_ARRIVED(
-            (e, r) -> "Teacher Arrived: " + r.getName(),
-            (e, r) -> r.getName() + " has joined the Meet session for \"" + e.getTitle() + "\".",
-            false, true, false
-    ),
-    TEACHER_LATE(
-            (e, r) -> "Teacher Late: " + r.getName(),
-            (e, r) -> r.getName() + " joined the Meet session late for \"" + e.getTitle() + "\".",
-            false, true, false
-    ),
-    TEACHER_ABSENT(
-            (e, r) -> "Teacher Absent: " + r.getName(),
-            (e, r) -> r.getName() + " was absent from the Meet session for \"" + e.getTitle() + "\".",
-            false, true, false
     ),
     UNMATCHED_GUESTS(
             (e, r) -> "Unknown People in Session: " + e.getTitle(),
@@ -80,11 +65,29 @@ public enum NotificationType {
         return toPrincipalViaEmail || toParentViaEmail;
     }
 
+    public boolean shouldSendEmail(NotificationSubject subject) {
+        return toPrincipalViaEmail || shouldSendParentEmail(subject);
+    }
+
+    public boolean shouldSendParentEmail(NotificationSubject subject) {
+        return toParentViaEmail && subject instanceof StudentSubject;
+    }
+
     public String subject(CalendarEvent event, NotificationSubject subject) {
         return subjectFn.apply(event, subject);
     }
 
     public String body(CalendarEvent event, NotificationSubject subject) {
         return bodyFn.apply(event, subject);
+    }
+
+    private static String roleLabel(NotificationSubject subject) {
+        if (subject instanceof TeacherSubject) {
+            return "Teacher";
+        }
+        if (subject instanceof StudentSubject) {
+            return "Student";
+        }
+        return "Person";
     }
 }
