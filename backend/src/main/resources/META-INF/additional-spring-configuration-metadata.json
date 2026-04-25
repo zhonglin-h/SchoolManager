@@ -13,6 +13,12 @@
     {
       "name": "app.notifications.enabled",
       "type": "java.lang.Boolean",
+      "description": "Whether automated notifications are enabled for all channels.",
+      "defaultValue": true
+    },
+    {
+      "name": "app.notifications.email.enabled",
+      "type": "java.lang.Boolean",
       "description": "Whether automated email notifications are enabled.",
       "defaultValue": true
     },

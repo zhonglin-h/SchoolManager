@@ -21,7 +21,8 @@ public class SettingsController {
     @GetMapping
     public ResponseEntity<Map<String, Object>> get() {
         return ResponseEntity.ok(Map.of(
-                "notificationsEnabled", notificationService.isNotificationsEnabled()
+                "notificationsEnabled", notificationService.isNotificationsEnabled(),
+                "emailNotificationsEnabled", notificationService.isEmailNotificationsEnabled()
         ));
     }
 }

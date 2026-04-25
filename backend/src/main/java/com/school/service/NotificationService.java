@@ -30,6 +30,7 @@ public class NotificationService {
 
     private final String principalEmail;
     private final boolean notificationsEnabled;
+    private final boolean emailNotificationsEnabled;
     private final String telegramChatId;
 
     public NotificationService(NotificationLogRepository notificationLogRepository,
@@ -37,17 +38,23 @@ public class NotificationService {
                                TelegramClient telegramClient,
                                @Value("${app.principal.email}") String principalEmail,
                                @Value("${app.notifications.enabled:true}") boolean notificationsEnabled,
+                               @Value("${app.notifications.email.enabled:true}") boolean emailNotificationsEnabled,
                                @Value("${telegram.chat-id}") String telegramChatId) {
         this.notificationLogRepository = notificationLogRepository;
         this.emailClient = emailClient;
         this.telegramClient = telegramClient;
         this.principalEmail = principalEmail;
         this.notificationsEnabled = notificationsEnabled;
+        this.emailNotificationsEnabled = emailNotificationsEnabled;
         this.telegramChatId = telegramChatId;
     }
 
     public boolean isNotificationsEnabled() {
         return notificationsEnabled;
+    }
+
+    public boolean isEmailNotificationsEnabled() {
+        return emailNotificationsEnabled;
     }
 
     @Transactional
@@ -64,7 +71,7 @@ public class NotificationService {
         Teacher teacher = recipient instanceof TeacherRecipient tr ? tr.teacher() : null;
 
         // --- Email path ---
-        if (type.shouldSendEmail()) {
+        if (emailNotificationsEnabled && type.shouldSendEmail()) {
             boolean emailAlreadySent = shouldDedup(type)
                     && dedupCheck(recipient, event, type, NotificationChannel.EMAIL);
 
