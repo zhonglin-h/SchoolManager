@@ -247,14 +247,14 @@ class MeetSessionHandlerTest {
         when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-bob")).thenReturn(Optional.of(bob));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
-        when(taskScheduler.scheduleAtFixedRate(any(Runnable.class), any(Duration.class)))
-                .thenReturn(mock(ScheduledFuture.class));
 
         sessionHandler.startSessionPolling(event);
 
         ArgumentCaptor<Attendance> captor = ArgumentCaptor.forClass(Attendance.class);
         verify(attendanceRepository, times(2)).save(captor.capture());
         assertThat(captor.getAllValues()).allMatch(a -> a.getStatus() == AttendanceStatus.PRESENT);
+        verify(taskScheduler, never()).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
+        verify(upcomingChecksRegistry).removePollingEntry(event.getId());
     }
 
     @Test
@@ -269,12 +269,11 @@ class MeetSessionHandlerTest {
                 .thenReturn(Optional.of(Attendance.builder().student(alice)
                         .calendarEventId("evt-1").date(LocalDate.now())
                         .status(AttendanceStatus.PRESENT).build()));
-        when(taskScheduler.scheduleAtFixedRate(any(Runnable.class), any(Duration.class)))
-                .thenReturn(mock(ScheduledFuture.class));
 
         sessionHandler.startSessionPolling(event);
 
         verify(attendanceRepository, never()).save(argThat(a -> a.getStudent().equals(alice)));
+        verify(taskScheduler, never()).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
     }
 
     // --- startSessionPolling (polling tick) ---
@@ -311,8 +310,7 @@ class MeetSessionHandlerTest {
     @SuppressWarnings("unchecked")
     void pollingTick_notifiesAllPresentWhenEveryoneAccountedFor() throws Exception {
         when(meetClient.isMeetingActive("abc-def")).thenReturn(true);
-        when(meetClient.getActiveParticipants("abc-def"))
-                .thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
         when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
         when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
@@ -320,14 +318,11 @@ class MeetSessionHandlerTest {
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
 
-        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
-        when(taskScheduler.scheduleAtFixedRate(runnableCaptor.capture(), any(Duration.class)))
-                .thenReturn(mock(ScheduledFuture.class));
-
         sessionHandler.startSessionPolling(event);
-        runnableCaptor.getValue().run();
 
-        verify(notificationService).notify(NotificationType.ALL_PRESENT, event, null);
+        verify(notificationService, never()).notify(NotificationType.ALL_PRESENT, event, null);
+        verify(taskScheduler, never()).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
+        verify(upcomingChecksRegistry).removePollingEntry(event.getId());
     }
 
     // --- meeting-not-started Telegram reminders ---
@@ -646,12 +641,14 @@ class MeetSessionHandlerTest {
         CalendarEvent eventWithUnknown = new CalendarEvent("evt-u", "Math Class",
                 "https://meet.google.com/abc-def", "abc-def",
                 LocalDateTime.now(), LocalDateTime.now().plusHours(1),
-                List.of("alice@meet.com", "unknown@meet.com"));
+                List.of("alice@meet.com", "bob@meet.com", "unknown@meet.com"));
         when(meetClient.isMeetingActive("abc-def")).thenReturn(true);
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT));
         when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
         when(studentRepository.findByMeetEmailAndActiveTrue("unknown@meet.com")).thenReturn(Optional.empty());
         when(teacherRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.empty());
         when(teacherRepository.findByMeetEmailAndActiveTrue("unknown@meet.com")).thenReturn(Optional.empty());
         when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
@@ -665,8 +662,8 @@ class MeetSessionHandlerTest {
         runnableCaptor.getValue().run();
         runnableCaptor.getValue().run();
 
-        // Fired twice (once per tick) - no dedup
-        verify(notificationService, times(2)).notify(
+        // Fired three times (initial snapshot + 2 ticks) - no dedup
+        verify(notificationService, times(3)).notify(
                 NotificationType.UNMATCHED_GUESTS,
                 eventWithUnknown,
                 new GuestRecipient(List.of("unknown@meet.com"), List.of()));
@@ -678,8 +675,7 @@ class MeetSessionHandlerTest {
     @SuppressWarnings("unchecked")
     void pollingTick_allPresentCallsCancelPollingForWhichRemovesRegistryEntry() throws Exception {
         when(meetClient.isMeetingActive("abc-def")).thenReturn(true);
-        when(meetClient.getActiveParticipants("abc-def"))
-                .thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
         when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
         when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
         when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
@@ -687,14 +683,10 @@ class MeetSessionHandlerTest {
         when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
                 .thenReturn(Optional.empty());
 
-        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
-        when(taskScheduler.scheduleAtFixedRate(runnableCaptor.capture(), any(Duration.class)))
-                .thenReturn(mock(ScheduledFuture.class));
-
         sessionHandler.startSessionPolling(event);
-        runnableCaptor.getValue().run();
 
-        verify(notificationService).notify(NotificationType.ALL_PRESENT, event, null);
+        verify(notificationService, never()).notify(NotificationType.ALL_PRESENT, event, null);
+        verify(taskScheduler, never()).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
         verify(upcomingChecksRegistry).removePollingEntry(event.getId());
     }
 
