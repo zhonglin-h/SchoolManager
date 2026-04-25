@@ -10,7 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAttendanceRecords, upsertAttendance } from '../services/api'
 import type { AttendanceRecord } from '../services/api'
 
-type PersonTypeFilter = 'STUDENT' | 'TEACHER'
+type PersonTypeFilter = 'ALL' | 'STUDENT' | 'TEACHER'
 type AttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT'
 type DatePreset = 'today' | 'week' | 'custom' | 'all'
 
@@ -65,7 +65,7 @@ export default function AttendanceRecords() {
   const queryClient = useQueryClient()
 
   // ── Filter state ──────────────────────────────────────────────────────────
-  const [personTypeFilter, setPersonTypeFilter] = useState<PersonTypeFilter>('STUDENT')
+  const [personTypeFilter, setPersonTypeFilter] = useState<PersonTypeFilter>('ALL')
   const [datePreset, setDatePreset] = useState<DatePreset>('week')
   const [customFrom, setCustomFrom] = useState<string>(daysAgo(30))
   const [customTo, setCustomTo] = useState<string>(today())
@@ -90,7 +90,13 @@ export default function AttendanceRecords() {
 
   const { data = [], isLoading, isError } = useQuery({
     queryKey: ['attendance', 'records', personTypeFilter, dateFrom, dateTo, statusArray],
-    queryFn: () => getAttendanceRecords(personTypeFilter, undefined, dateFrom, dateTo, statusArray.length > 0 ? statusArray : undefined),
+    queryFn: () => getAttendanceRecords(
+      personTypeFilter === 'ALL' ? undefined : personTypeFilter,
+      undefined,
+      dateFrom,
+      dateTo,
+      statusArray.length > 0 ? statusArray : undefined,
+    ),
   })
 
   // Client-side name filter
@@ -222,7 +228,7 @@ export default function AttendanceRecords() {
         <div>
           <p className="text-xs font-medium text-gray-500 mb-1">Show</p>
           <div className="flex items-center gap-1">
-            {(['STUDENT', 'TEACHER'] as PersonTypeFilter[]).map((opt) => (
+            {(['ALL', 'STUDENT', 'TEACHER'] as PersonTypeFilter[]).map((opt) => (
               <button
                 key={opt}
                 onClick={() => setPersonTypeFilter(opt)}
@@ -232,7 +238,7 @@ export default function AttendanceRecords() {
                     : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
                 }`}
               >
-                {opt === 'STUDENT' ? 'Students' : 'Teachers'}
+                {opt === 'ALL' ? 'All people' : opt === 'STUDENT' ? 'Students' : 'Teachers'}
               </button>
             ))}
           </div>

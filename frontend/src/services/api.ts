@@ -218,7 +218,7 @@ export async function upsertAttendance(
 }
 
 export async function getAttendanceRecords(
-  personType: 'STUDENT' | 'TEACHER',
+  personType?: 'STUDENT' | 'TEACHER',
   personId?: number,
   dateFrom?: string,
   dateTo?: string,
@@ -226,7 +226,7 @@ export async function getAttendanceRecords(
 ): Promise<AttendanceRecord[]> {
   const { data } = await api.get<AttendanceRecord[]>('/attendance/records', {
     params: {
-      personType,
+      ...(personType ? { personType } : {}),
       ...(personId != null ? { personId } : {}),
       ...(dateFrom ? { dateFrom } : {}),
       ...(dateTo ? { dateTo } : {}),
