@@ -52,4 +52,9 @@ public class TeacherController {
         teacherService.softDelete(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{id}/enable")
+    public ResponseEntity<TeacherResponse> enable(@PathVariable Long id) {
+        return ResponseEntity.ok(teacherService.activate(id));
+    }
 }

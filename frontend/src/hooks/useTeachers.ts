@@ -4,6 +4,7 @@ import {
   createTeacher,
   updateTeacher,
   deleteTeacher,
+  enableTeacher,
   type TeacherRequest,
 } from '../services/api'
 
@@ -46,6 +47,16 @@ export function useDeleteTeacher() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => deleteTeacher(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teachers'] })
+    },
+  })
+}
+
+export function useEnableTeacher() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => enableTeacher(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teachers'] })
     },

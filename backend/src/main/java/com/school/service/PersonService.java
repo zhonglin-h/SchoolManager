@@ -82,6 +82,13 @@ public class PersonService {
         personRepository.save(person);
     }
 
+    public PersonResponse activate(Long id) {
+        Person person = personRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Person not found: " + id));
+        person.setActive(true);
+        return PersonResponse.from(personRepository.save(person));
+    }
+
     private void validateUniqueMeetEmailForCreate(String meetEmail) {
         if (meetEmail == null || meetEmail.isBlank()) return;
         if (personRepository.existsByMeetEmail(meetEmail)) {

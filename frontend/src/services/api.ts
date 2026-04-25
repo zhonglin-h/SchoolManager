@@ -187,6 +187,11 @@ export async function deleteTeacher(id: number): Promise<void> {
   await api.delete(`/teachers/${id}`)
 }
 
+export async function enableTeacher(id: number): Promise<TeacherResponse> {
+  const { data } = await api.post<TeacherResponse>(`/teachers/${id}/enable`)
+  return data
+}
+
 // ── Attendance ─────────────────────────────────────────────────────────────
 
 export async function getAttendanceToday(live = false): Promise<AttendanceSummaryResponse[]> {

@@ -46,6 +46,12 @@ public class TeacherService {
         personService.softDelete(id);
     }
 
+    public TeacherResponse activate(Long id) {
+        PersonResponse existing = personService.getById(id);
+        requireTeacherType(existing, id);
+        return toTeacherResponse(personService.activate(id));
+    }
+
     private static TeacherResponse toTeacherResponse(PersonResponse p) {
         return new TeacherResponse(
                 p.id(),

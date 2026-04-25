@@ -10,6 +10,7 @@ import {
   useCreateTeacher,
   useUpdateTeacher,
   useDeleteTeacher,
+  useEnableTeacher,
 } from '../hooks/useTeachers'
 import type { TeacherResponse, TeacherRequest } from '../services/api'
 
@@ -27,6 +28,7 @@ export default function Teachers() {
   const createTeacher = useCreateTeacher()
   const updateTeacher = useUpdateTeacher()
   const deleteTeacher = useDeleteTeacher()
+  const enableTeacher = useEnableTeacher()
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<TeacherRequest>(EMPTY_FORM)
@@ -77,9 +79,15 @@ export default function Teachers() {
     }
   }
 
-  function handleDelete(id: number) {
+  function handleDisable(id: number) {
     if (window.confirm('Deactivate this teacher?')) {
       deleteTeacher.mutate(id)
+    }
+  }
+
+  function handleEnable(id: number) {
+    if (window.confirm('Enable this teacher?')) {
+      enableTeacher.mutate(id)
     }
   }
 
@@ -107,12 +115,19 @@ export default function Teachers() {
             >
               Edit
             </button>
-            {row.original.active && (
+            {row.original.active ? (
               <button
-                onClick={() => handleDelete(row.original.id)}
+                onClick={() => handleDisable(row.original.id)}
                 className="text-sm text-red-500 hover:underline"
               >
-                Delete
+                Disable
+              </button>
+            ) : (
+              <button
+                onClick={() => handleEnable(row.original.id)}
+                className="text-sm text-green-600 hover:underline"
+              >
+                Enable
               </button>
             )}
           </div>
