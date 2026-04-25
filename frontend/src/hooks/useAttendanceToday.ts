@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { getAttendanceToday, syncCalendar } from '../services/api'
 import type { AttendanceSummaryResponse, GuestEntry } from '../services/api'
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 interface LiveEventData {
   meetingActive: boolean | null
@@ -52,9 +52,12 @@ function mergeWithLive(
 }
 
 const LIVE_QUERY_KEY = ['attendance', 'today', 'live']
+const LIVE_REFRESH_MS = 60_000
+const CALENDAR_SYNC_MS = 4 * 60 * 60 * 1000
 
 export function useAttendanceToday() {
   const queryClient = useQueryClient()
+  const isCalendarSyncInFlight = useRef(false)
 
   const query = useQuery({
     queryKey: ['attendance', 'today'],
@@ -71,7 +74,7 @@ export function useAttendanceToday() {
       const result = await getAttendanceToday(true)
       return extractLive(result)
     },
-    refetchInterval: 60000,
+    refetchInterval: LIVE_REFRESH_MS,
     placeholderData: keepPreviousData,
     enabled: query.isSuccess,
   })
@@ -80,6 +83,8 @@ export function useAttendanceToday() {
     () => (query.data ? mergeWithLive(query.data, liveQuery.data ?? {}) : query.data),
     [query.data, liveQuery.data]
   )
+  const refetchAttendance = query.refetch
+  const refetchLive = liveQuery.refetch
 
   function patchLiveGuest(
     calendarEventId: string,
@@ -106,17 +111,36 @@ export function useAttendanceToday() {
       }
     })
     // Pull the newly registered person into the students list
-    query.refetch()
+    refetchAttendance()
   }
+
+  const refreshFromCalendar = useCallback(async () => {
+    if (isCalendarSyncInFlight.current) return
+    isCalendarSyncInFlight.current = true
+    try {
+      await syncCalendar()
+      await Promise.all([
+        refetchAttendance(),
+        refetchLive(),
+        queryClient.invalidateQueries({ queryKey: ['scheduledChecks'] }),
+      ])
+    } finally {
+      isCalendarSyncInFlight.current = false
+    }
+  }, [queryClient, refetchAttendance, refetchLive])
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void refreshFromCalendar()
+    }, CALENDAR_SYNC_MS)
+    return () => window.clearInterval(id)
+  }, [refreshFromCalendar])
 
   return {
     ...query,
     data,
     isLiveRefreshing: liveQuery.isFetching,
-    refreshLive: async () => {
-      await syncCalendar()
-      return liveQuery.refetch()
-    },
+    refreshLive: refreshFromCalendar,
     patchLiveGuest,
   }
 }

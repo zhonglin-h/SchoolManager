@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAttendanceToday } from '../hooks/useAttendanceToday'
 import { useScheduledChecks } from '../hooks/useScheduledChecks'
 import QuickAddModal from '../components/QuickAddModal'
@@ -11,8 +11,8 @@ const CHECK_TYPE_LABELS: Record<string, string> = {
   SESSION_FINALIZE: 'Session finalize',
 }
 
-function formatRelativeTime(scheduledAt: string): string {
-  const diff = Math.floor((new Date(scheduledAt).getTime() - Date.now()) / 1000)
+function formatRelativeTime(scheduledAt: string, nowMs: number): string {
+  const diff = Math.floor((new Date(scheduledAt).getTime() - nowMs) / 1000)
   if (diff <= 0) return 'now'
   const h = Math.floor(diff / 3600)
   const m = Math.floor((diff % 3600) / 60)
@@ -187,6 +187,12 @@ export default function Dashboard() {
   const { data, isLoading, isFetching, isLiveRefreshing, refreshLive, patchLiveGuest, isError } = useAttendanceToday()
   const { data: checksData } = useScheduledChecks()
   const checks = checksData?.checks ?? []
+  const [nowMs, setNowMs] = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
 
   return (
     <div>
@@ -248,7 +254,7 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <span className="text-gray-400 text-xs tabular-nums">
-                  {formatRelativeTime(check.scheduledAt)}
+                  {formatRelativeTime(check.scheduledAt, nowMs)}
                 </span>
               </div>
             ))}

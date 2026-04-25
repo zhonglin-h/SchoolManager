@@ -5,6 +5,6 @@ export function useScheduledChecks() {
   return useQuery<ScheduledChecksResponse>({
     queryKey: ['scheduledChecks'],
     queryFn: getScheduledChecks,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
 }

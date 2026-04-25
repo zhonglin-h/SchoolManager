@@ -6,7 +6,7 @@ export default function Notifications() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Notifications</h1>
-      <p className="text-xs text-gray-400 mb-4">Auto-refreshes every 30 seconds.</p>
+      <p className="text-xs text-gray-400 mb-4">Auto-refreshes every 3 minutes.</p>
 
       {isLoading && <p className="text-gray-500">Loading notifications…</p>}
       {isError && <p className="text-red-500">Failed to load notifications.</p>}
