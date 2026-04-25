@@ -6,6 +6,13 @@
 - [X] in NotificationService, it marks the people the notifications are about as recipients, when they are the subjects.
 
 NEW FEATURES
+- [ ] package into manner than can be more portable
+- [ ] create versioning and backups for database (online?)
+- [ ] open meeting automatically
+- [ ] edit msg for guest but not matched
+- [ ] monitor how long teacher stayed there - when teacher leaves (also when arrived)
+- [ ] support multiple email for people
+
 - [ ] use telegram bot to create a new student record from an email + the name of the attendee. 
 - [ ] add button in edith Person to reset the autolearned google id in case it's learned wrong.
 - [ ] principal can ask the bot to give her the currently missing students. 
