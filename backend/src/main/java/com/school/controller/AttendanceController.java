@@ -448,7 +448,7 @@ public class AttendanceController {
     /**
      * Returns attendance records with optional filters.
      *
-     * @param personType ALL (default), STUDENT, or TEACHER
+     * @param personType optional — STUDENT or TEACHER; omit (or leave null) to return all person types
      * @param personId   optional — if provided, only records for this person are returned
      * @param dateFrom   optional — only records on or after this date (ISO date, e.g. 2024-01-01)
      * @param dateTo     optional — only records on or before this date (ISO date, e.g. 2024-12-31)
@@ -456,7 +456,7 @@ public class AttendanceController {
      */
     @GetMapping("/records")
     public ResponseEntity<List<AttendanceRecordResponse>> getRecords(
-            @RequestParam(defaultValue = "ALL") String personType,
+            @RequestParam(required = false) PersonType personType,
             @RequestParam(required = false) Long personId,
             @RequestParam(required = false) LocalDate dateFrom,
             @RequestParam(required = false) LocalDate dateTo,
@@ -465,14 +465,14 @@ public class AttendanceController {
         List<Attendance> records;
 
         if (personId != null) {
-            if (PersonType.TEACHER.name().equals(personType)) {
+            if (PersonType.TEACHER == personType) {
                 records = attendanceRepository.findByTeacherIdOrderByDateDescIdDesc(personId);
             } else {
                 records = attendanceRepository.findByStudentIdOrderByDateDescIdDesc(personId);
             }
-        } else if (PersonType.STUDENT.name().equals(personType)) {
+        } else if (PersonType.STUDENT == personType) {
             records = attendanceRepository.findByStudentNotNullOrderByDateDescIdDesc();
-        } else if (PersonType.TEACHER.name().equals(personType)) {
+        } else if (PersonType.TEACHER == personType) {
             records = attendanceRepository.findByTeacherNotNullOrderByDateDescIdDesc();
         } else {
             records = attendanceRepository.findAllOrderByDateDescIdDesc();

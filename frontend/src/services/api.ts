@@ -219,7 +219,8 @@ export async function getAttendanceRecords(
 ): Promise<AttendanceRecord[]> {
   const { data } = await api.get<AttendanceRecord[]>('/attendance/records', {
     params: {
-      personType,
+      // Only send personType when it's a specific type; omit for ALL (backend defaults to all)
+      ...(personType !== 'ALL' ? { personType } : {}),
       ...(personId != null ? { personId } : {}),
       ...(dateFrom ? { dateFrom } : {}),
       ...(dateTo ? { dateTo } : {}),
