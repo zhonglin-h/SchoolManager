@@ -43,6 +43,7 @@ public class MeetSessionHandler {
     private final MeetClient googleMeetClient;
     private final ThreadPoolTaskScheduler taskScheduler;
     private final AttendanceRepository attendanceRepository;
+    private final UpcomingChecksRegistry upcomingChecksRegistry;
 
     @Value("${app.attendance.late-buffer-minutes}")
     private int lateBufferMinutes;
@@ -53,18 +54,21 @@ public class MeetSessionHandler {
                                NotificationService notificationService,
                                MeetClient googleMeetClient,
                                ThreadPoolTaskScheduler taskScheduler,
-                               AttendanceRepository attendanceRepository) {
+                               AttendanceRepository attendanceRepository,
+                               UpcomingChecksRegistry upcomingChecksRegistry) {
         this.attendanceHelper = attendanceHelper;
         this.notificationService = notificationService;
         this.googleMeetClient = googleMeetClient;
         this.taskScheduler = taskScheduler;
         this.attendanceRepository = attendanceRepository;
+        this.upcomingChecksRegistry = upcomingChecksRegistry;
     }
 
-    /** Stops and removes any active polling loop for the given event. */
+    /** Stops and removes any active polling loop for the given event, and clears its registry entry. */
     void cancelPollingFor(String eventId) {
         ScheduledFuture<?> f = pollingFutures.remove(eventId);
         if (f != null) f.cancel(false);
+        upcomingChecksRegistry.removePollingEntry(eventId);
     }
 
     /**
@@ -84,6 +88,7 @@ public class MeetSessionHandler {
 
     /**
      * At T−3 min, notifies every expected participant (student or teacher) who has not yet joined.
+     * Also sends an unmatched-guests notification for any invitee email that is not in the DB.
      * Uses the live participant list, so anyone already in the room is silently skipped.
      */
     public void checkPreClassJoins(CalendarEvent event) {
@@ -100,6 +105,10 @@ public class MeetSessionHandler {
                 if (!resolved.teacherIds().contains(teacher.getId())) {
                     notificationService.notify(NotificationType.NOT_YET_JOINED, event, new TeacherRecipient(teacher));
                 }
+            }
+            List<String> unmatchedInvitees = attendanceHelper.findUnmatchedInvitees(event);
+            if (!unmatchedInvitees.isEmpty()) {
+                notificationService.sendUnmatchedGuestsNotification(unmatchedInvitees, event);
             }
         } catch (Exception e) {
             log.warn("Failed pre-class join check for {}: {}", event.getId(), e.getMessage());
@@ -176,6 +185,7 @@ public class MeetSessionHandler {
 
         if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected) {
             log.info("All participants already present for {}; skipping polling", event.getId());
+            upcomingChecksRegistry.removePollingEntry(event.getId());
             return;
         }
 
@@ -214,10 +224,14 @@ public class MeetSessionHandler {
                         expected, seenStudentIds, seenTeacherIds, lateThreshold);
                 notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
 
+                List<String> unmatchedInvitees = attendanceHelper.findUnmatchedInvitees(event);
+                if (!unmatchedInvitees.isEmpty()) {
+                    notificationService.sendUnmatchedGuestsNotification(unmatchedInvitees, event);
+                }
+
                 if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {
                     notificationService.notify(NotificationType.ALL_PRESENT, event, null);
-                    ScheduledFuture<?> f = futureRef.get();
-                    if (f != null) f.cancel(true);
+                    cancelPollingFor(event.getId());
                 }
             } catch (Exception e) {
                 log.warn("Failed polling for {}: {}", event.getId(), e.getMessage());

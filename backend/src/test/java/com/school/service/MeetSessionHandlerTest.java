@@ -39,6 +39,7 @@ class MeetSessionHandlerTest {
     @Mock NotificationService notificationService;
     @Mock MeetClient meetClient;
     @Mock ThreadPoolTaskScheduler taskScheduler;
+    @Mock UpcomingChecksRegistry upcomingChecksRegistry;
 
     // Construct both with the same mocked dependencies so processParticipants works end-to-end
     private MeetAttendanceHelper attendanceHelper;
@@ -58,7 +59,7 @@ class MeetSessionHandlerTest {
         attendanceHelper = new MeetAttendanceHelper(studentRepository, teacherRepository,
                 attendanceRepository, notificationService);
         sessionHandler = new MeetSessionHandler(attendanceHelper, notificationService,
-                meetClient, taskScheduler, attendanceRepository);
+                meetClient, taskScheduler, attendanceRepository, upcomingChecksRegistry);
         ReflectionTestUtils.setField(sessionHandler, "lateBufferMinutes", 5);
 
         event = new CalendarEvent("evt-1", "Math Class",
@@ -570,6 +571,92 @@ class MeetSessionHandlerTest {
         // initial snapshot + 2 ticks = 3 reminders
         verify(notificationService, times(3)).notify(eq(NotificationType.MEETING_NOT_STARTED_15), eq(event), isNull());
         verify(meetClient, never()).getActiveParticipants(anyString());
+    }
+
+    // --- unmatched invitees ---
+
+    @Test
+    void checkPreClassJoins_sendsUnmatchedGuestsNotificationForUnknownInvitee() throws Exception {
+        // Event has "unknown@meet.com" which is not in student or teacher repository
+        CalendarEvent eventWithUnknown = new CalendarEvent("evt-u", "Math Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now().plusMinutes(3), LocalDateTime.now().plusHours(1),
+                List.of("alice@meet.com", "unknown@meet.com"));
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of());
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("unknown@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("unknown@meet.com")).thenReturn(Optional.empty());
+
+        sessionHandler.checkPreClassJoins(eventWithUnknown);
+
+        verify(notificationService).sendUnmatchedGuestsNotification(List.of("unknown@meet.com"), eventWithUnknown);
+    }
+
+    @Test
+    void checkPreClassJoins_doesNotSendUnmatchedGuestsNotificationWhenAllInviteesKnown() throws Exception {
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of());
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+
+        sessionHandler.checkPreClassJoins(event);
+
+        verify(notificationService, never()).sendUnmatchedGuestsNotification(any(), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void pollingTick_sendsUnmatchedGuestsNotificationEachTickForUnknownInvitee() throws Exception {
+        CalendarEvent eventWithUnknown = new CalendarEvent("evt-u", "Math Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now(), LocalDateTime.now().plusHours(1),
+                List.of("alice@meet.com", "unknown@meet.com"));
+        when(meetClient.isMeetingActive("abc-def")).thenReturn(true);
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("unknown@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("unknown@meet.com")).thenReturn(Optional.empty());
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
+        when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
+                .thenReturn(Optional.empty());
+
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        when(taskScheduler.scheduleAtFixedRate(runnableCaptor.capture(), any(Duration.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        sessionHandler.startSessionPolling(eventWithUnknown);
+        runnableCaptor.getValue().run();
+        runnableCaptor.getValue().run();
+
+        // Fired twice (once per tick) — no dedup
+        verify(notificationService, times(2)).sendUnmatchedGuestsNotification(List.of("unknown@meet.com"), eventWithUnknown);
+    }
+
+    // --- ALL_PRESENT calls cancelPollingFor (removes registry entry) ---
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void pollingTick_allPresentCallsCancelPollingForWhichRemovesRegistryEntry() throws Exception {
+        when(meetClient.isMeetingActive("abc-def")).thenReturn(true);
+        when(meetClient.getActiveParticipants("abc-def"))
+                .thenReturn(List.of(ALICE_PARTICIPANT, BOB_PARTICIPANT));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue("bob@meet.com")).thenReturn(Optional.of(bob));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-bob")).thenReturn(Optional.of(bob));
+        when(attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(anyLong(), anyString(), any()))
+                .thenReturn(Optional.empty());
+
+        ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+        when(taskScheduler.scheduleAtFixedRate(runnableCaptor.capture(), any(Duration.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        sessionHandler.startSessionPolling(event);
+        runnableCaptor.getValue().run();
+
+        verify(notificationService).notify(NotificationType.ALL_PRESENT, event, null);
+        verify(upcomingChecksRegistry).removePollingEntry(event.getId());
     }
 
     // --- helper ---

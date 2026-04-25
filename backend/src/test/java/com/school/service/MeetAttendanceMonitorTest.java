@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
@@ -29,12 +28,15 @@ class MeetAttendanceMonitorTest {
     @Mock MeetSessionHandler sessionHandler;
     @Mock NotificationService notificationService;
     @Mock ThreadPoolTaskScheduler taskScheduler;
-    @InjectMocks
-    MeetAttendanceMonitor monitor;
+
+    // Use a real registry so getUpcomingChecks() works correctly
+    private final UpcomingChecksRegistry upcomingChecksRegistry = new UpcomingChecksRegistry();
+    private MeetAttendanceMonitor monitor;
 
     @BeforeEach
     void setUp() {
-        // nothing shared across all tests
+        monitor = new MeetAttendanceMonitor(calendarSyncService, sessionHandler,
+                notificationService, taskScheduler, upcomingChecksRegistry);
     }
 
     // --- scheduleEventsForToday: upcoming checks ---
@@ -230,6 +232,7 @@ class MeetAttendanceMonitorTest {
         verify(sessionHandler).resumeSessionPolling(inProgress);
         List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
         assertThat(checks).anyMatch(c -> c.eventId().equals("evt-inprogress") && c.checkType().equals("SESSION_FINALIZE"));
+        assertThat(checks).anyMatch(c -> c.eventId().equals("evt-inprogress") && c.checkType().equals("SESSION_POLLING"));
         assertThat(checks).noneMatch(c -> c.eventId().equals("evt-inprogress") && c.checkType().equals("SESSION_START"));
     }
 
@@ -245,5 +248,52 @@ class MeetAttendanceMonitorTest {
 
         verify(sessionHandler, never()).resumeSessionPolling(ended);
         verify(taskScheduler, never()).schedule(any(Runnable.class), any(java.time.Instant.class));
+    }
+
+    // --- SESSION_POLLING registry ---
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_sessionPollingEntryRemovedOnResync() throws Exception {
+        // After a resync, the old SESSION_POLLING entry is cleared and replaced
+        CalendarEvent inProgress = new CalendarEvent("evt-poll", "Poll Class",
+                "https://meet.google.com/abc", "abc",
+                LocalDateTime.now().minusMinutes(5), LocalDateTime.now().plusMinutes(55),
+                List.of("alice@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(inProgress));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.scheduleEventsForToday();
+        assertThat(monitor.getUpcomingChecks())
+                .anyMatch(c -> "SESSION_POLLING".equals(c.checkType()) && "evt-poll".equals(c.eventId()));
+
+        // Resync removes and re-adds the entry
+        monitor.scheduleEventsForToday();
+        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
+        long pollingEntries = checks.stream()
+                .filter(c -> "SESSION_POLLING".equals(c.checkType()) && "evt-poll".equals(c.eventId()))
+                .count();
+        assertThat(pollingEntries).isEqualTo(1);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_sessionPollingEntryRemovedWhenEventDisappears() throws Exception {
+        CalendarEvent inProgress = new CalendarEvent("evt-vanish", "Vanish Class",
+                "https://meet.google.com/abc", "abc",
+                LocalDateTime.now().minusMinutes(5), LocalDateTime.now().plusMinutes(55),
+                List.of("alice@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(inProgress));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+        monitor.scheduleEventsForToday();
+
+        // Event disappears from calendar
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of());
+        monitor.scheduleEventsForToday();
+
+        assertThat(monitor.getUpcomingChecks())
+                .noneMatch(c -> "SESSION_POLLING".equals(c.checkType()));
     }
 }

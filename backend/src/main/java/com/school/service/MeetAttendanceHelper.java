@@ -151,6 +151,60 @@ class MeetAttendanceHelper {
         return changed;
     }
 
+    /**
+     * Returns attendee emails from the event that do not match any student or teacher
+     * with the same {@code meetEmail} in the database. Re-fetched on every call.
+     */
+    List<String> findUnmatchedInvitees(CalendarEvent event) {
+        if (event.getAttendeeEmails() == null) return List.of();
+        List<String> unmatched = new ArrayList<>();
+        for (String email : event.getAttendeeEmails()) {
+            boolean found = studentRepository.findByMeetEmailAndActiveTrue(email).isPresent()
+                    || teacherRepository.findByMeetEmailAndActiveTrue(email).isPresent();
+            if (!found) unmatched.add(email);
+        }
+        return unmatched;
+    }
+
+    /**
+     * Returns the display names of active participants who cannot be matched to any expected
+     * student or teacher using the standard priority chain (googleUserId → meetDisplayName → name).
+     * Participants with blank/null display names are skipped.
+     */
+    List<String> findUnmatchedParticipants(List<MeetParticipant> participants, ExpectedParticipants expected) {
+        List<String> unmatched = new ArrayList<>();
+        for (MeetParticipant participant : participants) {
+            if (participant.displayName() == null || participant.displayName().isBlank()) continue;
+            boolean matched = false;
+            for (com.school.entity.Student student : expected.students()) {
+                if (meetIdentityMatches(participant, student.getGoogleUserId(),
+                        student.getMeetDisplayName(), student.getName())) {
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                for (com.school.entity.Teacher teacher : expected.teachers()) {
+                    if (meetIdentityMatches(participant, teacher.getGoogleUserId(),
+                            teacher.getMeetDisplayName(), teacher.getName())) {
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            if (!matched) unmatched.add(participant.displayName());
+        }
+        return unmatched;
+    }
+
+    private boolean meetIdentityMatches(MeetParticipant participant, String googleUserId,
+                                        String meetDisplayName, String name) {
+        if (participant.googleUserId() != null && participant.googleUserId().equals(googleUserId)) return true;
+        if (participant.displayName() != null && participant.displayName().equalsIgnoreCase(meetDisplayName)) return true;
+        if (participant.displayName() != null && participant.displayName().equalsIgnoreCase(name)) return true;
+        return false;
+    }
+
     /** Looks up the enrolled students and assigned teacher for an event via their Meet email addresses. */
     ExpectedParticipants getExpectedParticipants(CalendarEvent event) {
         List<Student> students = new ArrayList<>();
