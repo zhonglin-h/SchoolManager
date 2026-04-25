@@ -211,7 +211,7 @@ export async function upsertAttendance(
 }
 
 export async function getAttendanceRecords(
-  personType: 'ALL' | 'STUDENT' | 'TEACHER' = 'ALL',
+  personType: 'STUDENT' | 'TEACHER',
   personId?: number,
   dateFrom?: string,
   dateTo?: string,

@@ -2,8 +2,9 @@ package com.school.service;
 
 import com.school.dto.TeacherRequest;
 import com.school.dto.TeacherResponse;
-import com.school.entity.Teacher;
-import com.school.repository.TeacherRepository;
+import com.school.dto.PersonRequest;
+import com.school.dto.PersonResponse;
+import com.school.entity.PersonType;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -11,50 +12,69 @@ import java.util.List;
 @Service
 public class TeacherService {
 
-    private final TeacherRepository teacherRepository;
+    private final PersonService personService;
 
-    public TeacherService(TeacherRepository teacherRepository) {
-        this.teacherRepository = teacherRepository;
+    public TeacherService(PersonService personService) {
+        this.personService = personService;
     }
 
     public List<TeacherResponse> getAllActive() {
-        return teacherRepository.findByActiveTrue().stream()
-                .map(TeacherResponse::from)
+        return personService.getAllActive(PersonType.TEACHER).stream()
+                .map(TeacherService::toTeacherResponse)
                 .toList();
     }
 
     public TeacherResponse getById(Long id) {
-        Teacher teacher = teacherRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Teacher not found: " + id));
-        return TeacherResponse.from(teacher);
+        PersonResponse person = personService.getById(id);
+        requireTeacherType(person, id);
+        return toTeacherResponse(person);
     }
 
     public TeacherResponse create(TeacherRequest req) {
-        Teacher teacher = Teacher.builder()
-                .name(req.name())
-                .meetEmail(req.meetEmail())
-                .meetDisplayName(req.meetDisplayName())
-                .phone(req.phone())
-                .hourlyRate(req.hourlyRate())
-                .build();
-        return TeacherResponse.from(teacherRepository.save(teacher));
+        return toTeacherResponse(personService.create(fromTeacherRequest(req)));
     }
 
     public TeacherResponse update(Long id, TeacherRequest req) {
-        Teacher teacher = teacherRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Teacher not found: " + id));
-        teacher.setName(req.name());
-        teacher.setMeetEmail(req.meetEmail());
-        teacher.setMeetDisplayName(req.meetDisplayName());
-        teacher.setPhone(req.phone());
-        teacher.setHourlyRate(req.hourlyRate());
-        return TeacherResponse.from(teacherRepository.save(teacher));
+        PersonResponse existing = personService.getById(id);
+        requireTeacherType(existing, id);
+        return toTeacherResponse(personService.update(id, fromTeacherRequest(req)));
     }
 
     public void softDelete(Long id) {
-        Teacher teacher = teacherRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Teacher not found: " + id));
-        teacher.setActive(false);
-        teacherRepository.save(teacher);
+        PersonResponse existing = personService.getById(id);
+        requireTeacherType(existing, id);
+        personService.softDelete(id);
+    }
+
+    private static TeacherResponse toTeacherResponse(PersonResponse p) {
+        return new TeacherResponse(
+                p.id(),
+                p.name(),
+                p.meetEmail(),
+                p.meetDisplayName(),
+                p.phone(),
+                p.hourlyRate(),
+                p.active()
+        );
+    }
+
+    private static PersonRequest fromTeacherRequest(TeacherRequest req) {
+        return new PersonRequest(
+                PersonType.TEACHER,
+                req.name(),
+                req.meetEmail(),
+                req.meetDisplayName(),
+                null,
+                null,
+                null,
+                req.phone(),
+                req.hourlyRate()
+        );
+    }
+
+    private static void requireTeacherType(PersonResponse person, Long id) {
+        if (person.personType() != PersonType.TEACHER) {
+            throw new RuntimeException("Teacher not found: " + id);
+        }
     }
 }

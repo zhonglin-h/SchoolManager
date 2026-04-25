@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
@@ -21,8 +22,8 @@ import org.springframework.stereotype.Service;
 
 import com.school.entity.Attendance;
 import com.school.entity.AttendanceStatus;
-import com.school.entity.Student;
-import com.school.entity.Teacher;
+import com.school.entity.Person;
+import com.school.entity.PersonType;
 import com.school.integration.MeetClient;
 import com.school.integration.MeetParticipant;
 import com.school.model.CalendarEvent;
@@ -96,16 +97,13 @@ public class MeetSessionHandler {
             List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
             ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
             ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
-            for (Student student : expected.students()) {
-                if (!resolved.studentIds().contains(student.getId())) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(student));
+            forEachExpectedPerson(expected, (person, personType) -> {
+                Set<Long> resolvedIds = personType == PersonType.STUDENT ? resolved.studentIds() : resolved.teacherIds();
+                NotificationSubject subject = new PersonSubject(person);
+                if (!resolvedIds.contains(person.getId())) {
+                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, subject);
                 }
-            }
-            for (Teacher teacher : expected.teachers()) {
-                if (!resolved.teacherIds().contains(teacher.getId())) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, new TeacherRecipient(teacher));
-                }
-            }
+            });
             processUnmatchedGuests(event, expected, participants);
         } catch (Exception e) {
             log.warn("Failed pre-class join check for {}: {}", event.getId(), e.getMessage());
@@ -210,11 +208,16 @@ public class MeetSessionHandler {
     private void preSeedSeenAttendance(CalendarEvent event, Set<Long> seenStudentIds, Set<Long> seenTeacherIds) {
         attendanceRepository.findByCalendarEventIdAndDate(event.getId(), LocalDate.now())
                 .forEach(a -> {
-                    log.debug("Pre-seeding attendance for {}: studentId={}, teacherId={}, status={}",
-                            event.getId(), a.getStudent() != null ? a.getStudent().getId() : null,
-                            a.getTeacher() != null ? a.getTeacher().getId() : null, a.getStatus());
-                    if (a.getStudent() != null) seenStudentIds.add(a.getStudent().getId());
-                    if (a.getTeacher() != null) seenTeacherIds.add(a.getTeacher().getId());
+                    Person person = a.getPerson();
+                    log.debug("Pre-seeding attendance for {}: personId={}, personType={}, status={}",
+                            event.getId(), person != null ? person.getId() : null,
+                            person != null ? person.getPersonType() : null, a.getStatus());
+                    if (person != null && person.getPersonType() == PersonType.STUDENT) {
+                        seenStudentIds.add(person.getId());
+                    }
+                    if (person != null && person.getPersonType() == PersonType.TEACHER) {
+                        seenTeacherIds.add(person.getId());
+                    }
                 });
     }
 
@@ -243,7 +246,7 @@ public class MeetSessionHandler {
             notificationService.notify(
                     NotificationType.UNMATCHED_GUESTS,
                     event,
-                    new GuestRecipient(unmatchedInvitees, unmatchedParticipants));
+                    new GuestSubject(unmatchedInvitees, unmatchedParticipants));
         }
     }
 
@@ -262,16 +265,13 @@ public class MeetSessionHandler {
 
     private void notifyMissing(CalendarEvent event, ExpectedParticipants expected,
                                Set<Long> seenStudentIds, Set<Long> seenTeacherIds) {
-        for (Student student : expected.students()) {
-            if (!seenStudentIds.contains(student.getId())) {
-                notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(student));
+        forEachExpectedPerson(expected, (person, personType) -> {
+            Set<Long> seenIds = personType == PersonType.STUDENT ? seenStudentIds : seenTeacherIds;
+            NotificationSubject subject = new PersonSubject(person);
+            if (!seenIds.contains(person.getId())) {
+                notificationService.notify(NotificationType.NOT_YET_JOINED, event, subject);
             }
-        }
-        for (Teacher teacher : expected.teachers()) {
-            if (!seenTeacherIds.contains(teacher.getId())) {
-                notificationService.notify(NotificationType.NOT_YET_JOINED, event, new TeacherRecipient(teacher));
-            }
-        }
+        });
     }
 
     /** Fires a MEETING_NOT_STARTED_15 notification without a specific recipient (broadcast). */
@@ -288,6 +288,7 @@ public class MeetSessionHandler {
         cancelPollingFor(event.getId());
 
         Instant classStart = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant();
+        Instant lateThreshold = classStart.plusSeconds(lateBufferMinutes * 60L);
         LocalDate today = LocalDate.now();
 
         // Build a join-time map from the full participant history (including those who left)
@@ -306,41 +307,35 @@ public class MeetSessionHandler {
 
         ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
 
-        for (Student student : expected.students()) {
+        forEachExpectedPerson(expected, (person, personType) -> {
+            NotificationSubject subject = new PersonSubject(person);
             Optional<Attendance> existing = attendanceRepository
-                    .findByStudentIdAndCalendarEventIdAndDate(student.getId(), event.getId(), today);
-            if (existing.isEmpty()) {
-                Instant joinTime = attendanceHelper.resolveJoinTime(student.getGoogleUserId(), student.getMeetDisplayName(),
-                        student.getName(), joinTimeByUserId, joinTimeByDisplayName);
-                if (joinTime == null) {
-                    attendanceHelper.recordStudentAttendance(student, event, AttendanceStatus.ABSENT);
-                    notificationService.notify(NotificationType.ABSENT, event, new StudentRecipient(student));
-                } else if (joinTime.isAfter(classStart.plusSeconds(lateBufferMinutes * 60L))) {
-                    attendanceHelper.recordStudentAttendance(student, event, AttendanceStatus.LATE);
-                    notificationService.notify(NotificationType.LATE, event, new StudentRecipient(student));
-                } else {
-                    attendanceHelper.recordStudentAttendance(student, event, AttendanceStatus.PRESENT);
-                    notificationService.notify(NotificationType.ARRIVAL, event, new StudentRecipient(student));
-                }
+                    .findByPersonIdAndCalendarEventIdAndDate(person.getId(), event.getId(), today);
+            if (existing.isPresent()) {
+                return;
             }
+
+            Instant joinTime = attendanceHelper.resolveJoinTime(person.getGoogleUserId(), person.getMeetDisplayName(),
+                    person.getName(), joinTimeByUserId, joinTimeByDisplayName);
+            if (joinTime == null) {
+                attendanceHelper.recordAttendance(person, event, AttendanceStatus.ABSENT);
+                notificationService.notify(NotificationType.ABSENT, event, subject);
+            } else if (joinTime.isAfter(lateThreshold)) {
+                attendanceHelper.recordAttendance(person, event, AttendanceStatus.LATE);
+                notificationService.notify(NotificationType.LATE, event, subject);
+            } else {
+                attendanceHelper.recordAttendance(person, event, AttendanceStatus.PRESENT);
+                notificationService.notify(NotificationType.ARRIVAL, event, subject);
+            }
+        });
+    }
+
+    private void forEachExpectedPerson(ExpectedParticipants expected, BiConsumer<Person, PersonType> consumer) {
+        for (Person student : expected.students()) {
+            consumer.accept(student, PersonType.STUDENT);
         }
-        for (Teacher teacher : expected.teachers()) {
-            Optional<Attendance> existing = attendanceRepository
-                    .findByTeacherIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), today);
-            if (existing.isEmpty()) {
-                Instant joinTime = attendanceHelper.resolveJoinTime(teacher.getGoogleUserId(), teacher.getMeetDisplayName(),
-                        teacher.getName(), joinTimeByUserId, joinTimeByDisplayName);
-                if (joinTime == null) {
-                    attendanceHelper.recordTeacherAttendance(teacher, event, AttendanceStatus.ABSENT);
-                    notificationService.notify(NotificationType.TEACHER_ABSENT, event, new TeacherRecipient(teacher));
-                } else if (joinTime.isAfter(classStart.plusSeconds(lateBufferMinutes * 60L))) {
-                    attendanceHelper.recordTeacherAttendance(teacher, event, AttendanceStatus.LATE);
-                    notificationService.notify(NotificationType.TEACHER_LATE, event, new TeacherRecipient(teacher));
-                } else {
-                    attendanceHelper.recordTeacherAttendance(teacher, event, AttendanceStatus.PRESENT);
-                    notificationService.notify(NotificationType.TEACHER_ARRIVED, event, new TeacherRecipient(teacher));
-                }
-            }
+        for (Person teacher : expected.teachers()) {
+            consumer.accept(teacher, PersonType.TEACHER);
         }
     }
 

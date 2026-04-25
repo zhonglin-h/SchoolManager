@@ -22,7 +22,7 @@ public record NotificationLogResponse(
     public static NotificationLogResponse from(NotificationLog n) {
         return new NotificationLogResponse(
                 n.getId(),
-                n.getStudent() != null ? n.getStudent().getId() : null,
+                n.getPerson() != null ? n.getPerson().getId() : null,
                 n.getCalendarEventId(),
                 n.getDate(),
                 n.getType(),

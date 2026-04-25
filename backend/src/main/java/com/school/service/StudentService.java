@@ -2,8 +2,9 @@ package com.school.service;
 
 import com.school.dto.StudentRequest;
 import com.school.dto.StudentResponse;
-import com.school.entity.Student;
-import com.school.repository.StudentRepository;
+import com.school.dto.PersonRequest;
+import com.school.dto.PersonResponse;
+import com.school.entity.PersonType;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -11,52 +12,70 @@ import java.util.List;
 @Service
 public class StudentService {
 
-    private final StudentRepository studentRepository;
+    private final PersonService personService;
 
-    public StudentService(StudentRepository studentRepository) {
-        this.studentRepository = studentRepository;
+    public StudentService(PersonService personService) {
+        this.personService = personService;
     }
 
     public List<StudentResponse> getAllActive() {
-        return studentRepository.findByActiveTrue().stream()
-                .map(StudentResponse::from)
+        return personService.getAllActive(PersonType.STUDENT).stream()
+                .map(StudentService::toStudentResponse)
                 .toList();
     }
 
     public StudentResponse getById(Long id) {
-        Student student = studentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Student not found: " + id));
-        return StudentResponse.from(student);
+        PersonResponse person = personService.getById(id);
+        requireStudentType(person, id);
+        return toStudentResponse(person);
     }
 
     public StudentResponse create(StudentRequest req) {
-        Student student = Student.builder()
-                .name(req.name())
-                .meetEmail(req.meetEmail())
-                .meetDisplayName(req.meetDisplayName())
-                .classroomEmail(req.classroomEmail())
-                .parentEmail(req.parentEmail())
-                .parentPhone(req.parentPhone())
-                .build();
-        return StudentResponse.from(studentRepository.save(student));
+        return toStudentResponse(personService.create(fromStudentRequest(req)));
     }
 
     public StudentResponse update(Long id, StudentRequest req) {
-        Student student = studentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Student not found: " + id));
-        student.setName(req.name());
-        student.setMeetEmail(req.meetEmail());
-        student.setMeetDisplayName(req.meetDisplayName());
-        student.setClassroomEmail(req.classroomEmail());
-        student.setParentEmail(req.parentEmail());
-        student.setParentPhone(req.parentPhone());
-        return StudentResponse.from(studentRepository.save(student));
+        PersonResponse existing = personService.getById(id);
+        requireStudentType(existing, id);
+        return toStudentResponse(personService.update(id, fromStudentRequest(req)));
     }
 
     public void softDelete(Long id) {
-        Student student = studentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Student not found: " + id));
-        student.setActive(false);
-        studentRepository.save(student);
+        PersonResponse existing = personService.getById(id);
+        requireStudentType(existing, id);
+        personService.softDelete(id);
+    }
+
+    private static StudentResponse toStudentResponse(PersonResponse p) {
+        return new StudentResponse(
+                p.id(),
+                p.name(),
+                p.meetEmail(),
+                p.meetDisplayName(),
+                p.classroomEmail(),
+                p.parentEmail(),
+                p.parentPhone(),
+                p.active()
+        );
+    }
+
+    private static PersonRequest fromStudentRequest(StudentRequest req) {
+        return new PersonRequest(
+                PersonType.STUDENT,
+                req.name(),
+                req.meetEmail(),
+                req.meetDisplayName(),
+                req.classroomEmail(),
+                req.parentEmail(),
+                req.parentPhone(),
+                null,
+                null
+        );
+    }
+
+    private static void requireStudentType(PersonResponse person, Long id) {
+        if (person.personType() != PersonType.STUDENT) {
+            throw new RuntimeException("Student not found: " + id);
+        }
     }
 }

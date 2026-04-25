@@ -1,9 +1,10 @@
 package com.school.service;
 
+import com.school.dto.PersonRequest;
+import com.school.dto.PersonResponse;
 import com.school.dto.StudentRequest;
 import com.school.dto.StudentResponse;
-import com.school.entity.Student;
-import com.school.repository.StudentRepository;
+import com.school.entity.PersonType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -12,11 +13,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -24,17 +24,15 @@ import static org.mockito.Mockito.when;
 class StudentServiceTest {
 
     @Mock
-    StudentRepository studentRepository;
+    PersonService personService;
 
     @InjectMocks
     StudentService studentService;
 
-    // --- getAllActive ---
-
     @Test
     void getAllActive_returnsOnlyActiveStudents() {
-        Student active = student(1L, "Alice", true);
-        when(studentRepository.findByActiveTrue()).thenReturn(List.of(active));
+        when(personService.getAllActive(PersonType.STUDENT))
+                .thenReturn(List.of(student(1L, "Alice", true)));
 
         List<StudentResponse> result = studentService.getAllActive();
 
@@ -45,16 +43,13 @@ class StudentServiceTest {
 
     @Test
     void getAllActive_returnsEmptyListWhenNoneActive() {
-        when(studentRepository.findByActiveTrue()).thenReturn(List.of());
-
+        when(personService.getAllActive(PersonType.STUDENT)).thenReturn(List.of());
         assertThat(studentService.getAllActive()).isEmpty();
     }
 
-    // --- getById ---
-
     @Test
     void getById_returnsStudentWhenFound() {
-        when(studentRepository.findById(1L)).thenReturn(Optional.of(student(1L, "Bob", true)));
+        when(personService.getById(1L)).thenReturn(student(1L, "Bob", true));
 
         StudentResponse result = studentService.getById(1L);
 
@@ -63,25 +58,20 @@ class StudentServiceTest {
     }
 
     @Test
-    void getById_throwsWhenNotFound() {
-        when(studentRepository.findById(99L)).thenReturn(Optional.empty());
+    void getById_throwsWhenWrongType() {
+        when(personService.getById(99L)).thenReturn(teacher(99L, "Tina", true));
 
         assertThatThrownBy(() -> studentService.getById(99L))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("99");
+                .hasMessageContaining("Student not found");
     }
 
-    // --- create ---
-
     @Test
-    void create_savesAndReturnsNewStudent() {
+    void create_delegatesAndMapsResponse() {
         StudentRequest req = new StudentRequest("Carol", "carol@meet.com", null, "carol@classroom.com",
                 "parent@test.com", "555-1234");
-        Student saved = Student.builder()
-                .id(5L).name("Carol").meetEmail("carol@meet.com")
-                .classroomEmail("carol@classroom.com")
-                .parentEmail("parent@test.com").parentPhone("555-1234").build();
-        when(studentRepository.save(any(Student.class))).thenReturn(saved);
+        when(personService.create(org.mockito.ArgumentMatchers.any(PersonRequest.class)))
+                .thenReturn(student(5L, "Carol", true));
 
         StudentResponse result = studentService.create(req);
 
@@ -89,18 +79,19 @@ class StudentServiceTest {
         assertThat(result.name()).isEqualTo("Carol");
         assertThat(result.meetEmail()).isEqualTo("carol@meet.com");
 
-        ArgumentCaptor<Student> captor = ArgumentCaptor.forClass(Student.class);
-        verify(studentRepository).save(captor.capture());
-        assertThat(captor.getValue().isActive()).isTrue();
+        ArgumentCaptor<PersonRequest> captor = ArgumentCaptor.forClass(PersonRequest.class);
+        verify(personService).create(captor.capture());
+        assertThat(captor.getValue().personType()).isEqualTo(PersonType.STUDENT);
+        assertThat(captor.getValue().name()).isEqualTo("Carol");
+        assertThat(captor.getValue().phone()).isNull();
+        assertThat(captor.getValue().hourlyRate()).isNull();
     }
 
-    // --- update ---
-
     @Test
-    void update_updatesFieldsAndSaves() {
-        Student existing = student(2L, "Dave", true);
-        when(studentRepository.findById(2L)).thenReturn(Optional.of(existing));
-        when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
+    void update_delegatesAndMapsResponse() {
+        when(personService.getById(2L)).thenReturn(student(2L, "Dave", true));
+        when(personService.update(eq(2L), org.mockito.ArgumentMatchers.any(PersonRequest.class)))
+                .thenReturn(student(2L, "David", true));
 
         StudentRequest req = new StudentRequest("David", "david@meet.com", null, "david@class.com",
                 "dp@test.com", "555-9999");
@@ -108,47 +99,72 @@ class StudentServiceTest {
 
         assertThat(result.name()).isEqualTo("David");
         assertThat(result.meetEmail()).isEqualTo("david@meet.com");
+
+        ArgumentCaptor<PersonRequest> captor = ArgumentCaptor.forClass(PersonRequest.class);
+        verify(personService).update(eq(2L), captor.capture());
+        assertThat(captor.getValue().personType()).isEqualTo(PersonType.STUDENT);
+        assertThat(captor.getValue().name()).isEqualTo("David");
     }
 
     @Test
-    void update_throwsWhenNotFound() {
-        when(studentRepository.findById(99L)).thenReturn(Optional.empty());
+    void update_throwsWhenWrongType() {
+        when(personService.getById(99L)).thenReturn(teacher(99L, "Tina", true));
 
         assertThatThrownBy(() -> studentService.update(99L,
                 new StudentRequest("X", "x@x.com", null, "x@x.com", "x@x.com", "000")))
-                .isInstanceOf(RuntimeException.class);
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Student not found");
     }
 
-    // --- softDelete ---
-
     @Test
-    void softDelete_setsActiveFalse() {
-        Student existing = student(3L, "Eve", true);
-        when(studentRepository.findById(3L)).thenReturn(Optional.of(existing));
-        when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
+    void softDelete_delegatesToPersonService() {
+        when(personService.getById(3L)).thenReturn(student(3L, "Eve", true));
 
         studentService.softDelete(3L);
 
-        ArgumentCaptor<Student> captor = ArgumentCaptor.forClass(Student.class);
-        verify(studentRepository).save(captor.capture());
-        assertThat(captor.getValue().isActive()).isFalse();
+        verify(personService).softDelete(3L);
     }
 
     @Test
-    void softDelete_throwsWhenNotFound() {
-        when(studentRepository.findById(99L)).thenReturn(Optional.empty());
+    void softDelete_throwsWhenWrongType() {
+        when(personService.getById(99L)).thenReturn(teacher(99L, "Tina", true));
 
         assertThatThrownBy(() -> studentService.softDelete(99L))
-                .isInstanceOf(RuntimeException.class);
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Student not found");
     }
 
-    // --- helpers ---
+    private PersonResponse student(Long id, String name, boolean active) {
+        return new PersonResponse(
+                id,
+                PersonType.STUDENT,
+                name,
+                name.toLowerCase() + "@meet.com",
+                null,
+                null,
+                name.toLowerCase() + "@class.com",
+                "parent@test.com",
+                "555-0000",
+                null,
+                null,
+                active
+        );
+    }
 
-    private Student student(Long id, String name, boolean active) {
-        return Student.builder().id(id).name(name)
-                .meetEmail(name.toLowerCase() + "@meet.com")
-                .classroomEmail(name.toLowerCase() + "@class.com")
-                .parentEmail("parent@test.com").parentPhone("555-0000")
-                .active(active).build();
+    private PersonResponse teacher(Long id, String name, boolean active) {
+        return new PersonResponse(
+                id,
+                PersonType.TEACHER,
+                name,
+                name.toLowerCase() + "@meet.com",
+                null,
+                null,
+                null,
+                null,
+                null,
+                "555-0000",
+                java.math.BigDecimal.ONE,
+                active
+        );
     }
 }

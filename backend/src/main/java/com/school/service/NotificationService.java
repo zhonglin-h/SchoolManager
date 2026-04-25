@@ -2,8 +2,7 @@ package com.school.service;
 
 import com.school.entity.NotificationChannel;
 import com.school.entity.NotificationLog;
-import com.school.entity.Student;
-import com.school.entity.Teacher;
+import com.school.entity.Person;
 import com.school.integration.EmailClient;
 import com.school.integration.TelegramClient;
 import com.school.model.CalendarEvent;
@@ -64,47 +63,45 @@ public class NotificationService {
     }
 
     @Transactional
-    public void notify(NotificationType type, CalendarEvent event, @Nullable Recipient recipient) {
+    public void notify(NotificationType type, CalendarEvent event, @Nullable NotificationSubject subject) {
         if (!notificationsEnabled) return;
 
-        Student student = recipient instanceof StudentRecipient sr ? sr.student() : null;
-        Teacher teacher = recipient instanceof TeacherRecipient tr ? tr.teacher() : null;
+        Person person = subject instanceof PersonSubject ps ? ps.person() : null;
 
         // --- Email path ---
-        if (emailNotificationsEnabled && type.shouldSendEmail()) {
+        if (emailNotificationsEnabled && type.shouldSendEmail(subject)) {
             boolean emailAlreadySent = shouldDedup(type)
-                    && dedupCheck(recipient, event, type, NotificationChannel.EMAIL);
+                    && dedupCheck(subject, event, type, NotificationChannel.EMAIL);
 
             if (!emailAlreadySent) {
-                String subject = type.subject(event, recipient);
-                String body = resolveBody(type, event, recipient);
+                String emailSubject = type.subject(event, subject);
+                String body = resolveBody(type, event, subject);
                 String failureReason = null;
                 List<String> recipients = new ArrayList<>();
 
                 if (type.toPrincipalViaEmail) {
                     recipients.add(principalEmail);
                     try {
-                        emailClient.send(principalEmail, subject, body);
+                        emailClient.send(principalEmail, emailSubject, body);
                     } catch (Exception e) {
                         failureReason = e.getMessage();
                         log.error("Failed to send {} email to principal: {}", type.name(), e.getMessage());
                     }
                 }
-                if (type.toParentViaEmail && student != null
-                        && student.getParentEmail() != null && !student.getParentEmail().isBlank()) {
-                    recipients.add(student.getParentEmail());
+                if (type.shouldSendParentEmail(subject) && person != null
+                        && person.getParentEmail() != null && !person.getParentEmail().isBlank()) {
+                    recipients.add(person.getParentEmail());
                     try {
-                        emailClient.send(student.getParentEmail(), subject, body);
+                        emailClient.send(person.getParentEmail(), emailSubject, body);
                     } catch (Exception e) {
                         failureReason = e.getMessage();
                         log.error("Failed to send {} email to parent of {}: {}", type.name(),
-                                student.getName(), e.getMessage());
+                                person.getName(), e.getMessage());
                     }
                 }
 
                 NotificationLog emailEntry = NotificationLog.builder()
-                        .student(student)
-                        .teacher(teacher)
+                        .person(person)
                         .calendarEventId(event.getId())
                         .date(LocalDate.now())
                         .type(type.name())
@@ -122,10 +119,10 @@ public class NotificationService {
         // --- Telegram path ---
         if (type.toPrincipalViaTelegram) {
             boolean telegramAlreadySent = shouldDedup(type)
-                    && dedupCheck(recipient, event, type, NotificationChannel.TELEGRAM);
+                    && dedupCheck(subject, event, type, NotificationChannel.TELEGRAM);
 
             if (!telegramAlreadySent) {
-                String body = resolveBody(type, event, recipient);
+                String body = resolveBody(type, event, subject);
                 String failureReason = null;
 
                 try {
@@ -136,8 +133,7 @@ public class NotificationService {
                 }
 
                 NotificationLog telegramEntry = NotificationLog.builder()
-                        .student(student)
-                        .teacher(teacher)
+                        .person(person)
                         .calendarEventId(event.getId())
                         .date(LocalDate.now())
                         .type(type.name())
@@ -157,36 +153,32 @@ public class NotificationService {
         return type != NotificationType.UNMATCHED_GUESTS;
     }
 
-    private String resolveBody(NotificationType type, CalendarEvent event, @Nullable Recipient recipient) {
-        if (type == NotificationType.UNMATCHED_GUESTS && recipient instanceof GuestRecipient guestRecipient) {
+    private String resolveBody(NotificationType type, CalendarEvent event, @Nullable NotificationSubject subject) {
+        if (type == NotificationType.UNMATCHED_GUESTS && subject instanceof GuestSubject guestSubject) {
             List<String> sections = new ArrayList<>();
             sections.add("Meet: \"" + event.getTitle() + "\" (space: " + event.getSpaceCode() + ")");
-            if (!guestRecipient.unmatchedInvitees().isEmpty()) {
+            if (!guestSubject.unmatchedInvitees().isEmpty()) {
                 sections.add("Invited but not found in system: "
-                        + String.join(", ", guestRecipient.unmatchedInvitees()));
+                        + String.join(", ", guestSubject.unmatchedInvitees()));
             }
-            if (!guestRecipient.unmatchedParticipants().isEmpty()) {
+            if (!guestSubject.unmatchedParticipants().isEmpty()) {
                 sections.add("In room but not found in system: "
-                        + String.join(", ", guestRecipient.unmatchedParticipants()));
+                        + String.join(", ", guestSubject.unmatchedParticipants()));
             }
             return String.join("\n", sections);
         }
-        return type.body(event, recipient);
+        return type.body(event, subject);
     }
 
-    private boolean dedupCheck(@Nullable Recipient recipient, CalendarEvent event,
+    private boolean dedupCheck(@Nullable NotificationSubject subject, CalendarEvent event,
                                NotificationType type, NotificationChannel channel) {
-        if (recipient instanceof StudentRecipient sr) {
+        if (subject instanceof PersonSubject ps) {
             return notificationLogRepository
-                    .existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
-                            sr.getId(), event.getId(), LocalDate.now(), type.name(), channel);
-        } else if (recipient instanceof TeacherRecipient tr) {
-            return notificationLogRepository
-                    .existsByTeacherIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
-                            tr.getId(), event.getId(), LocalDate.now(), type.name(), channel);
+                    .existsByPersonIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
+                            ps.getId(), event.getId(), LocalDate.now(), type.name(), channel);
         } else {
             return notificationLogRepository
-                    .existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
+                    .existsByCalendarEventIdAndDateAndTypeAndChannelAndPersonIsNullAndSuccessTrue(
                             event.getId(), LocalDate.now(), type.name(), channel);
         }
     }

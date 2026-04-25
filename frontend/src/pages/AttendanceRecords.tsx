@@ -10,7 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getAttendanceRecords, upsertAttendance } from '../services/api'
 import type { AttendanceRecord } from '../services/api'
 
-type PersonTypeFilter = 'ALL' | 'STUDENT' | 'TEACHER'
+type PersonTypeFilter = 'STUDENT' | 'TEACHER'
 type AttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT'
 type DatePreset = 'today' | 'week' | 'custom' | 'all'
 
@@ -65,7 +65,7 @@ export default function AttendanceRecords() {
   const queryClient = useQueryClient()
 
   // ── Filter state ──────────────────────────────────────────────────────────
-  const [personTypeFilter, setPersonTypeFilter] = useState<PersonTypeFilter>('ALL')
+  const [personTypeFilter, setPersonTypeFilter] = useState<PersonTypeFilter>('STUDENT')
   const [datePreset, setDatePreset] = useState<DatePreset>('week')
   const [customFrom, setCustomFrom] = useState<string>(daysAgo(30))
   const [customTo, setCustomTo] = useState<string>(today())
@@ -222,7 +222,7 @@ export default function AttendanceRecords() {
         <div>
           <p className="text-xs font-medium text-gray-500 mb-1">Show</p>
           <div className="flex items-center gap-1">
-            {(['ALL', 'STUDENT', 'TEACHER'] as PersonTypeFilter[]).map((opt) => (
+            {(['STUDENT', 'TEACHER'] as PersonTypeFilter[]).map((opt) => (
               <button
                 key={opt}
                 onClick={() => setPersonTypeFilter(opt)}
@@ -232,7 +232,7 @@ export default function AttendanceRecords() {
                     : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
                 }`}
               >
-                {opt === 'ALL' ? 'All' : opt === 'STUDENT' ? 'Students' : 'Teachers'}
+                {opt === 'STUDENT' ? 'Students' : 'Teachers'}
               </button>
             ))}
           </div>

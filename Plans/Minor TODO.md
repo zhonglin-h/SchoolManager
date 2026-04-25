@@ -1,5 +1,5 @@
-- [ ] Replace ad-hoc `personType` strings with a `PersonType` enum (STUDENT, TEACHER).
-- [ ] Timer for notifications not ticking down on frontend
+- [X] Replace ad-hoc `personType` strings with a `PersonType` enum (STUDENT, TEACHER).
+- [X] Timer for notifications not ticking down on frontend
 ![alt text](image.png)
 - [X] duplicate telegram notifications at start of class
 ![alt text](image-1.png)
