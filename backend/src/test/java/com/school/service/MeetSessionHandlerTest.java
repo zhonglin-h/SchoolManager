@@ -68,13 +68,9 @@ class MeetSessionHandlerTest {
     @Test
     void checkPreClassJoins_notifiesMissingStudentAndTeacher() throws Exception {
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of());
-        when(personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.STUDENT, "alice@meet.com"))
+        when(personRepository.findByMeetEmailAndActiveTrue("alice@meet.com"))
                 .thenReturn(Optional.of(student));
-        when(personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.STUDENT, "carol@meet.com"))
-                .thenReturn(Optional.empty());
-        when(personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.TEACHER, "alice@meet.com"))
-                .thenReturn(Optional.empty());
-        when(personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.TEACHER, "carol@meet.com"))
+        when(personRepository.findByMeetEmailAndActiveTrue("carol@meet.com"))
                 .thenReturn(Optional.of(teacher));
 
         sessionHandler.checkPreClassJoins(event);
@@ -86,13 +82,9 @@ class MeetSessionHandlerTest {
     @Test
     void checkPreClassJoins_skipsPresentStudentMatchedByGoogleUserId() throws Exception {
         when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(new MeetParticipant("uid-alice", "Alice", null)));
-        when(personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.STUDENT, "alice@meet.com"))
+        when(personRepository.findByMeetEmailAndActiveTrue("alice@meet.com"))
                 .thenReturn(Optional.of(student));
-        when(personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.STUDENT, "carol@meet.com"))
-                .thenReturn(Optional.empty());
-        when(personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.TEACHER, "alice@meet.com"))
-                .thenReturn(Optional.empty());
-        when(personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.TEACHER, "carol@meet.com"))
+        when(personRepository.findByMeetEmailAndActiveTrue("carol@meet.com"))
                 .thenReturn(Optional.of(teacher));
         when(personRepository.findByPersonTypeAndGoogleUserIdAndActiveTrue(PersonType.STUDENT, "uid-alice"))
                 .thenReturn(Optional.of(student));
@@ -106,13 +98,9 @@ class MeetSessionHandlerTest {
     @Test
     void finalizeSession_marksAbsentAndSendsTypeSpecificNotifications() throws Exception {
         when(meetClient.getAllParticipants("abc-def")).thenReturn(List.of());
-        when(personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.STUDENT, "alice@meet.com"))
+        when(personRepository.findByMeetEmailAndActiveTrue("alice@meet.com"))
                 .thenReturn(Optional.of(student));
-        when(personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.STUDENT, "carol@meet.com"))
-                .thenReturn(Optional.empty());
-        when(personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.TEACHER, "alice@meet.com"))
-                .thenReturn(Optional.empty());
-        when(personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.TEACHER, "carol@meet.com"))
+        when(personRepository.findByMeetEmailAndActiveTrue("carol@meet.com"))
                 .thenReturn(Optional.of(teacher));
         when(attendanceRepository.findByPersonIdAndCalendarEventIdAndDate(1L, "evt-1", LocalDate.now()))
                 .thenReturn(Optional.empty());

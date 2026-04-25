@@ -211,7 +211,7 @@ export async function upsertAttendance(
 }
 
 export async function getAttendanceRecords(
-  personType: 'ALL' | 'STUDENT' | 'TEACHER' = 'ALL',
+  personType: 'STUDENT' | 'TEACHER',
   personId?: number,
   dateFrom?: string,
   dateTo?: string,
@@ -219,8 +219,7 @@ export async function getAttendanceRecords(
 ): Promise<AttendanceRecord[]> {
   const { data } = await api.get<AttendanceRecord[]>('/attendance/records', {
     params: {
-      // Only send personType when it's a specific type; omit for ALL (backend defaults to all)
-      ...(personType !== 'ALL' ? { personType } : {}),
+      personType,
       ...(personId != null ? { personId } : {}),
       ...(dateFrom ? { dateFrom } : {}),
       ...(dateTo ? { dateTo } : {}),

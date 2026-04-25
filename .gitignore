@@ -16,6 +16,7 @@ backend/bin/
 
 # Backend — Gradle
 backend/.gradle/
+backend/.gradle-local/
 backend/build/
 backend/out/
 

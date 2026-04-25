@@ -342,7 +342,7 @@ public class AttendanceController {
 
     @GetMapping("/records")
     public ResponseEntity<List<AttendanceRecordResponse>> getRecords(
-            @RequestParam(required = false) PersonType personType,
+            @RequestParam PersonType personType,
             @RequestParam(required = false) Long personId,
             @RequestParam(required = false) LocalDate dateFrom,
             @RequestParam(required = false) LocalDate dateTo,
@@ -351,13 +351,12 @@ public class AttendanceController {
         List<Attendance> records;
         if (personId != null) {
             records = attendanceRepository.findByPersonIdOrderByDateDescIdDesc(personId);
-        } else if (personType != null) {
-            records = attendanceRepository.findByPersonTypeOrderByDateDescIdDesc(personType);
         } else {
-            records = attendanceRepository.findAllOrderByDateDescIdDesc();
+            records = attendanceRepository.findByPersonTypeOrderByDateDescIdDesc(personType);
         }
 
         Stream<Attendance> stream = records.stream();
+        stream = stream.filter(a -> a.getPerson() != null && a.getPerson().getPersonType() == personType);
         if (dateFrom != null) {
             stream = stream.filter(a -> !a.getDate().isBefore(dateFrom));
         }
