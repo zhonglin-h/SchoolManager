@@ -24,7 +24,7 @@ public enum NotificationType {
     ),
     ALL_PRESENT(
             (e, r) -> "All People Present: " + e.getTitle(),
-            (e, r) -> "All expected people have joined the Meet session for \"" + e.getTitle() + "\".",
+            (e, r) -> "✅ All expected people have joined the Meet session for \"" + e.getTitle() + "\".",
             false, true, false
     ),
     LATE(
