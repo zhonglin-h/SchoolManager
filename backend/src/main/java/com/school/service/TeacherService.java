@@ -2,9 +2,9 @@ package com.school.service;
 
 import com.school.dto.TeacherRequest;
 import com.school.dto.TeacherResponse;
-import com.school.entity.Person;
+import com.school.dto.PersonRequest;
+import com.school.dto.PersonResponse;
 import com.school.entity.PersonType;
-import com.school.repository.PersonRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -12,70 +12,69 @@ import java.util.List;
 @Service
 public class TeacherService {
 
-    private final PersonRepository personRepository;
+    private final PersonService personService;
 
-    public TeacherService(PersonRepository personRepository) {
-        this.personRepository = personRepository;
+    public TeacherService(PersonService personService) {
+        this.personService = personService;
     }
 
     public List<TeacherResponse> getAllActive() {
-        return personRepository.findByPersonTypeAndActiveTrue(PersonType.TEACHER).stream()
-                .map(TeacherResponse::from)
+        return personService.getAllActive(PersonType.TEACHER).stream()
+                .map(TeacherService::toTeacherResponse)
                 .toList();
     }
 
     public TeacherResponse getById(Long id) {
-        Person teacher = personRepository.findById(id)
-                .filter(p -> p.getPersonType() == PersonType.TEACHER)
-                .orElseThrow(() -> new RuntimeException("Teacher not found: " + id));
-        return TeacherResponse.from(teacher);
+        PersonResponse person = personService.getById(id);
+        requireTeacherType(person, id);
+        return toTeacherResponse(person);
     }
 
     public TeacherResponse create(TeacherRequest req) {
-        validateUniqueMeetEmailForCreate(req.meetEmail());
-        Person teacher = Person.builder()
-                .personType(PersonType.TEACHER)
-                .name(req.name())
-                .meetEmail(req.meetEmail())
-                .meetDisplayName(req.meetDisplayName())
-                .phone(req.phone())
-                .hourlyRate(req.hourlyRate())
-                .build();
-        return TeacherResponse.from(personRepository.save(teacher));
+        return toTeacherResponse(personService.create(fromTeacherRequest(req)));
     }
 
     public TeacherResponse update(Long id, TeacherRequest req) {
-        Person teacher = personRepository.findById(id)
-                .filter(p -> p.getPersonType() == PersonType.TEACHER)
-                .orElseThrow(() -> new RuntimeException("Teacher not found: " + id));
-        validateUniqueMeetEmailForUpdate(req.meetEmail(), id);
-        teacher.setName(req.name());
-        teacher.setMeetEmail(req.meetEmail());
-        teacher.setMeetDisplayName(req.meetDisplayName());
-        teacher.setPhone(req.phone());
-        teacher.setHourlyRate(req.hourlyRate());
-        return TeacherResponse.from(personRepository.save(teacher));
+        PersonResponse existing = personService.getById(id);
+        requireTeacherType(existing, id);
+        return toTeacherResponse(personService.update(id, fromTeacherRequest(req)));
     }
 
     public void softDelete(Long id) {
-        Person teacher = personRepository.findById(id)
-                .filter(p -> p.getPersonType() == PersonType.TEACHER)
-                .orElseThrow(() -> new RuntimeException("Teacher not found: " + id));
-        teacher.setActive(false);
-        personRepository.save(teacher);
+        PersonResponse existing = personService.getById(id);
+        requireTeacherType(existing, id);
+        personService.softDelete(id);
     }
 
-    private void validateUniqueMeetEmailForCreate(String meetEmail) {
-        if (meetEmail == null || meetEmail.isBlank()) return;
-        if (personRepository.existsByMeetEmail(meetEmail)) {
-            throw new RuntimeException("Duplicate meetEmail not allowed: " + meetEmail);
-        }
+    private static TeacherResponse toTeacherResponse(PersonResponse p) {
+        return new TeacherResponse(
+                p.id(),
+                p.name(),
+                p.meetEmail(),
+                p.meetDisplayName(),
+                p.phone(),
+                p.hourlyRate(),
+                p.active()
+        );
     }
 
-    private void validateUniqueMeetEmailForUpdate(String meetEmail, Long id) {
-        if (meetEmail == null || meetEmail.isBlank()) return;
-        if (personRepository.existsByMeetEmailAndIdNot(meetEmail, id)) {
-            throw new RuntimeException("Duplicate meetEmail not allowed: " + meetEmail);
+    private static PersonRequest fromTeacherRequest(TeacherRequest req) {
+        return new PersonRequest(
+                PersonType.TEACHER,
+                req.name(),
+                req.meetEmail(),
+                req.meetDisplayName(),
+                null,
+                null,
+                null,
+                req.phone(),
+                req.hourlyRate()
+        );
+    }
+
+    private static void requireTeacherType(PersonResponse person, Long id) {
+        if (person.personType() != PersonType.TEACHER) {
+            throw new RuntimeException("Teacher not found: " + id);
         }
     }
 }
