@@ -107,11 +107,12 @@ public class MeetSessionHandler {
                 }
             }
             List<String> unmatchedInvitees = attendanceHelper.findUnmatchedInvitees(event);
+            List<String> unmatchedParticipants = attendanceHelper.findUnmatchedParticipants(participants, expected);
             if (!unmatchedInvitees.isEmpty()) {
                 notificationService.notify(
                         NotificationType.UNMATCHED_GUESTS,
                         event,
-                        new GuestRecipient(unmatchedInvitees));
+                        new GuestRecipient(unmatchedInvitees, unmatchedParticipants));
             }
         } catch (Exception e) {
             log.warn("Failed pre-class join check for {}: {}", event.getId(), e.getMessage());
@@ -223,16 +224,18 @@ public class MeetSessionHandler {
                     }
                 }
 
-                attendanceHelper.processParticipants(event, googleMeetClient.getActiveParticipants(event.getSpaceCode()),
+                List<MeetParticipant> activeParticipants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
+                attendanceHelper.processParticipants(event, activeParticipants,
                         expected, seenStudentIds, seenTeacherIds, lateThreshold);
                 notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
 
                 List<String> unmatchedInvitees = attendanceHelper.findUnmatchedInvitees(event);
+                List<String> unmatchedParticipants = attendanceHelper.findUnmatchedParticipants(activeParticipants, expected);
                 if (!unmatchedInvitees.isEmpty()) {
                     notificationService.notify(
                             NotificationType.UNMATCHED_GUESTS,
                             event,
-                            new GuestRecipient(unmatchedInvitees));
+                            new GuestRecipient(unmatchedInvitees, unmatchedParticipants));
                 }
 
                 if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {

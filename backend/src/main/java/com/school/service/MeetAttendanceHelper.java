@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.school.entity.Attendance;
@@ -37,15 +38,18 @@ class MeetAttendanceHelper {
     private final TeacherRepository teacherRepository;
     private final AttendanceRepository attendanceRepository;
     private final NotificationService notificationService;
+    private final String principalEmail;
 
     MeetAttendanceHelper(StudentRepository studentRepository,
                           TeacherRepository teacherRepository,
                           AttendanceRepository attendanceRepository,
-                          NotificationService notificationService) {
+                          NotificationService notificationService,
+                          @Value("${app.principal.email}") String principalEmail) {
         this.studentRepository = studentRepository;
         this.teacherRepository = teacherRepository;
         this.attendanceRepository = attendanceRepository;
         this.notificationService = notificationService;
+        this.principalEmail = principalEmail;
     }
 
     /**
@@ -159,6 +163,8 @@ class MeetAttendanceHelper {
         if (event.getAttendeeEmails() == null) return List.of();
         List<String> unmatched = new ArrayList<>();
         for (String email : event.getAttendeeEmails()) {
+            if (email == null || email.isBlank()) continue;
+            if (principalEmail != null && email.equalsIgnoreCase(principalEmail)) continue;
             boolean found = studentRepository.findByMeetEmailAndActiveTrue(email).isPresent()
                     || teacherRepository.findByMeetEmailAndActiveTrue(email).isPresent();
             if (!found) unmatched.add(email);

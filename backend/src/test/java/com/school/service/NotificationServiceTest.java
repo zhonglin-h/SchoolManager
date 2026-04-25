@@ -275,7 +275,9 @@ class NotificationServiceTest {
 
     @Test
     void notifyUnmatchedGuests_sendsEachTimeWithoutDedup() {
-        GuestRecipient guestRecipient = new GuestRecipient(List.of("unknown@meet.com", "external@meet.com"));
+        GuestRecipient guestRecipient = new GuestRecipient(
+                List.of("unknown@meet.com", "external@meet.com"),
+                List.of("Mystery Person"));
 
         notificationService.notify(NotificationType.UNMATCHED_GUESTS, event, guestRecipient);
         notificationService.notify(NotificationType.UNMATCHED_GUESTS, event, guestRecipient);
@@ -285,7 +287,7 @@ class NotificationServiceTest {
                         anyString(), any(LocalDate.class), anyString(), any());
         verify(emailClient, times(2)).send(eq(PRINCIPAL), eq("Unknown People in Session: Math Class"),
                 contains("unknown@meet.com"));
-        verify(telegramClient, times(2)).send(contains("external@meet.com"));
+        verify(telegramClient, times(2)).send(contains("In room but not found in system: Mystery Person"));
         verify(notificationLogRepository, times(4)).save(any(NotificationLog.class));
     }
 

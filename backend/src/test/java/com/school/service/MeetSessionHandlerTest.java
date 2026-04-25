@@ -53,11 +53,12 @@ class MeetSessionHandlerTest {
     private static final MeetParticipant ALICE_PARTICIPANT = new MeetParticipant("uid-alice", "Alice", null);
     private static final MeetParticipant BOB_PARTICIPANT   = new MeetParticipant("uid-bob",   "Bob",   null);
     private static final MeetParticipant CAROL_PARTICIPANT = new MeetParticipant("uid-carol", "Carol", null);
+    private static final String PRINCIPAL_EMAIL = "principal@test.com";
 
     @BeforeEach
     void setUp() throws Exception {
         attendanceHelper = new MeetAttendanceHelper(studentRepository, teacherRepository,
-                attendanceRepository, notificationService);
+                attendanceRepository, notificationService, PRINCIPAL_EMAIL);
         sessionHandler = new MeetSessionHandler(attendanceHelper, notificationService,
                 meetClient, taskScheduler, attendanceRepository, upcomingChecksRegistry);
         ReflectionTestUtils.setField(sessionHandler, "lateBufferMinutes", 5);
@@ -593,7 +594,38 @@ class MeetSessionHandlerTest {
         verify(notificationService).notify(
                 NotificationType.UNMATCHED_GUESTS,
                 eventWithUnknown,
-                new GuestRecipient(List.of("unknown@meet.com")));
+                new GuestRecipient(List.of("unknown@meet.com"), List.of()));
+    }
+
+    @Test
+    void checkPreClassJoins_ignoresPrincipalInviteeAndIncludesUnmatchedParticipantsInMessage() throws Exception {
+        CalendarEvent eventWithPrincipal = new CalendarEvent("evt-u2", "Math Class",
+                "https://meet.google.com/abc-def", "abc-def",
+                LocalDateTime.now().plusMinutes(3), LocalDateTime.now().plusHours(1),
+                List.of("alice@meet.com", PRINCIPAL_EMAIL, "unknown@meet.com"));
+        MeetParticipant mysteryParticipant = new MeetParticipant(null, "Mystery Person", null);
+
+        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(ALICE_PARTICIPANT, mysteryParticipant));
+        when(studentRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetEmailAndActiveTrue(PRINCIPAL_EMAIL)).thenReturn(Optional.empty());
+        when(studentRepository.findByMeetEmailAndActiveTrue("unknown@meet.com")).thenReturn(Optional.empty());
+        when(studentRepository.findByGoogleUserIdAndActiveTrue("uid-alice")).thenReturn(Optional.of(alice));
+        when(studentRepository.findByMeetDisplayNameIgnoreCaseAndActiveTrue("Mystery Person")).thenReturn(Optional.empty());
+        when(studentRepository.findByNameIgnoreCaseAndActiveTrue("Mystery Person")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("alice@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue(PRINCIPAL_EMAIL)).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetEmailAndActiveTrue("unknown@meet.com")).thenReturn(Optional.empty());
+        when(teacherRepository.findByMeetDisplayNameIgnoreCaseAndActiveTrue("Mystery Person")).thenReturn(Optional.empty());
+        when(teacherRepository.findByNameIgnoreCaseAndActiveTrue("Mystery Person")).thenReturn(Optional.empty());
+
+        sessionHandler.checkPreClassJoins(eventWithPrincipal);
+
+        verify(notificationService).notify(
+                eq(NotificationType.UNMATCHED_GUESTS),
+                eq(eventWithPrincipal),
+                argThat(r -> r instanceof GuestRecipient gr
+                        && gr.unmatchedInvitees().equals(List.of("unknown@meet.com"))
+                        && gr.unmatchedParticipants().equals(List.of("Mystery Person"))));
     }
 
     @Test
@@ -636,7 +668,7 @@ class MeetSessionHandlerTest {
         verify(notificationService, times(2)).notify(
                 NotificationType.UNMATCHED_GUESTS,
                 eventWithUnknown,
-                new GuestRecipient(List.of("unknown@meet.com")));
+                new GuestRecipient(List.of("unknown@meet.com"), List.of()));
     }
 
     // --- ALL_PRESENT calls cancelPollingFor (removes registry entry) ---

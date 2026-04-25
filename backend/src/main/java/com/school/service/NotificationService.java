@@ -152,8 +152,16 @@ public class NotificationService {
 
     private String resolveBody(NotificationType type, CalendarEvent event, @Nullable Recipient recipient) {
         if (type == NotificationType.UNMATCHED_GUESTS && recipient instanceof GuestRecipient guestRecipient) {
-            return "Invited but not found in system: "
-                    + String.join(", ", guestRecipient.unmatchedInvitees());
+            List<String> sections = new ArrayList<>();
+            if (!guestRecipient.unmatchedInvitees().isEmpty()) {
+                sections.add("Invited but not found in system: "
+                        + String.join(", ", guestRecipient.unmatchedInvitees()));
+            }
+            if (!guestRecipient.unmatchedParticipants().isEmpty()) {
+                sections.add("In room but not found in system: "
+                        + String.join(", ", guestRecipient.unmatchedParticipants()));
+            }
+            return String.join("\n", sections);
         }
         return type.body(event, recipient);
     }
