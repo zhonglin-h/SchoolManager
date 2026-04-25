@@ -6,9 +6,10 @@
 - [X] in NotificationService, it marks the people the notifications are about as recipients, when they are the subjects.
 
 NEW FEATURES
+- [ ] open meeting automatically
 - [ ] package into manner than can be more portable
 - [ ] create versioning and backups for database (online?)
-- [ ] open meeting automatically
+- [ ] uptime checks
 - [ ] edit msg for guest but not matched
 - [ ] monitor how long teacher stayed there - when teacher leaves (also when arrived)
 - [ ] support multiple email for people
