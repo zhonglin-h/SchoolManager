@@ -8,11 +8,13 @@ Add best-effort Windows auto-join on top of the existing Calendar + Meet monitor
 - Google Calendar API read for today's events and Meet links.
 - Google Meet API read for meeting-active checks and participant snapshots.
 - Scheduler and monitor pipeline for T-15, T-3, session start polling, and finalize.
+- Backend OAuth is already the source of truth for Google API access; no new OAuth system is needed for auto-join.
 
 This plan focuses only on missing auto-join capabilities.
 
 ## 1. Scope And Guardrails
 - Support internal Google Workspace meetings first.
+- Use the principal's Google account as the dedicated auto-join account.
 - Treat unattended join as best-effort automation, not guaranteed.
 - Define terminal outcomes:
   - `joined`
@@ -27,6 +29,8 @@ This plan focuses only on missing auto-join capabilities.
 ## 2. Architecture Decision (Local-Only First)
 - Run join automation on the same Windows machine that already runs backend.
 - Keep backend as orchestrator and state owner.
+- Keep existing backend OAuth flow unchanged for Calendar/Meet APIs.
+- Browser auto-join uses principal Chrome session state (signed-in profile/cookies), not API OAuth tokens.
 - Add a local `JoinAutomationClient` abstraction with two implementations:
   - `NoopJoinAutomationClient` for environments where automation is disabled.
   - `PlaywrightJoinAutomationClient` (or Selenium equivalent) for real joins.
@@ -42,7 +46,7 @@ This plan focuses only on missing auto-join capabilities.
 - Keep current attendance polling flow unchanged after join attempt.
 
 ## 4. Join Attempt Flow (Windows Browser Automation)
-- Launch Chrome with a dedicated signed-in profile for the bot account.
+- Launch Chrome with a dedicated signed-in profile for the principal account.
 - Navigate to Meet URL.
 - Ensure mic and camera are disabled before attempting to join.
 - Handle UI branches:
@@ -76,6 +80,7 @@ This plan focuses only on missing auto-join capabilities.
 - `app.autojoin.retry.max-attempts`
 - `app.autojoin.retry.backoff-ms`
 - `app.autojoin.notify-on-success` (default `false`)
+- `app.autojoin.require-principal-profile-signed-in` (default `true`)
 
 ## 7. Notifications And Fallback
 - On failed unattended join, notify principal through existing notification channels.
@@ -85,12 +90,13 @@ This plan focuses only on missing auto-join capabilities.
 - Deduplicate by event/date/reason to prevent alert spam.
 
 ## 8. Security/Operations
-- Keep bot account isolated from personal browser profiles.
+- Keep the principal auto-join profile isolated from other personal browser profiles.
 - Restrict filesystem access for token and browser profile directories.
 - Document one-time manual setup:
-  - First OAuth consent login
-  - Chrome profile sign-in
+  - First backend OAuth consent login (existing flow, for API access)
+  - Chrome profile sign-in with principal account
   - Browser permission grants for Meet camera/mic prompts
+- Document recovery steps when Chrome session expires (re-login principal profile); no backend OAuth redesign required.
 
 ## 9. Testing Strategy
 - Unit tests:
@@ -121,4 +127,5 @@ This plan focuses only on missing auto-join capabilities.
 5. Wire auto-join trigger into current monitor scheduling.
 6. Add failure notifications and dedup.
 7. Add endpoints/UI hooks for join attempt visibility.
-8. Execute pilot and tune selectors/retries/timeouts.
+8. Add startup/preflight check that principal Chrome profile is signed in.
+9. Execute pilot and tune selectors/retries/timeouts.
