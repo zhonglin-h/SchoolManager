@@ -62,7 +62,13 @@ public class GoogleMeetClient implements MeetClient {
         JsonNode space = getSpace(spaceCode);
         if (space == null) return false;
         JsonNode activeConference = space.get("activeConference");
-        return activeConference != null && !activeConference.isNull();
+        if (activeConference == null || activeConference.isNull()) return false;
+
+        String conferenceRecord = activeConference.path("conferenceRecord").asText(null);
+        if (conferenceRecord == null) return false;
+
+        // Treat meetings as active only when at least one participant is currently present.
+        return !fetchParticipants(conferenceRecord, true).isEmpty();
     }
 
     @Override
