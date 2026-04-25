@@ -90,8 +90,6 @@ public class CalendarController {
                     .filter(event -> eventId.equals(event.getId()))
                     .findFirst()
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found for today: " + eventId));
-        } catch (ResponseStatusException e) {
-            throw e;
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to load today's events", e);
         }

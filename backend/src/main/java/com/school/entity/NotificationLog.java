@@ -49,5 +49,7 @@ public class NotificationLog {
     @Builder.Default
     private boolean success = true;
 
+    private String reasonCode;
+
     private String failureReason;
 }

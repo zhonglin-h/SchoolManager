@@ -3,7 +3,6 @@ package com.school.service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -78,7 +77,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             }
 
             try {
-                Thread.sleep(Duration.ofSeconds(2));
+                Thread.sleep(2000L);
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
                 return new JoinAutomationResult(
@@ -111,7 +110,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         new ProcessBuilder(command).start();
     }
 
-    public boolean isProfileReady() {
+    boolean isProfileReady() {
         String profileDir = autoJoinProperties.getChromeProfileDir();
         if (profileDir == null || profileDir.isBlank()) {
             return false;

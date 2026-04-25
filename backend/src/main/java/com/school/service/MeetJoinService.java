@@ -12,6 +12,9 @@ import com.school.integration.MeetClient;
 import com.school.model.CalendarEvent;
 import com.school.repository.JoinAttemptLogRepository;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
 public class MeetJoinService {
 
@@ -86,6 +89,8 @@ public class MeetJoinService {
                     return skipped;
                 }
             } catch (Exception ignored) {
+                log.debug("Failed to probe meeting active status before auto-join for {}: {}",
+                        event.getId(), ignored.getMessage());
                 // continue to auto-join attempt on status probe failure
             }
         }

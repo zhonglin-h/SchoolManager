@@ -77,6 +77,7 @@ public class NotificationService {
                 String emailSubject = type.subject(event, subject);
                 String body = resolveBody(type, event, subject);
                 String failureReason = null;
+                String reasonCode = subject instanceof JoinAttemptSubject joinAttemptSubject ? joinAttemptSubject.reasonCode() : null;
                 List<String> recipients = new ArrayList<>();
 
                 if (type.toPrincipalViaEmail) {
@@ -110,6 +111,7 @@ public class NotificationService {
                         .channel(NotificationChannel.EMAIL)
                         .recipient(String.join(", ", recipients))
                         .success(failureReason == null)
+                        .reasonCode(reasonCode)
                         .failureReason(failureReason)
                         .build();
                 notificationLogRepository.save(emailEntry);
@@ -124,6 +126,7 @@ public class NotificationService {
             if (!telegramAlreadySent) {
                 String body = resolveBody(type, event, subject);
                 String failureReason = null;
+                String reasonCode = subject instanceof JoinAttemptSubject joinAttemptSubject ? joinAttemptSubject.reasonCode() : null;
 
                 try {
                     telegramClient.send(body);
@@ -142,6 +145,7 @@ public class NotificationService {
                         .channel(NotificationChannel.TELEGRAM)
                         .recipient(telegramChatId)
                         .success(failureReason == null)
+                        .reasonCode(reasonCode)
                         .failureReason(failureReason)
                         .build();
                 notificationLogRepository.save(telegramEntry);
@@ -172,10 +176,11 @@ public class NotificationService {
 
     private boolean dedupCheck(@Nullable NotificationSubject subject, CalendarEvent event,
                                NotificationType type, NotificationChannel channel) {
-        if (subject instanceof JoinAttemptSubject joinAttemptSubject && type == NotificationType.AUTO_JOIN_FAILED) {
+        if (subject instanceof JoinAttemptSubject joinAttemptSubject
+                && (type == NotificationType.AUTO_JOIN_FAILED || type == NotificationType.AUTO_JOIN_SUCCESS)) {
             return notificationLogRepository
-                    .existsByCalendarEventIdAndDateAndTypeAndChannelAndPersonIsNullAndMessageContainingAndSuccessTrue(
-                            event.getId(), LocalDate.now(), type.name(), channel, "Reason: " + joinAttemptSubject.reasonCode());
+                    .existsByCalendarEventIdAndDateAndTypeAndChannelAndPersonIsNullAndReasonCodeAndSuccessTrue(
+                            event.getId(), LocalDate.now(), type.name(), channel, joinAttemptSubject.reasonCode());
         }
         if (subject instanceof PersonSubject ps) {
             return notificationLogRepository
