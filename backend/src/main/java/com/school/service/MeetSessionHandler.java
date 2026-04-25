@@ -248,12 +248,12 @@ public class MeetSessionHandler {
     }
 
     /**
-     * Returns the number of expected participants excluding the principal attendee.
+     * Returns the number of expected participants from calendar attendees.
      * Applies the same rule everywhere this count is used.
      */
     private int getTotalExpectedParticipants(CalendarEvent event) {
         int attendeeCount = event.getAttendeeEmails() != null ? event.getAttendeeEmails().size() : 0;
-        return Math.max(0, attendeeCount - 1);
+        return Math.max(0, attendeeCount);
     }
 
     private boolean hasSeenAllExpectedParticipants(Set<Long> seenStudentIds, Set<Long> seenTeacherIds, int totalExpected) {

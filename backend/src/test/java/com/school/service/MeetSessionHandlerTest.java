@@ -54,12 +54,11 @@ class MeetSessionHandlerTest {
     private static final MeetParticipant BOB_PARTICIPANT   = new MeetParticipant("uid-bob",   "Bob",   null);
     private static final MeetParticipant CAROL_PARTICIPANT = new MeetParticipant("uid-carol", "Carol", null);
     private static final String PRINCIPAL_EMAIL = "principal@test.com";
-    private static final String PRINCIPAL_NAME = "Principal";
 
     @BeforeEach
     void setUp() throws Exception {
         attendanceHelper = new MeetAttendanceHelper(studentRepository, teacherRepository,
-                attendanceRepository, notificationService, PRINCIPAL_EMAIL, PRINCIPAL_NAME);
+                attendanceRepository, notificationService);
         sessionHandler = new MeetSessionHandler(attendanceHelper, notificationService,
                 meetClient, taskScheduler, attendanceRepository, upcomingChecksRegistry);
         ReflectionTestUtils.setField(sessionHandler, "lateBufferMinutes", 5);
@@ -269,11 +268,13 @@ class MeetSessionHandlerTest {
                 .thenReturn(Optional.of(Attendance.builder().student(alice)
                         .calendarEventId("evt-1").date(LocalDate.now())
                         .status(AttendanceStatus.PRESENT).build()));
+        when(taskScheduler.scheduleAtFixedRate(any(Runnable.class), any(Duration.class)))
+                .thenReturn(mock(ScheduledFuture.class));
 
         sessionHandler.startSessionPolling(event);
 
         verify(attendanceRepository, never()).save(argThat(a -> a.getStudent().equals(alice)));
-        verify(taskScheduler, never()).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
+        verify(taskScheduler).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
     }
 
     // --- startSessionPolling (polling tick) ---
@@ -594,7 +595,7 @@ class MeetSessionHandlerTest {
     }
 
     @Test
-    void checkPreClassJoins_ignoresPrincipalInviteeAndIncludesUnmatchedParticipantsInMessage() throws Exception {
+    void checkPreClassJoins_includesUnmatchedPrincipalInviteeAndParticipantsInMessage() throws Exception {
         CalendarEvent eventWithPrincipal = new CalendarEvent("evt-u2", "Math Class",
                 "https://meet.google.com/abc-def", "abc-def",
                 LocalDateTime.now().plusMinutes(3), LocalDateTime.now().plusHours(1),
@@ -620,7 +621,7 @@ class MeetSessionHandlerTest {
                 eq(NotificationType.UNMATCHED_GUESTS),
                 eq(eventWithPrincipal),
                 argThat(r -> r instanceof GuestRecipient gr
-                        && gr.unmatchedInvitees().equals(List.of("unknown@meet.com"))
+                        && gr.unmatchedInvitees().equals(List.of(PRINCIPAL_EMAIL, "unknown@meet.com"))
                         && gr.unmatchedParticipants().equals(List.of("Mystery Person"))));
     }
 
