@@ -39,17 +39,20 @@ class MeetAttendanceHelper {
     private final AttendanceRepository attendanceRepository;
     private final NotificationService notificationService;
     private final String principalEmail;
+    private final String principalName;
 
     MeetAttendanceHelper(StudentRepository studentRepository,
                           TeacherRepository teacherRepository,
                           AttendanceRepository attendanceRepository,
                           NotificationService notificationService,
-                          @Value("${app.principal.email}") String principalEmail) {
+                          @Value("${app.principal.email}") String principalEmail,
+                          @Value("${app.principal.name:}") String principalName) {
         this.studentRepository = studentRepository;
         this.teacherRepository = teacherRepository;
         this.attendanceRepository = attendanceRepository;
         this.notificationService = notificationService;
         this.principalEmail = principalEmail;
+        this.principalName = principalName;
     }
 
     /**
@@ -89,6 +92,7 @@ class MeetAttendanceHelper {
     ResolvedParticipants resolveAndAutoLearn(List<MeetParticipant> participants) {
         Set<Long> studentIds = new HashSet<>();
         Set<Long> teacherIds = new HashSet<>();
+        Optional<Teacher> principalTeacher = findPrincipalTeacher();
 
         for (MeetParticipant participant : participants) {
             Optional<Student> student = Optional.empty();
@@ -126,6 +130,11 @@ class MeetAttendanceHelper {
                     teacherRepository.save(teacher.get());
                 }
                 teacherIds.add(teacher.get().getId());
+                continue;
+            }
+
+            if (tryAutoLearnPrincipalByConfiguredName(participant, principalTeacher)) {
+                principalTeacher.ifPresent(t -> teacherIds.add(t.getId()));
             }
         }
         return new ResolvedParticipants(studentIds, teacherIds);
@@ -179,8 +188,10 @@ class MeetAttendanceHelper {
      */
     List<String> findUnmatchedParticipants(List<MeetParticipant> participants, ExpectedParticipants expected) {
         List<String> unmatched = new ArrayList<>();
+        Optional<Teacher> principalTeacher = findPrincipalTeacher();
         for (MeetParticipant participant : participants) {
             if (participant.displayName() == null || participant.displayName().isBlank()) continue;
+            if (isKnownPrincipalParticipant(participant, principalTeacher)) continue;
             boolean matched = false;
             for (com.school.entity.Student student : expected.students()) {
                 if (meetIdentityMatches(participant, student.getGoogleUserId(),
@@ -201,6 +212,54 @@ class MeetAttendanceHelper {
             if (!matched) unmatched.add(participant.displayName());
         }
         return unmatched;
+    }
+
+    private Optional<Teacher> findPrincipalTeacher() {
+        if (principalEmail == null || principalEmail.isBlank()) return Optional.empty();
+        Optional<Teacher> teacher = teacherRepository.findByMeetEmailAndActiveTrue(principalEmail);
+        return teacher != null ? teacher : Optional.empty();
+    }
+
+    private boolean tryAutoLearnPrincipalByConfiguredName(MeetParticipant participant, Optional<Teacher> principalTeacher) {
+        if (participant.displayName() == null || participant.displayName().isBlank() || principalTeacher.isEmpty()) {
+            return false;
+        }
+        Teacher principal = principalTeacher.get();
+        if (principal.getGoogleUserId() != null && !principal.getGoogleUserId().isBlank()) {
+            return false;
+        }
+        String configuredPrincipalName = resolveConfiguredPrincipalName(principal);
+        if (configuredPrincipalName == null || configuredPrincipalName.isBlank()
+                || !participant.displayName().equalsIgnoreCase(configuredPrincipalName)) {
+            return false;
+        }
+        boolean changed = autoLearnMeetIdentity(participant,
+                principal::getGoogleUserId, principal::setGoogleUserId,
+                principal::getMeetDisplayName, principal::setMeetDisplayName,
+                "principal " + principal.getName());
+        if (changed) {
+            teacherRepository.save(principal);
+        }
+        return true;
+    }
+
+    private boolean isKnownPrincipalParticipant(MeetParticipant participant, Optional<Teacher> principalTeacher) {
+        if (principalTeacher.isEmpty()) return false;
+        Teacher principal = principalTeacher.get();
+        if (principal.getGoogleUserId() != null && participant.googleUserId() != null
+                && participant.googleUserId().equals(principal.getGoogleUserId())) {
+            return true;
+        }
+        String configuredPrincipalName = resolveConfiguredPrincipalName(principal);
+        return participant.displayName() != null
+                && configuredPrincipalName != null
+                && !configuredPrincipalName.isBlank()
+                && participant.displayName().equalsIgnoreCase(configuredPrincipalName);
+    }
+
+    private String resolveConfiguredPrincipalName(Teacher principalTeacher) {
+        if (principalName != null && !principalName.isBlank()) return principalName;
+        return principalTeacher.getName();
     }
 
     private boolean meetIdentityMatches(MeetParticipant participant, String googleUserId,

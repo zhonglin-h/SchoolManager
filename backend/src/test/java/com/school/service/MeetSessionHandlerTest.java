@@ -54,11 +54,12 @@ class MeetSessionHandlerTest {
     private static final MeetParticipant BOB_PARTICIPANT   = new MeetParticipant("uid-bob",   "Bob",   null);
     private static final MeetParticipant CAROL_PARTICIPANT = new MeetParticipant("uid-carol", "Carol", null);
     private static final String PRINCIPAL_EMAIL = "principal@test.com";
+    private static final String PRINCIPAL_NAME = "Principal";
 
     @BeforeEach
     void setUp() throws Exception {
         attendanceHelper = new MeetAttendanceHelper(studentRepository, teacherRepository,
-                attendanceRepository, notificationService, PRINCIPAL_EMAIL);
+                attendanceRepository, notificationService, PRINCIPAL_EMAIL, PRINCIPAL_NAME);
         sessionHandler = new MeetSessionHandler(attendanceHelper, notificationService,
                 meetClient, taskScheduler, attendanceRepository, upcomingChecksRegistry);
         ReflectionTestUtils.setField(sessionHandler, "lateBufferMinutes", 5);
