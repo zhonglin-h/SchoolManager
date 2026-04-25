@@ -2,8 +2,9 @@ package com.school.service;
 
 import com.school.dto.TeacherRequest;
 import com.school.dto.TeacherResponse;
-import com.school.entity.Teacher;
-import com.school.repository.TeacherRepository;
+import com.school.entity.Person;
+import com.school.entity.PersonType;
+import com.school.repository.PersonRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -25,7 +26,7 @@ import static org.mockito.Mockito.when;
 class TeacherServiceTest {
 
     @Mock
-    TeacherRepository teacherRepository;
+    PersonRepository personRepository;
 
     @InjectMocks
     TeacherService teacherService;
@@ -34,8 +35,8 @@ class TeacherServiceTest {
 
     @Test
     void getAllActive_returnsOnlyActiveTeachers() {
-        Teacher active = teacher(1L, "Alice", true);
-        when(teacherRepository.findByActiveTrue()).thenReturn(List.of(active));
+        Person active = teacher(1L, "Alice", true);
+        when(personRepository.findByPersonTypeAndActiveTrue(PersonType.TEACHER)).thenReturn(List.of(active));
 
         List<TeacherResponse> result = teacherService.getAllActive();
 
@@ -46,7 +47,7 @@ class TeacherServiceTest {
 
     @Test
     void getAllActive_returnsEmptyListWhenNoneActive() {
-        when(teacherRepository.findByActiveTrue()).thenReturn(List.of());
+        when(personRepository.findByPersonTypeAndActiveTrue(PersonType.TEACHER)).thenReturn(List.of());
 
         assertThat(teacherService.getAllActive()).isEmpty();
     }
@@ -55,7 +56,7 @@ class TeacherServiceTest {
 
     @Test
     void getById_returnsTeacherWhenFound() {
-        when(teacherRepository.findById(1L)).thenReturn(Optional.of(teacher(1L, "Bob", true)));
+        when(personRepository.findById(1L)).thenReturn(Optional.of(teacher(1L, "Bob", true)));
 
         TeacherResponse result = teacherService.getById(1L);
 
@@ -65,7 +66,7 @@ class TeacherServiceTest {
 
     @Test
     void getById_throwsWhenNotFound() {
-        when(teacherRepository.findById(99L)).thenReturn(Optional.empty());
+        when(personRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> teacherService.getById(99L))
                 .isInstanceOf(RuntimeException.class)
@@ -77,10 +78,11 @@ class TeacherServiceTest {
     @Test
     void create_savesAndReturnsNewTeacher() {
         TeacherRequest req = new TeacherRequest("Carol", "carol@meet.com", null, "555-1234", new BigDecimal("50.00"));
-        Teacher saved = Teacher.builder()
+        Person saved = Person.builder()
                 .id(5L).name("Carol").meetEmail("carol@meet.com")
+                .personType(PersonType.TEACHER)
                 .phone("555-1234").hourlyRate(new BigDecimal("50.00")).build();
-        when(teacherRepository.save(any(Teacher.class))).thenReturn(saved);
+        when(personRepository.save(any(Person.class))).thenReturn(saved);
 
         TeacherResponse result = teacherService.create(req);
 
@@ -88,8 +90,9 @@ class TeacherServiceTest {
         assertThat(result.name()).isEqualTo("Carol");
         assertThat(result.meetEmail()).isEqualTo("carol@meet.com");
 
-        ArgumentCaptor<Teacher> captor = ArgumentCaptor.forClass(Teacher.class);
-        verify(teacherRepository).save(captor.capture());
+        ArgumentCaptor<Person> captor = ArgumentCaptor.forClass(Person.class);
+        verify(personRepository).save(captor.capture());
+        assertThat(captor.getValue().getPersonType()).isEqualTo(PersonType.TEACHER);
         assertThat(captor.getValue().isActive()).isTrue();
     }
 
@@ -97,9 +100,9 @@ class TeacherServiceTest {
 
     @Test
     void update_updatesFieldsAndSaves() {
-        Teacher existing = teacher(2L, "Dave", true);
-        when(teacherRepository.findById(2L)).thenReturn(Optional.of(existing));
-        when(teacherRepository.save(any(Teacher.class))).thenAnswer(inv -> inv.getArgument(0));
+        Person existing = teacher(2L, "Dave", true);
+        when(personRepository.findById(2L)).thenReturn(Optional.of(existing));
+        when(personRepository.save(any(Person.class))).thenAnswer(inv -> inv.getArgument(0));
 
         TeacherRequest req = new TeacherRequest("David", "david@meet.com", null, "555-9999", new BigDecimal("60.00"));
         TeacherResponse result = teacherService.update(2L, req);
@@ -111,7 +114,7 @@ class TeacherServiceTest {
 
     @Test
     void update_throwsWhenNotFound() {
-        when(teacherRepository.findById(99L)).thenReturn(Optional.empty());
+        when(personRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> teacherService.update(99L,
                 new TeacherRequest("X", "x@x.com", null, "000", null)))
@@ -122,20 +125,20 @@ class TeacherServiceTest {
 
     @Test
     void softDelete_setsActiveFalse() {
-        Teacher existing = teacher(3L, "Eve", true);
-        when(teacherRepository.findById(3L)).thenReturn(Optional.of(existing));
-        when(teacherRepository.save(any(Teacher.class))).thenAnswer(inv -> inv.getArgument(0));
+        Person existing = teacher(3L, "Eve", true);
+        when(personRepository.findById(3L)).thenReturn(Optional.of(existing));
+        when(personRepository.save(any(Person.class))).thenAnswer(inv -> inv.getArgument(0));
 
         teacherService.softDelete(3L);
 
-        ArgumentCaptor<Teacher> captor = ArgumentCaptor.forClass(Teacher.class);
-        verify(teacherRepository).save(captor.capture());
+        ArgumentCaptor<Person> captor = ArgumentCaptor.forClass(Person.class);
+        verify(personRepository).save(captor.capture());
         assertThat(captor.getValue().isActive()).isFalse();
     }
 
     @Test
     void softDelete_throwsWhenNotFound() {
-        when(teacherRepository.findById(99L)).thenReturn(Optional.empty());
+        when(personRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> teacherService.softDelete(99L))
                 .isInstanceOf(RuntimeException.class);
@@ -143,8 +146,9 @@ class TeacherServiceTest {
 
     // --- helpers ---
 
-    private Teacher teacher(Long id, String name, boolean active) {
-        return Teacher.builder().id(id).name(name)
+    private Person teacher(Long id, String name, boolean active) {
+        return Person.builder().id(id).name(name)
+                .personType(PersonType.TEACHER)
                 .meetEmail(name.toLowerCase() + "@meet.com")
                 .phone("555-0000")
                 .hourlyRate(new BigDecimal("45.00"))

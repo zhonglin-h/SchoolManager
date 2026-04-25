@@ -8,11 +8,10 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface NotificationLogRepository extends JpaRepository<NotificationLog, Long> {
-    boolean existsByStudentIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(Long studentId, String calendarEventId, LocalDate date, String type);
-    boolean existsByCalendarEventIdAndDateAndTypeAndStudentIsNullAndSuccessTrue(String calendarEventId, LocalDate date, String type);
-    boolean existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(Long studentId, String calendarEventId, LocalDate date, String type, NotificationChannel channel);
-    boolean existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(String calendarEventId, LocalDate date, String type, NotificationChannel channel);
-    boolean existsByTeacherIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(Long teacherId, String calendarEventId, LocalDate date, String type, NotificationChannel channel);
+    boolean existsByPersonIdAndCalendarEventIdAndDateAndTypeAndSuccessTrue(Long personId, String calendarEventId, LocalDate date, String type);
+    boolean existsByCalendarEventIdAndDateAndTypeAndPersonIsNullAndSuccessTrue(String calendarEventId, LocalDate date, String type);
+    boolean existsByPersonIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(Long personId, String calendarEventId, LocalDate date, String type, NotificationChannel channel);
+    boolean existsByCalendarEventIdAndDateAndTypeAndChannelAndPersonIsNullAndSuccessTrue(String calendarEventId, LocalDate date, String type, NotificationChannel channel);
     List<NotificationLog> findAllByOrderBySentAtDesc();
     void deleteByCalendarEventIdAndDate(String calendarEventId, LocalDate date);
 }

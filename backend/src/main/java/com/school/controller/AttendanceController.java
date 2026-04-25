@@ -3,15 +3,13 @@ package com.school.controller;
 import com.school.dto.AttendanceSummaryResponse;
 import com.school.entity.Attendance;
 import com.school.entity.AttendanceStatus;
+import com.school.entity.Person;
 import com.school.entity.PersonType;
-import com.school.entity.Student;
-import com.school.entity.Teacher;
 import com.school.integration.MeetClient;
 import com.school.integration.MeetParticipant;
 import com.school.model.CalendarEvent;
 import com.school.repository.AttendanceRepository;
-import com.school.repository.StudentRepository;
-import com.school.repository.TeacherRepository;
+import com.school.repository.PersonRepository;
 import com.school.service.CalendarSyncService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,23 +44,20 @@ public class AttendanceController {
 
     private final CalendarSyncService calendarSyncService;
     private final AttendanceRepository attendanceRepository;
-    private final StudentRepository studentRepository;
-    private final TeacherRepository teacherRepository;
+    private final PersonRepository personRepository;
     private final MeetClient meetClient;
     private final String principalEmail;
     private final String principalGoogleUserId;
 
     public AttendanceController(CalendarSyncService calendarSyncService,
                                 AttendanceRepository attendanceRepository,
-                                StudentRepository studentRepository,
-                                TeacherRepository teacherRepository,
+                                PersonRepository personRepository,
                                 MeetClient meetClient,
                                 @Value("${app.principal.email}") String principalEmail,
                                 @Value("${app.principal.google-user-id:}") String principalGoogleUserId) {
         this.calendarSyncService = calendarSyncService;
         this.attendanceRepository = attendanceRepository;
-        this.studentRepository = studentRepository;
-        this.teacherRepository = teacherRepository;
+        this.personRepository = personRepository;
         this.meetClient = meetClient;
         this.principalEmail = principalEmail;
         this.principalGoogleUserId = principalGoogleUserId;
@@ -76,16 +71,10 @@ public class AttendanceController {
         List<AttendanceSummaryResponse> summaries = new ArrayList<>();
 
         for (CalendarEvent event : events) {
-            List<Attendance> records = attendanceRepository
-                    .findByCalendarEventIdAndDate(event.getId(), today);
-
-            Map<Long, Attendance> byStudentId = records.stream()
-                    .filter(a -> a.getStudent() != null)
-                    .collect(Collectors.toMap(a -> a.getStudent().getId(), Function.identity()));
-
-            Map<Long, Attendance> byTeacherId = records.stream()
-                    .filter(a -> a.getTeacher() != null)
-                    .collect(Collectors.toMap(a -> a.getTeacher().getId(), Function.identity()));
+            List<Attendance> records = attendanceRepository.findByCalendarEventIdAndDate(event.getId(), today);
+            Map<Long, Attendance> byPersonId = records.stream()
+                    .filter(a -> a.getPerson() != null)
+                    .collect(Collectors.toMap(a -> a.getPerson().getId(), Function.identity()));
 
             Boolean meetingActive = null;
             List<MeetParticipant> liveParticipants = Collections.emptyList();
@@ -98,7 +87,6 @@ public class AttendanceController {
                 } catch (Exception ignored) {}
             }
 
-            // Build lookup sets and join-time maps for live participant matching
             Set<String> liveGoogleIds = new HashSet<>();
             Set<String> liveDisplayNames = new HashSet<>();
             Map<String, Instant> joinByUserId = new HashMap<>();
@@ -121,39 +109,24 @@ public class AttendanceController {
             if (event.getAttendeeEmails() != null) {
                 for (String email : event.getAttendeeEmails()) {
                     if (email.equalsIgnoreCase(principalEmail)) continue;
-                    var studentOpt = studentRepository.findByMeetEmailAndActiveTrue(email);
-                    if (studentOpt.isPresent()) {
-                        var student = studentOpt.get();
-                        Attendance att = byStudentId.get(student.getId());
+                    Person person = personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.STUDENT, email)
+                            .or(() -> personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.TEACHER, email))
+                            .orElse(null);
+                    if (person != null) {
+                        Attendance att = byPersonId.get(person.getId());
                         AttendanceStatus status = att != null ? att.getStatus() : null;
-                        boolean inMeetNow = isInMeet(student, liveGoogleIds, liveDisplayNames);
+                        boolean inMeetNow = isInMeet(person, liveGoogleIds, liveDisplayNames);
                         if (status == null && inMeetNow) {
-                            status = writeStudentAttendance(student, event, today,
-                                    resolveJoinTime(student.getGoogleUserId(), student.getMeetDisplayName(),
-                                            student.getName(), joinByUserId, joinByDisplayName),
+                            status = writeAttendance(person, event, today,
+                                    resolveJoinTime(person.getGoogleUserId(), person.getMeetDisplayName(),
+                                            person.getName(), joinByUserId, joinByDisplayName),
                                     classStart);
                         }
                         entries.add(new AttendanceSummaryResponse.AttendanceEntry(
-                                student.getId(), PersonType.STUDENT, student.getName(), email, status, true, inMeetNow));
+                                person.getId(), person.getPersonType(), person.getName(), email, status, true, inMeetNow));
                     } else {
-                        var teacherOpt = teacherRepository.findByMeetEmailAndActiveTrue(email);
-                        if (teacherOpt.isPresent()) {
-                            var teacher = teacherOpt.get();
-                            Attendance att = byTeacherId.get(teacher.getId());
-                            AttendanceStatus status = att != null ? att.getStatus() : null;
-                            boolean inMeetNow = isInMeet(teacher, liveGoogleIds, liveDisplayNames);
-                            if (status == null && inMeetNow) {
-                                status = writeTeacherAttendance(teacher, event, today,
-                                        resolveJoinTime(teacher.getGoogleUserId(), teacher.getMeetDisplayName(),
-                                                teacher.getName(), joinByUserId, joinByDisplayName),
-                                        classStart);
-                            }
-                            entries.add(new AttendanceSummaryResponse.AttendanceEntry(
-                                    teacher.getId(), PersonType.TEACHER, teacher.getName(), email, status, true, inMeetNow));
-                        } else {
-                            entries.add(new AttendanceSummaryResponse.AttendanceEntry(
-                                    null, null, email, email, null, false, false));
-                        }
+                        entries.add(new AttendanceSummaryResponse.AttendanceEntry(
+                                null, null, email, email, null, false, false));
                     }
                 }
             }
@@ -163,47 +136,29 @@ public class AttendanceController {
             }
 
             int totalExpected = entries.size();
-
-            // Guests: live participants not covered by the attendee list
             Set<String> coveredRefs = new HashSet<>();
             for (var entry : entries) {
                 if (entry.personId() != null && entry.personType() != null) {
                     coveredRefs.add(entry.personType().name() + ":" + entry.personId());
                 }
             }
-            // Also exclude the principal (skipped from entries but may still be in the meeting)
-            studentRepository.findByMeetEmailAndActiveTrue(principalEmail)
+            personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.STUDENT, principalEmail)
                     .ifPresent(s -> coveredRefs.add(PersonType.STUDENT.name() + ":" + s.getId()));
-            teacherRepository.findByMeetEmailAndActiveTrue(principalEmail)
+            personRepository.findByPersonTypeAndMeetEmailAndActiveTrue(PersonType.TEACHER, principalEmail)
                     .ifPresent(t -> coveredRefs.add(PersonType.TEACHER.name() + ":" + t.getId()));
+
             List<AttendanceSummaryResponse.GuestEntry> guests = new ArrayList<>();
             for (MeetParticipant p : liveParticipants) {
                 if (!principalGoogleUserId.isBlank() && principalGoogleUserId.equals(p.googleUserId())) continue;
-                var studentOpt = p.googleUserId() != null
-                        ? studentRepository.findByGoogleUserIdAndActiveTrue(p.googleUserId()) : java.util.Optional.<Student>empty();
-                if (studentOpt.isEmpty() && p.displayName() != null) {
-                    studentOpt = studentRepository.findByMeetDisplayNameIgnoreCaseAndActiveTrue(p.displayName())
-                            .or(() -> studentRepository.findByNameIgnoreCaseAndActiveTrue(p.displayName()));
+                Person person = resolveParticipantToPerson(p, PersonType.STUDENT);
+                if (person == null) {
+                    person = resolveParticipantToPerson(p, PersonType.TEACHER);
                 }
-                if (studentOpt.isPresent()) {
-                    if (!coveredRefs.contains(PersonType.STUDENT.name() + ":" + studentOpt.get().getId())) {
+                if (person != null) {
+                    if (!coveredRefs.contains(person.getPersonType().name() + ":" + person.getId())) {
                         guests.add(new AttendanceSummaryResponse.GuestEntry(
                                 p.googleUserId(), p.displayName(),
-                                studentOpt.get().getId(), PersonType.STUDENT, studentOpt.get().getName()));
-                    }
-                    continue;
-                }
-                var teacherOpt = p.googleUserId() != null
-                        ? teacherRepository.findByGoogleUserIdAndActiveTrue(p.googleUserId()) : java.util.Optional.<Teacher>empty();
-                if (teacherOpt.isEmpty() && p.displayName() != null) {
-                    teacherOpt = teacherRepository.findByMeetDisplayNameIgnoreCaseAndActiveTrue(p.displayName())
-                            .or(() -> teacherRepository.findByNameIgnoreCaseAndActiveTrue(p.displayName()));
-                }
-                if (teacherOpt.isPresent()) {
-                    if (!coveredRefs.contains(PersonType.TEACHER.name() + ":" + teacherOpt.get().getId())) {
-                        guests.add(new AttendanceSummaryResponse.GuestEntry(
-                                p.googleUserId(), p.displayName(),
-                                teacherOpt.get().getId(), PersonType.TEACHER, teacherOpt.get().getName()));
+                                person.getId(), person.getPersonType(), person.getName()));
                     }
                     continue;
                 }
@@ -231,8 +186,19 @@ public class AttendanceController {
         summaries.sort(java.util.Comparator
                 .comparing(AttendanceSummaryResponse::startTime)
                 .thenComparing(AttendanceSummaryResponse::eventTitle));
-
         return ResponseEntity.ok(summaries);
+    }
+
+    private Person resolveParticipantToPerson(MeetParticipant p, PersonType personType) {
+        Person person = p.googleUserId() != null
+                ? personRepository.findByPersonTypeAndGoogleUserIdAndActiveTrue(personType, p.googleUserId()).orElse(null)
+                : null;
+        if (person == null && p.displayName() != null) {
+            person = personRepository.findByPersonTypeAndMeetDisplayNameIgnoreCaseAndActiveTrue(personType, p.displayName())
+                    .or(() -> personRepository.findByPersonTypeAndNameIgnoreCaseAndActiveTrue(personType, p.displayName()))
+                    .orElse(null);
+        }
+        return person;
     }
 
     private Instant resolveJoinTime(String googleUserId, String meetDisplayName, String name,
@@ -247,41 +213,23 @@ public class AttendanceController {
         return (joinTime != null && joinTime.isAfter(classStart)) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
     }
 
-    private AttendanceStatus writeStudentAttendance(Student student, CalendarEvent event, LocalDate date,
-                                                     Instant joinTime, Instant classStart) {
+    private AttendanceStatus writeAttendance(Person person, CalendarEvent event, LocalDate date,
+                                             Instant joinTime, Instant classStart) {
         AttendanceStatus status = statusFromJoinTime(joinTime, classStart);
-        attendanceRepository.findByStudentIdAndCalendarEventIdAndDate(student.getId(), event.getId(), date)
+        attendanceRepository.findByPersonIdAndCalendarEventIdAndDate(person.getId(), event.getId(), date)
                 .ifPresentOrElse(existing -> {}, () -> attendanceRepository.save(
-                        Attendance.builder().student(student).calendarEventId(event.getId())
+                        Attendance.builder().person(person).calendarEventId(event.getId())
                                 .eventTitle(event.getTitle())
                                 .date(date).status(status).build()));
         return status;
     }
 
-    private AttendanceStatus writeTeacherAttendance(Teacher teacher, CalendarEvent event, LocalDate date,
-                                                     Instant joinTime, Instant classStart) {
-        AttendanceStatus status = statusFromJoinTime(joinTime, classStart);
-        attendanceRepository.findByTeacherIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), date)
-                .ifPresentOrElse(existing -> {}, () -> attendanceRepository.save(
-                        Attendance.builder().teacher(teacher).calendarEventId(event.getId())
-                                .eventTitle(event.getTitle())
-                                .date(date).status(status).build()));
-        return status;
+    private boolean isInMeet(Person person, Set<String> liveGoogleIds, Set<String> liveDisplayNames) {
+        if (person.getGoogleUserId() != null && liveGoogleIds.contains(person.getGoogleUserId())) return true;
+        if (person.getMeetDisplayName() != null && liveDisplayNames.contains(person.getMeetDisplayName().toLowerCase())) return true;
+        return liveDisplayNames.contains(person.getName().toLowerCase());
     }
 
-    private boolean isInMeet(Student student, Set<String> liveGoogleIds, Set<String> liveDisplayNames) {
-        if (student.getGoogleUserId() != null && liveGoogleIds.contains(student.getGoogleUserId())) return true;
-        if (student.getMeetDisplayName() != null && liveDisplayNames.contains(student.getMeetDisplayName().toLowerCase())) return true;
-        return liveDisplayNames.contains(student.getName().toLowerCase());
-    }
-
-    private boolean isInMeet(Teacher teacher, Set<String> liveGoogleIds, Set<String> liveDisplayNames) {
-        if (teacher.getGoogleUserId() != null && liveGoogleIds.contains(teacher.getGoogleUserId())) return true;
-        if (teacher.getMeetDisplayName() != null && liveDisplayNames.contains(teacher.getMeetDisplayName().toLowerCase())) return true;
-        return liveDisplayNames.contains(teacher.getName().toLowerCase());
-    }
-
-    /** Returns the spaceCode for each today event — use with the debug endpoint. */
     @GetMapping("/today/space-codes")
     public ResponseEntity<Map<String, String>> getTodaySpaceCodes() throws Exception {
         Map<String, String> result = new LinkedHashMap<>();
@@ -291,13 +239,6 @@ public class AttendanceController {
         return ResponseEntity.ok(result);
     }
 
-    /**
-     * Debug endpoint — call GET /attendance/debug/{spaceCode} to see exactly what the Meet API
-     * returns for active participants in that space, plus how each participant resolves against
-     * the teacher/student DB records for the matching calendar event attendees.
-     *
-     * Example: GET /attendance/debug/abc-defg-hij
-     */
     @GetMapping("/debug/{spaceCode}")
     public ResponseEntity<Map<String, Object>> debugParticipants(@PathVariable String spaceCode) {
         Map<String, Object> out = new LinkedHashMap<>();
@@ -319,34 +260,16 @@ public class AttendanceController {
                     Map<String, Object> entry = new LinkedHashMap<>();
                     entry.put("googleUserId", p.googleUserId());
                     entry.put("displayName", p.displayName());
-
-                    // Resolve against DB
-                    var student = p.googleUserId() != null
-                            ? studentRepository.findByGoogleUserId(p.googleUserId()).orElse(null) : null;
-                    if (student == null && p.displayName() != null) {
-                        student = studentRepository.findByMeetDisplayNameIgnoreCase(p.displayName())
-                                .or(() -> studentRepository.findByNameIgnoreCase(p.displayName()))
-                                .orElse(null);
+                    Person person = resolveParticipantToPerson(p, PersonType.STUDENT);
+                    if (person == null) {
+                        person = resolveParticipantToPerson(p, PersonType.TEACHER);
                     }
-                    if (student != null) {
-                        entry.put("resolvedAs", "STUDENT");
-                        entry.put("resolvedName", student.getName());
-                        entry.put("resolvedId", student.getId());
+                    if (person != null) {
+                        entry.put("resolvedAs", person.getPersonType().name());
+                        entry.put("resolvedName", person.getName());
+                        entry.put("resolvedId", person.getId());
                     } else {
-                        var teacher = p.googleUserId() != null
-                                ? teacherRepository.findByGoogleUserId(p.googleUserId()).orElse(null) : null;
-                        if (teacher == null && p.displayName() != null) {
-                            teacher = teacherRepository.findByMeetDisplayNameIgnoreCase(p.displayName())
-                                    .or(() -> teacherRepository.findByNameIgnoreCase(p.displayName()))
-                                    .orElse(null);
-                        }
-                        if (teacher != null) {
-                            entry.put("resolvedAs", "TEACHER");
-                            entry.put("resolvedName", teacher.getName());
-                            entry.put("resolvedId", teacher.getId());
-                        } else {
-                            entry.put("resolvedAs", "UNREGISTERED");
-                        }
+                        entry.put("resolvedAs", "UNREGISTERED");
                     }
                     rawParticipants.add(entry);
                 }
@@ -357,7 +280,6 @@ public class AttendanceController {
         out.put("participants", rawParticipants);
         out.put("participantCount", rawParticipants.size());
 
-        // Also show what the calendar event attendees look like from the DB perspective
         try {
             List<Map<String, Object>> eventAttendees = new ArrayList<>();
             for (var event : calendarSyncService.getTodaysEvents()) {
@@ -366,18 +288,14 @@ public class AttendanceController {
                 for (String email : event.getAttendeeEmails()) {
                     Map<String, Object> ae = new LinkedHashMap<>();
                     ae.put("email", email);
-                    var s = studentRepository.findByMeetEmail(email).orElse(null);
-                    var t = teacherRepository.findByMeetEmail(email).orElse(null);
-                    if (s != null) {
-                        ae.put("registeredAs", "STUDENT");
-                        ae.put("name", s.getName());
-                        ae.put("googleUserId", s.getGoogleUserId());
-                        ae.put("meetDisplayName", s.getMeetDisplayName());
-                    } else if (t != null) {
-                        ae.put("registeredAs", "TEACHER");
-                        ae.put("name", t.getName());
-                        ae.put("googleUserId", t.getGoogleUserId());
-                        ae.put("meetDisplayName", t.getMeetDisplayName());
+                    Person person = personRepository.findByPersonTypeAndMeetEmail(PersonType.STUDENT, email)
+                            .or(() -> personRepository.findByPersonTypeAndMeetEmail(PersonType.TEACHER, email))
+                            .orElse(null);
+                    if (person != null) {
+                        ae.put("registeredAs", person.getPersonType().name());
+                        ae.put("name", person.getName());
+                        ae.put("googleUserId", person.getGoogleUserId());
+                        ae.put("meetDisplayName", person.getMeetDisplayName());
                     } else {
                         ae.put("registeredAs", "UNREGISTERED");
                     }
@@ -393,46 +311,26 @@ public class AttendanceController {
         return ResponseEntity.ok(out);
     }
 
-    /**
-     * Upserts an attendance record for a student or teacher.
-     * If a record already exists for the given person/event/date it is updated; otherwise created.
-     */
     @PostMapping("/upsert")
     public ResponseEntity<Void> upsert(@RequestBody UpsertAttendanceRequest req) {
         LocalDate date = req.date() != null ? req.date() : LocalDate.now();
-        if (PersonType.STUDENT == req.personType()) {
-            Student student = studentRepository.findById(req.personId())
-                    .orElseThrow(() -> new RuntimeException("Student not found: " + req.personId()));
-            Attendance att = attendanceRepository
-                    .findByStudentIdAndCalendarEventIdAndDate(req.personId(), req.calendarEventId(), date)
-                    .orElseGet(() -> Attendance.builder()
-                            .student(student)
-                            .calendarEventId(req.calendarEventId())
-                            .date(date)
-                            .build());
-            att.setStatus(req.status());
-            if (req.eventTitle() != null) {
-                att.setEventTitle(req.eventTitle());
-            }
-            attendanceRepository.save(att);
-        } else if (PersonType.TEACHER == req.personType()) {
-            Teacher teacher = teacherRepository.findById(req.personId())
-                    .orElseThrow(() -> new RuntimeException("Teacher not found: " + req.personId()));
-            Attendance att = attendanceRepository
-                    .findByTeacherIdAndCalendarEventIdAndDate(req.personId(), req.calendarEventId(), date)
-                    .orElseGet(() -> Attendance.builder()
-                            .teacher(teacher)
-                            .calendarEventId(req.calendarEventId())
-                            .date(date)
-                            .build());
-            att.setStatus(req.status());
-            if (req.eventTitle() != null) {
-                att.setEventTitle(req.eventTitle());
-            }
-            attendanceRepository.save(att);
-        } else {
+        Person person = personRepository.findById(req.personId())
+                .orElseThrow(() -> new RuntimeException("Person not found: " + req.personId()));
+        if (person.getPersonType() != req.personType()) {
             return ResponseEntity.badRequest().build();
         }
+        Attendance att = attendanceRepository
+                .findByPersonIdAndCalendarEventIdAndDate(req.personId(), req.calendarEventId(), date)
+                .orElseGet(() -> Attendance.builder()
+                        .person(person)
+                        .calendarEventId(req.calendarEventId())
+                        .date(date)
+                        .build());
+        att.setStatus(req.status());
+        if (req.eventTitle() != null) {
+            att.setEventTitle(req.eventTitle());
+        }
+        attendanceRepository.save(att);
         return ResponseEntity.ok().build();
     }
 
@@ -445,15 +343,6 @@ public class AttendanceController {
             AttendanceStatus status
     ) {}
 
-    /**
-     * Returns attendance records with optional filters.
-     *
-     * @param personType optional — STUDENT or TEACHER; omit (or leave null) to return all person types
-     * @param personId   optional — if provided, only records for this person are returned
-     * @param dateFrom   optional — only records on or after this date (ISO date, e.g. 2024-01-01)
-     * @param dateTo     optional — only records on or before this date (ISO date, e.g. 2024-12-31)
-     * @param status     optional — repeated parameter for filtering by status (e.g. ?status=ABSENT&status=LATE); if omitted all statuses are returned
-     */
     @GetMapping("/records")
     public ResponseEntity<List<AttendanceRecordResponse>> getRecords(
             @RequestParam(required = false) PersonType personType,
@@ -463,22 +352,14 @@ public class AttendanceController {
             @RequestParam(required = false) List<AttendanceStatus> status) {
 
         List<Attendance> records;
-
         if (personId != null) {
-            if (PersonType.TEACHER == personType) {
-                records = attendanceRepository.findByTeacherIdOrderByDateDescIdDesc(personId);
-            } else {
-                records = attendanceRepository.findByStudentIdOrderByDateDescIdDesc(personId);
-            }
-        } else if (PersonType.STUDENT == personType) {
-            records = attendanceRepository.findByStudentNotNullOrderByDateDescIdDesc();
-        } else if (PersonType.TEACHER == personType) {
-            records = attendanceRepository.findByTeacherNotNullOrderByDateDescIdDesc();
+            records = attendanceRepository.findByPersonIdOrderByDateDescIdDesc(personId);
+        } else if (personType != null) {
+            records = attendanceRepository.findByPersonTypeOrderByDateDescIdDesc(personType);
         } else {
             records = attendanceRepository.findAllOrderByDateDescIdDesc();
         }
 
-        // Apply optional date range and status filters in memory
         Stream<Attendance> stream = records.stream();
         if (dateFrom != null) {
             stream = stream.filter(a -> !a.getDate().isBefore(dateFrom));
@@ -490,29 +371,20 @@ public class AttendanceController {
             Set<AttendanceStatus> statusSet = new HashSet<>(status);
             stream = stream.filter(a -> statusSet.contains(a.getStatus()));
         }
-        records = stream.collect(Collectors.toList());
+        records = stream.toList();
 
         List<AttendanceRecordResponse> result = records.stream()
-                .map(a -> {
-                    Long pid;
-                    PersonType ptype;
-                    String pname;
-                    if (a.getStudent() != null) {
-                        pid = a.getStudent().getId();
-                        ptype = PersonType.STUDENT;
-                        pname = a.getStudent().getName();
-                    } else {
-                        pid = a.getTeacher() != null ? a.getTeacher().getId() : null;
-                        ptype = PersonType.TEACHER;
-                        pname = a.getTeacher() != null ? a.getTeacher().getName() : null;
-                    }
-                    return new AttendanceRecordResponse(
-                            a.getId(), pid, ptype, pname,
-                            a.getCalendarEventId(), a.getEventTitle(),
-                            a.getDate(), a.getStatus(), a.getUpdatedAt());
-                })
+                .map(a -> new AttendanceRecordResponse(
+                        a.getId(),
+                        a.getPerson() != null ? a.getPerson().getId() : null,
+                        a.getPerson() != null ? a.getPerson().getPersonType() : null,
+                        a.getPerson() != null ? a.getPerson().getName() : null,
+                        a.getCalendarEventId(),
+                        a.getEventTitle(),
+                        a.getDate(),
+                        a.getStatus(),
+                        a.getUpdatedAt()))
                 .toList();
-
         return ResponseEntity.ok(result);
     }
 
@@ -530,7 +402,9 @@ public class AttendanceController {
 
     @GetMapping("/student/{id}")
     public ResponseEntity<List<StudentAttendanceRecord>> getByStudent(@PathVariable Long id) {
-        List<Attendance> records = attendanceRepository.findByStudentId(id);
+        List<Attendance> records = attendanceRepository.findByPersonId(id).stream()
+                .filter(a -> a.getPerson() != null && a.getPerson().getPersonType() == PersonType.STUDENT)
+                .toList();
         List<StudentAttendanceRecord> result = records.stream()
                 .map(a -> new StudentAttendanceRecord(a.getCalendarEventId(), a.getDate(), a.getStatus()))
                 .toList();

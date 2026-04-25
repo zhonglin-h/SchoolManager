@@ -1,6 +1,8 @@
 package com.school.entity;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -9,32 +11,38 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 @Entity
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Student {
+public class Person {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Enumerated(EnumType.STRING)
+    private PersonType personType;
+
     private String name;
 
     private String meetEmail;
 
-    private String classroomEmail;
-
-    private String parentEmail;
-
-    private String parentPhone;
-
-    /** Populated automatically when a student joins a Google Meet session. */
     private String googleUserId;
 
-    /** Display name used in Google Meet (may differ from real name). Auto-learned on first join. */
     private String meetDisplayName;
+
+    // Student profile fields (v1 on person)
+    private String classroomEmail;
+    private String parentEmail;
+    private String parentPhone;
+
+    // Teacher profile fields (v1 on person)
+    private String phone;
+    private BigDecimal hourlyRate;
 
     @Builder.Default
     private boolean active = true;

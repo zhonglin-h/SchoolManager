@@ -22,8 +22,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"student_id", "calendarEventId", "date"}),
-        @UniqueConstraint(columnNames = {"teacher_id", "calendarEventId", "date"})
+        @UniqueConstraint(columnNames = {"person_id", "calendarEventId", "date"})
 })
 @Data
 @Builder
@@ -36,10 +35,7 @@ public class Attendance {
     private Long id;
 
     @ManyToOne
-    private Student student;
-
-    @ManyToOne
-    private Teacher teacher;
+    private Person person;
 
     private String calendarEventId;
 
