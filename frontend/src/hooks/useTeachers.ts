@@ -9,8 +9,15 @@ import {
 
 export function useTeachers() {
   return useQuery({
-    queryKey: ['teachers'],
-    queryFn: getTeachers,
+    queryKey: ['teachers', 'list', false],
+    queryFn: () => getTeachers(false),
+  })
+}
+
+export function useTeachersList(includeInactive: boolean) {
+  return useQuery({
+    queryKey: ['teachers', 'list', includeInactive],
+    queryFn: () => getTeachers(includeInactive),
   })
 }
 

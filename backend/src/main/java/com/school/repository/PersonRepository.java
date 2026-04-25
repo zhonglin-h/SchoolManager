@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface PersonRepository extends JpaRepository<Person, Long> {
+    List<Person> findByPersonType(PersonType personType);
     List<Person> findByPersonTypeAndActiveTrue(PersonType personType);
     List<Person> findByActiveTrue();
     boolean existsByMeetEmail(String meetEmail);

@@ -19,9 +19,20 @@ public class PersonService {
     }
 
     public List<PersonResponse> getAllActive(PersonType personType) {
+        return getAll(personType, false);
+    }
+
+    public List<PersonResponse> getAll(PersonType personType, boolean includeInactive) {
+        if (!includeInactive) {
+            List<Person> people = personType == null
+                    ? personRepository.findByActiveTrue()
+                    : personRepository.findByPersonTypeAndActiveTrue(personType);
+            return people.stream().map(PersonResponse::from).toList();
+        }
+
         List<Person> people = personType == null
-                ? personRepository.findByActiveTrue()
-                : personRepository.findByPersonTypeAndActiveTrue(personType);
+                ? personRepository.findAll()
+                : personRepository.findByPersonType(personType);
         return people.stream().map(PersonResponse::from).toList();
     }
 

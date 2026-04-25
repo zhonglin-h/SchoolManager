@@ -6,7 +6,7 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table'
 import {
-  useTeachers,
+  useTeachersList,
   useCreateTeacher,
   useUpdateTeacher,
   useDeleteTeacher,
@@ -22,12 +22,11 @@ const EMPTY_FORM: TeacherRequest = {
 }
 
 export default function Teachers() {
-  const { data: allTeachers = [], isLoading, isError } = useTeachers()
+  const [showInactive, setShowInactive] = useState(false)
+  const { data: allTeachers = [], isLoading, isError } = useTeachersList(showInactive)
   const createTeacher = useCreateTeacher()
   const updateTeacher = useUpdateTeacher()
   const deleteTeacher = useDeleteTeacher()
-
-  const [showInactive, setShowInactive] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<TeacherRequest>(EMPTY_FORM)

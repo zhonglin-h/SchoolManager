@@ -166,8 +166,10 @@ export async function deleteStudent(id: number): Promise<void> {
 
 // ── Teachers ───────────────────────────────────────────────────────────────
 
-export async function getTeachers(): Promise<TeacherResponse[]> {
-  const { data } = await api.get<TeacherResponse[]>('/teachers')
+export async function getTeachers(includeInactive = false): Promise<TeacherResponse[]> {
+  const { data } = await api.get<TeacherResponse[]>('/teachers', {
+    params: includeInactive ? { includeInactive: true } : undefined,
+  })
   return data
 }
 

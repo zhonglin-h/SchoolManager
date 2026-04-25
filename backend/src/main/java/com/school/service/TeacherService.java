@@ -18,8 +18,8 @@ public class TeacherService {
         this.personService = personService;
     }
 
-    public List<TeacherResponse> getAllActive() {
-        return personService.getAllActive(PersonType.TEACHER).stream()
+    public List<TeacherResponse> getAll(boolean includeInactive) {
+        return personService.getAll(PersonType.TEACHER, includeInactive).stream()
                 .map(TeacherService::toTeacherResponse)
                 .toList();
     }
