@@ -210,14 +210,15 @@ public class MeetSessionHandler {
     private void preSeedSeenAttendance(CalendarEvent event, Set<Long> seenStudentIds, Set<Long> seenTeacherIds) {
         attendanceRepository.findByCalendarEventIdAndDate(event.getId(), LocalDate.now())
                 .forEach(a -> {
+                    Person person = a.getPerson();
                     log.debug("Pre-seeding attendance for {}: personId={}, personType={}, status={}",
-                            event.getId(), a.getPerson() != null ? a.getPerson().getId() : null,
-                            a.getPerson() != null ? a.getPerson().getPersonType() : null, a.getStatus());
-                    if (a.getPerson() != null && a.getPerson().getPersonType() == PersonType.STUDENT) {
-                        seenStudentIds.add(a.getPerson().getId());
+                            event.getId(), person != null ? person.getId() : null,
+                            person != null ? person.getPersonType() : null, a.getStatus());
+                    if (person != null && person.getPersonType() == PersonType.STUDENT) {
+                        seenStudentIds.add(person.getId());
                     }
-                    if (a.getPerson() != null && a.getPerson().getPersonType() == PersonType.TEACHER) {
-                        seenTeacherIds.add(a.getPerson().getId());
+                    if (person != null && person.getPersonType() == PersonType.TEACHER) {
+                        seenTeacherIds.add(person.getId());
                     }
                 });
     }

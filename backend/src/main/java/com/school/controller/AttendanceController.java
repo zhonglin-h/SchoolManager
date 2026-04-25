@@ -312,12 +312,13 @@ public class AttendanceController {
     }
 
     @PostMapping("/upsert")
-    public ResponseEntity<Void> upsert(@RequestBody UpsertAttendanceRequest req) {
+    public ResponseEntity<?> upsert(@RequestBody UpsertAttendanceRequest req) {
         LocalDate date = req.date() != null ? req.date() : LocalDate.now();
         Person person = personRepository.findById(req.personId())
                 .orElseThrow(() -> new RuntimeException("Person not found: " + req.personId()));
         if (person.getPersonType() != req.personType()) {
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "personType does not match persisted person type"));
         }
         Attendance att = attendanceRepository
                 .findByPersonIdAndCalendarEventIdAndDate(req.personId(), req.calendarEventId(), date)

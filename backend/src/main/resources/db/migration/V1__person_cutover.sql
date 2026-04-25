@@ -52,11 +52,7 @@ WHERE NOT EXISTS (
 
 INSERT INTO person (id, person_type, name, meet_email, google_user_id, meet_display_name, phone, hourly_rate, active)
 SELECT
-    CASE
-        WHEN EXISTS (SELECT 1 FROM person p WHERE p.id = t.id)
-            THEN t.id + COALESCE((SELECT MAX(id) FROM student), 0)
-        ELSE t.id
-        END,
+    ROW_NUMBER() OVER (ORDER BY t.id) + COALESCE((SELECT MAX(id) FROM person), 0),
     'TEACHER', t.name, t.meet_email, t.google_user_id, t.meet_display_name, t.phone, t.hourly_rate, COALESCE(t.active, TRUE)
 FROM teacher t
 WHERE NOT EXISTS (

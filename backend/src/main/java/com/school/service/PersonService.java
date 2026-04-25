@@ -48,7 +48,9 @@ public class PersonService {
     public PersonResponse update(Long id, PersonRequest req) {
         Person person = personRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Person not found: " + id));
-        person.setPersonType(req.personType());
+        if (req.personType() != null && req.personType() != person.getPersonType()) {
+            throw new RuntimeException("Person type cannot be changed for id: " + id);
+        }
         person.setName(req.name());
         person.setMeetEmail(req.meetEmail());
         person.setMeetDisplayName(req.meetDisplayName());
