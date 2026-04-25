@@ -106,14 +106,7 @@ public class MeetSessionHandler {
                     notificationService.notify(NotificationType.NOT_YET_JOINED, event, new TeacherRecipient(teacher));
                 }
             }
-            List<String> unmatchedInvitees = attendanceHelper.findUnmatchedInvitees(event);
-            List<String> unmatchedParticipants = attendanceHelper.findUnmatchedParticipants(participants, expected);
-            if (!unmatchedInvitees.isEmpty()) {
-                notificationService.notify(
-                        NotificationType.UNMATCHED_GUESTS,
-                        event,
-                        new GuestRecipient(unmatchedInvitees, unmatchedParticipants));
-            }
+            processUnmatchedGuests(event, expected, participants);
         } catch (Exception e) {
             log.warn("Failed pre-class join check for {}: {}", event.getId(), e.getMessage());
         }
@@ -126,27 +119,16 @@ public class MeetSessionHandler {
      * If the meeting room isn't open yet, keeps sending reminders on each tick until it is.
      */
     public void startSessionPolling(CalendarEvent event) {
-        ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
-        Set<Long> seenStudentIds = new HashSet<>();
-        Set<Long> seenTeacherIds = new HashSet<>();
-        Instant lateThreshold = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant()
-                .plusSeconds(lateBufferMinutes * 60L);
-        AtomicBoolean meetingActive = new AtomicBoolean(false);
-
-        try {
-            if (googleMeetClient.isMeetingActive(event.getSpaceCode())) {
-                meetingActive.set(true);
-                attendanceHelper.processParticipants(event, googleMeetClient.getActiveParticipants(event.getSpaceCode()),
-                        expected, seenStudentIds, seenTeacherIds, lateThreshold);
-                notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
-            } else {
-                sendMeetingStartReminder(event);
-            }
-        } catch (Exception e) {
-            log.warn("Failed session start poll for {}: {}", event.getId(), e.getMessage());
+        PollingContext context = createPollingContext(event);
+        int totalExpected = getTotalExpectedParticipants(event);
+        runInitialSnapshot(event, context, "Failed session start poll for {}: {}");
+        if (hasSeenAllExpectedParticipants(context.seenStudentIds(), context.seenTeacherIds(), totalExpected)) {
+            log.info("All participants already present for {}; skipping polling", event.getId());
+            upcomingChecksRegistry.removePollingEntry(event.getId());
+            return;
         }
-
-        schedulePollingLoop(event, expected, seenStudentIds, seenTeacherIds, lateThreshold, meetingActive);
+        schedulePollingLoop(event, context.expected(), context.seenStudentIds(), context.seenTeacherIds(),
+                context.lateThreshold(), context.meetingActive());
     }
 
     /**
@@ -156,44 +138,19 @@ public class MeetSessionHandler {
      * If the meeting room isn't open yet, keeps sending reminders on each tick until it is.
      */
     public void resumeSessionPolling(CalendarEvent event) {
-        ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
+        PollingContext context = createPollingContext(event);
+        preSeedSeenAttendance(event, context.seenStudentIds(), context.seenTeacherIds());
+
         int totalExpected = getTotalExpectedParticipants(event);
-        Set<Long> seenStudentIds = new HashSet<>();
-        Set<Long> seenTeacherIds = new HashSet<>();
-
-        // Pre-seed from attendance already recorded before the restart
-        attendanceRepository.findByCalendarEventIdAndDate(event.getId(), LocalDate.now())
-                .forEach(a -> {
-                    log.debug("Pre-seeding attendance for {}: studentId={}, teacherId={}, status={}",
-                            event.getId(), a.getStudent() != null ? a.getStudent().getId() : null,
-                            a.getTeacher() != null ? a.getTeacher().getId() : null, a.getStatus());
-                    if (a.getStudent() != null) seenStudentIds.add(a.getStudent().getId());
-                    if (a.getTeacher() != null) seenTeacherIds.add(a.getTeacher().getId());
-                });
-
-        Instant lateThreshold = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant()
-                .plusSeconds(lateBufferMinutes * 60L);
-        AtomicBoolean meetingActive = new AtomicBoolean(false);
-
-        try {
-            if (googleMeetClient.isMeetingActive(event.getSpaceCode())) {
-                meetingActive.set(true);
-                attendanceHelper.processParticipants(event, googleMeetClient.getActiveParticipants(event.getSpaceCode()),
-                        expected, seenStudentIds, seenTeacherIds, lateThreshold);
-                if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected) {
-                    log.info("All participants already present for {}; skipping polling", event.getId());
-                    upcomingChecksRegistry.removePollingEntry(event.getId());
-                    return;
-                }
-                notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
-            } else {
-                sendMeetingStartReminder(event);
-            }
-        } catch (Exception e) {
-            log.warn("Failed catch-up snapshot for {}: {}", event.getId(), e.getMessage());
+        runInitialSnapshot(event, context, "Failed catch-up snapshot for {}: {}");
+        if (hasSeenAllExpectedParticipants(context.seenStudentIds(), context.seenTeacherIds(), totalExpected)) {
+            log.info("All participants already present for {}; skipping polling", event.getId());
+            upcomingChecksRegistry.removePollingEntry(event.getId());
+            return;
         }
-        
-        schedulePollingLoop(event, expected, seenStudentIds, seenTeacherIds, lateThreshold, meetingActive);
+
+        schedulePollingLoop(event, context.expected(), context.seenStudentIds(), context.seenTeacherIds(),
+                context.lateThreshold(), context.meetingActive());
     }
 
     /**
@@ -226,17 +183,9 @@ public class MeetSessionHandler {
                 attendanceHelper.processParticipants(event, activeParticipants,
                         expected, seenStudentIds, seenTeacherIds, lateThreshold);
                 notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
+                processUnmatchedGuests(event, expected, activeParticipants);
 
-                List<String> unmatchedInvitees = attendanceHelper.findUnmatchedInvitees(event);
-                List<String> unmatchedParticipants = attendanceHelper.findUnmatchedParticipants(activeParticipants, expected);
-                if (!unmatchedInvitees.isEmpty()) {
-                    notificationService.notify(
-                            NotificationType.UNMATCHED_GUESTS,
-                            event,
-                            new GuestRecipient(unmatchedInvitees, unmatchedParticipants));
-                }
-
-                if (seenStudentIds.size() + seenTeacherIds.size() >= totalExpected && totalExpected > 0) {
+                if (hasSeenAllExpectedParticipants(seenStudentIds, seenTeacherIds, totalExpected) && totalExpected > 0) {
                     notificationService.notify(NotificationType.ALL_PRESENT, event, null);
                     cancelPollingFor(event.getId());
                 }
@@ -248,6 +197,56 @@ public class MeetSessionHandler {
         pollingFutures.put(event.getId(), futureRef.get());
     }
 
+    private PollingContext createPollingContext(CalendarEvent event) {
+        ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
+        Set<Long> seenStudentIds = new HashSet<>();
+        Set<Long> seenTeacherIds = new HashSet<>();
+        Instant lateThreshold = event.getStartTime().atZone(ZoneId.systemDefault()).toInstant()
+                .plusSeconds(lateBufferMinutes * 60L);
+        AtomicBoolean meetingActive = new AtomicBoolean(false);
+        return new PollingContext(expected, seenStudentIds, seenTeacherIds, lateThreshold, meetingActive);
+    }
+
+    private void preSeedSeenAttendance(CalendarEvent event, Set<Long> seenStudentIds, Set<Long> seenTeacherIds) {
+        attendanceRepository.findByCalendarEventIdAndDate(event.getId(), LocalDate.now())
+                .forEach(a -> {
+                    log.debug("Pre-seeding attendance for {}: studentId={}, teacherId={}, status={}",
+                            event.getId(), a.getStudent() != null ? a.getStudent().getId() : null,
+                            a.getTeacher() != null ? a.getTeacher().getId() : null, a.getStatus());
+                    if (a.getStudent() != null) seenStudentIds.add(a.getStudent().getId());
+                    if (a.getTeacher() != null) seenTeacherIds.add(a.getTeacher().getId());
+                });
+    }
+
+    private void runInitialSnapshot(CalendarEvent event, PollingContext context, String failureLogPattern) {
+        try {
+            if (googleMeetClient.isMeetingActive(event.getSpaceCode())) {
+                context.meetingActive().set(true);
+                List<MeetParticipant> activeParticipants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
+                attendanceHelper.processParticipants(event, activeParticipants,
+                        context.expected(), context.seenStudentIds(), context.seenTeacherIds(), context.lateThreshold());
+                notifyMissing(event, context.expected(), context.seenStudentIds(), context.seenTeacherIds());
+                processUnmatchedGuests(event, context.expected(), activeParticipants);
+            } else {
+                sendMeetingStartReminder(event);
+            }
+        } catch (Exception e) {
+            log.warn(failureLogPattern, event.getId(), e.getMessage());
+        }
+    }
+
+    private void processUnmatchedGuests(CalendarEvent event, ExpectedParticipants expected,
+                                       List<MeetParticipant> participants) {
+        List<String> unmatchedInvitees = attendanceHelper.findUnmatchedInvitees(event);
+        List<String> unmatchedParticipants = attendanceHelper.findUnmatchedParticipants(participants, expected);
+        if (!unmatchedInvitees.isEmpty()) {
+            notificationService.notify(
+                    NotificationType.UNMATCHED_GUESTS,
+                    event,
+                    new GuestRecipient(unmatchedInvitees, unmatchedParticipants));
+        }
+    }
+
     /**
      * Returns the number of expected participants excluding the principal attendee.
      * Applies the same rule everywhere this count is used.
@@ -255,6 +254,10 @@ public class MeetSessionHandler {
     private int getTotalExpectedParticipants(CalendarEvent event) {
         int attendeeCount = event.getAttendeeEmails() != null ? event.getAttendeeEmails().size() : 0;
         return Math.max(0, attendeeCount - 1);
+    }
+
+    private boolean hasSeenAllExpectedParticipants(Set<Long> seenStudentIds, Set<Long> seenTeacherIds, int totalExpected) {
+        return seenStudentIds.size() + seenTeacherIds.size() >= totalExpected;
     }
 
     private void notifyMissing(CalendarEvent event, ExpectedParticipants expected,
@@ -340,4 +343,12 @@ public class MeetSessionHandler {
             }
         }
     }
+
+    private record PollingContext(
+            ExpectedParticipants expected,
+            Set<Long> seenStudentIds,
+            Set<Long> seenTeacherIds,
+            Instant lateThreshold,
+            AtomicBoolean meetingActive
+    ) {}
 }
