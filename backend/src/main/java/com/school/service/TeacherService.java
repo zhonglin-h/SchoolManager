@@ -24,6 +24,12 @@ public class TeacherService {
                 .toList();
     }
 
+    public List<TeacherResponse> getAllActive() {
+        return personService.getAllActive(PersonType.TEACHER).stream()
+                .map(TeacherService::toTeacherResponse)
+                .toList();
+    }
+
     public TeacherResponse getById(Long id) {
         PersonResponse person = personService.getById(id);
         requireTeacherType(person, id);

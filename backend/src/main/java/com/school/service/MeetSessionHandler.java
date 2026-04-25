@@ -95,8 +95,8 @@ public class MeetSessionHandler {
     public void checkPreClassJoins(CalendarEvent event) {
         try {
             List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-            ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
             ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
+            ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
             forEachExpectedPerson(expected, (person, personType) -> {
                 Set<Long> resolvedIds = personType == PersonType.STUDENT ? resolved.studentIds() : resolved.teacherIds();
                 NotificationSubject subject = new PersonSubject(person);
@@ -178,11 +178,7 @@ public class MeetSessionHandler {
                 }
 
                 List<MeetParticipant> activeParticipants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-                ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
-                attendanceHelper.processParticipants(event, activeParticipants,
-                        expected, seenStudentIds, seenTeacherIds, lateThreshold);
-                notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
-                processUnmatchedGuests(event, expected, activeParticipants);
+                processParticipants(event, activeParticipants, seenStudentIds, seenTeacherIds, lateThreshold);
 
                 if (hasSeenAllExpectedParticipants(seenStudentIds, seenTeacherIds, totalExpected) && totalExpected > 0) {
                     notificationService.notify(NotificationType.ALL_PRESENT, event, null);
@@ -226,11 +222,7 @@ public class MeetSessionHandler {
             if (googleMeetClient.isMeetingActive(event.getSpaceCode())) {
                 context.meetingActive().set(true);
                 List<MeetParticipant> activeParticipants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-                ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
-                attendanceHelper.processParticipants(event, activeParticipants,
-                        expected, context.seenStudentIds(), context.seenTeacherIds(), context.lateThreshold());
-                notifyMissing(event, expected, context.seenStudentIds(), context.seenTeacherIds());
-                processUnmatchedGuests(event, expected, activeParticipants);
+                processParticipants(event, activeParticipants, context.seenStudentIds(), context.seenTeacherIds(), context.lateThreshold());
             } else {
                 sendMeetingStartReminder(event);
             }
@@ -262,6 +254,35 @@ public class MeetSessionHandler {
 
     private boolean hasSeenAllExpectedParticipants(Set<Long> seenStudentIds, Set<Long> seenTeacherIds, int totalExpected) {
         return seenStudentIds.size() + seenTeacherIds.size() >= totalExpected;
+    }
+
+    private void processParticipants(CalendarEvent event, List<MeetParticipant> participants,
+                                     Set<Long> seenStudentIds, Set<Long> seenTeacherIds,
+                                     Instant lateThreshold) {
+        ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
+        ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
+        boolean isLate = Instant.now().isAfter(lateThreshold);
+
+        for (Person student : expected.students()) {
+            if (!seenStudentIds.contains(student.getId()) && resolved.studentIds().contains(student.getId())) {
+                seenStudentIds.add(student.getId());
+                AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+                attendanceHelper.recordAttendance(student, event, status);
+                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL,
+                        event, new PersonSubject(student));
+            }
+        }
+        for (Person teacher : expected.teachers()) {
+            if (!seenTeacherIds.contains(teacher.getId()) && resolved.teacherIds().contains(teacher.getId())) {
+                seenTeacherIds.add(teacher.getId());
+                AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+                attendanceHelper.recordAttendance(teacher, event, status);
+                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL,
+                        event, new PersonSubject(teacher));
+            }
+        }
+        notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
+        processUnmatchedGuests(event, expected, participants);
     }
 
     private void notifyMissing(CalendarEvent event, ExpectedParticipants expected,

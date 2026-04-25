@@ -20,7 +20,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 @Slf4j
@@ -29,38 +28,11 @@ class MeetAttendanceHelper {
 
     private final PersonRepository personRepository;
     private final AttendanceRepository attendanceRepository;
-    private final NotificationService notificationService;
 
     MeetAttendanceHelper(PersonRepository personRepository,
-                         AttendanceRepository attendanceRepository,
-                         NotificationService notificationService) {
+                         AttendanceRepository attendanceRepository) {
         this.personRepository = personRepository;
         this.attendanceRepository = attendanceRepository;
-        this.notificationService = notificationService;
-    }
-
-    void processParticipants(CalendarEvent event, List<MeetParticipant> participants,
-                             ExpectedParticipants expected, Set<Long> seenStudentIds,
-                             Set<Long> seenTeacherIds, Instant lateThreshold) {
-        ResolvedParticipants resolved = resolveAndAutoLearn(participants);
-        boolean isLate = Instant.now().isAfter(lateThreshold);
-
-        for (Person student : expected.students()) {
-            if (!seenStudentIds.contains(student.getId()) && resolved.studentIds().contains(student.getId())) {
-                seenStudentIds.add(student.getId());
-                AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
-                recordAttendance(student, event, status);
-                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL, event, new PersonSubject(student));
-            }
-        }
-        for (Person teacher : expected.teachers()) {
-            if (!seenTeacherIds.contains(teacher.getId()) && resolved.teacherIds().contains(teacher.getId())) {
-                seenTeacherIds.add(teacher.getId());
-                AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
-                recordAttendance(teacher, event, status);
-                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL, event, new PersonSubject(teacher));
-            }
-        }
     }
 
     ResolvedParticipants resolveAndAutoLearn(List<MeetParticipant> participants) {
@@ -145,6 +117,10 @@ class MeetAttendanceHelper {
         List<String> unmatched = new ArrayList<>();
         for (MeetParticipant participant : participants) {
             if (participant.displayName() == null || participant.displayName().isBlank()) continue;
+
+            // TODO: Decide whether known-in-DB participants who are not in expected attendees
+            // should be treated as unmatched guests or as a separate category.
+
             boolean matched = false;
             for (Person student : expected.students()) {
                 if (meetIdentityMatches(participant, student.getGoogleUserId(), student.getMeetDisplayName(), student.getName())) {

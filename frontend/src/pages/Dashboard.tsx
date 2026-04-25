@@ -46,7 +46,7 @@ function MeetingActiveDot({ active }: { active: boolean | null }) {
 
 function AttendanceCard({ event, onGuestRegistered }: { event: AttendanceSummaryResponse; onGuestRegistered?: (displayName: string, id: number, personType: 'STUDENT' | 'TEACHER') => void }) {
   const [expanded, setExpanded] = useState(false)
-  const [quickAdd, setQuickAdd] = useState<{ email: string; initialName?: string; calendarEventId: string; mode: 'student' | 'teacher' } | null>(null)
+  const [quickAdd, setQuickAdd] = useState<{ email: string; initialName?: string; calendarEventId: string; eventTitle: string; mode: 'student' | 'teacher' } | null>(null)
 
   return (
     <div className="bg-white rounded-lg shadow p-4 mb-4">
@@ -104,13 +104,13 @@ function AttendanceCard({ event, onGuestRegistered }: { event: AttendanceSummary
                     {!entry.registered && (
                       <div className="flex gap-1">
                         <button
-                          onClick={() => setQuickAdd({ email: entry.email, calendarEventId: event.calendarEventId, mode: 'student' })}
+                          onClick={() => setQuickAdd({ email: entry.email, calendarEventId: event.calendarEventId, eventTitle: event.eventTitle, mode: 'student' })}
                           className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-0.5 rounded"
                         >
                           + Student
                         </button>
                         <button
-                          onClick={() => setQuickAdd({ email: entry.email, calendarEventId: event.calendarEventId, mode: 'teacher' })}
+                          onClick={() => setQuickAdd({ email: entry.email, calendarEventId: event.calendarEventId, eventTitle: event.eventTitle, mode: 'teacher' })}
                           className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-2 py-0.5 rounded"
                         >
                           + Teacher
@@ -146,13 +146,13 @@ function AttendanceCard({ event, onGuestRegistered }: { event: AttendanceSummary
                         {!guest.personType && (
                           <div className="flex gap-1">
                             <button
-                              onClick={() => setQuickAdd({ email: '', initialName: guest.displayName ?? '', calendarEventId: event.calendarEventId, mode: 'student' })}
+                              onClick={() => setQuickAdd({ email: '', initialName: guest.displayName ?? '', calendarEventId: event.calendarEventId, eventTitle: event.eventTitle, mode: 'student' })}
                               className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-0.5 rounded"
                             >
                               + Student
                             </button>
                             <button
-                              onClick={() => setQuickAdd({ email: '', initialName: guest.displayName ?? '', calendarEventId: event.calendarEventId, mode: 'teacher' })}
+                              onClick={() => setQuickAdd({ email: '', initialName: guest.displayName ?? '', calendarEventId: event.calendarEventId, eventTitle: event.eventTitle, mode: 'teacher' })}
                               className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-2 py-0.5 rounded"
                             >
                               + Teacher
@@ -174,6 +174,7 @@ function AttendanceCard({ event, onGuestRegistered }: { event: AttendanceSummary
           email={quickAdd.email}
           initialName={quickAdd.initialName}
           calendarEventId={quickAdd.calendarEventId}
+          eventTitle={quickAdd.eventTitle}
           mode={quickAdd.mode}
           onSaved={(id, personType) => onGuestRegistered?.(quickAdd.initialName ?? '', id, personType)}
           onClose={() => setQuickAdd(null)}

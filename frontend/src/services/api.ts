@@ -212,9 +212,18 @@ export async function upsertAttendance(
   calendarEventId: string,
   status: 'PRESENT' | 'LATE' | 'ABSENT',
   date?: string,
-  eventTitle?: string
+  eventTitle?: string,
+  autoResolveFromMeet?: boolean
 ): Promise<void> {
-  await api.post('/attendance/upsert', { personId, personType, calendarEventId, status, date, eventTitle })
+  await api.post('/attendance/upsert', {
+    personId,
+    personType,
+    calendarEventId,
+    status,
+    date,
+    eventTitle,
+    autoResolveFromMeet,
+  })
 }
 
 export async function getAttendanceRecords(

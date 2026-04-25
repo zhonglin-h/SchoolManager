@@ -29,7 +29,9 @@ public class TeacherController {
     @GetMapping
     public ResponseEntity<List<TeacherResponse>> getAll(
             @RequestParam(defaultValue = "false") boolean includeInactive) {
-        return ResponseEntity.ok(teacherService.getAll(includeInactive));
+        return ResponseEntity.ok(includeInactive
+                ? teacherService.getAll(true)
+                : teacherService.getAllActive());
     }
 
     @GetMapping("/{id}")

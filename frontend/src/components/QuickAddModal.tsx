@@ -6,12 +6,13 @@ interface Props {
   email: string
   initialName?: string
   calendarEventId?: string
+  eventTitle?: string
   mode: 'student' | 'teacher'
   onClose: () => void
   onSaved?: (id: number, personType: 'STUDENT' | 'TEACHER') => void
 }
 
-export default function QuickAddModal({ email, initialName = '', calendarEventId, mode, onClose, onSaved }: Props) {
+export default function QuickAddModal({ email, initialName = '', calendarEventId, eventTitle, mode, onClose, onSaved }: Props) {
   const queryClient = useQueryClient()
   const [name, setName] = useState(initialName)
   const [meetEmail, setMeetEmail] = useState(email)
@@ -34,14 +35,30 @@ export default function QuickAddModal({ email, initialName = '', calendarEventId
           parentPhone: '',
         })
         if (calendarEventId) {
-          await upsertAttendance(person.id, 'STUDENT', calendarEventId, 'PRESENT')
+          await upsertAttendance(
+            person.id,
+            'STUDENT',
+            calendarEventId,
+            'PRESENT',
+            undefined,
+            eventTitle,
+            true,
+          )
         }
         queryClient.invalidateQueries({ queryKey: ['students'] })
         onSaved?.(person.id, 'STUDENT')
       } else {
         const person = await createTeacher({ name, meetEmail, meetDisplayName, phone: '', hourlyRate: null })
         if (calendarEventId) {
-          await upsertAttendance(person.id, 'TEACHER', calendarEventId, 'PRESENT')
+          await upsertAttendance(
+            person.id,
+            'TEACHER',
+            calendarEventId,
+            'PRESENT',
+            undefined,
+            eventTitle,
+            true,
+          )
         }
         queryClient.invalidateQueries({ queryKey: ['teachers'] })
         onSaved?.(person.id, 'TEACHER')
