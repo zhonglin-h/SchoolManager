@@ -58,14 +58,14 @@ public enum NotificationType {
             true, true, false
     );
 
-    private final BiFunction<CalendarEvent, Recipient, String> subjectFn;
-    private final BiFunction<CalendarEvent, Recipient, String> bodyFn;
+    private final BiFunction<CalendarEvent, NotificationSubject, String> subjectFn;
+    private final BiFunction<CalendarEvent, NotificationSubject, String> bodyFn;
     final boolean toPrincipalViaEmail;
     final boolean toPrincipalViaTelegram;
     final boolean toParentViaEmail;
 
-    NotificationType(BiFunction<CalendarEvent, Recipient, String> subjectFn,
-                     BiFunction<CalendarEvent, Recipient, String> bodyFn,
+    NotificationType(BiFunction<CalendarEvent, NotificationSubject, String> subjectFn,
+                     BiFunction<CalendarEvent, NotificationSubject, String> bodyFn,
                      boolean toPrincipalViaEmail,
                      boolean toPrincipalViaTelegram,
                      boolean toParentViaEmail) {
@@ -80,11 +80,11 @@ public enum NotificationType {
         return toPrincipalViaEmail || toParentViaEmail;
     }
 
-    public String subject(CalendarEvent event, Recipient recipient) {
-        return subjectFn.apply(event, recipient);
+    public String subject(CalendarEvent event, NotificationSubject subject) {
+        return subjectFn.apply(event, subject);
     }
 
-    public String body(CalendarEvent event, Recipient recipient) {
-        return bodyFn.apply(event, recipient);
+    public String body(CalendarEvent event, NotificationSubject subject) {
+        return bodyFn.apply(event, subject);
     }
 }

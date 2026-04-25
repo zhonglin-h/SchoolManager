@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.springframework.stereotype.Service;
@@ -63,7 +64,7 @@ class MeetAttendanceHelper {
                 seenStudentIds.add(student.getId());
                 AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 recordStudentAttendance(student, event, status);
-                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL, event, new StudentRecipient(student));
+                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL, event, new StudentSubject(student));
             }
         }
         for (Teacher teacher : expected.teachers()) {
@@ -72,7 +73,7 @@ class MeetAttendanceHelper {
                 AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 recordTeacherAttendance(teacher, event, status);
                 NotificationType teacherType = isLate ? NotificationType.TEACHER_LATE : NotificationType.TEACHER_ARRIVED;
-                notificationService.notify(teacherType, event, new TeacherRecipient(teacher));
+                notificationService.notify(teacherType, event, new TeacherSubject(teacher));
             }
         }
     }
@@ -87,44 +88,54 @@ class MeetAttendanceHelper {
         Set<Long> teacherIds = new HashSet<>();
 
         for (MeetParticipant participant : participants) {
-            Optional<Student> student = Optional.empty();
-            if (participant.googleUserId() != null) {
-                student = studentRepository.findByGoogleUserIdAndActiveTrue(participant.googleUserId());
-            }
-            if (student.isEmpty() && participant.displayName() != null) {
-                student = studentRepository.findByMeetDisplayNameIgnoreCaseAndActiveTrue(participant.displayName())
-                        .or(() -> studentRepository.findByNameIgnoreCaseAndActiveTrue(participant.displayName()));
-            }
+            Optional<Student> student = resolveFromDb(participant,
+                    studentRepository::findByGoogleUserIdAndActiveTrue,
+                    dn -> studentRepository.findByMeetDisplayNameIgnoreCaseAndActiveTrue(dn)
+                            .or(() -> studentRepository.findByNameIgnoreCaseAndActiveTrue(dn)));
             if (student.isPresent()) {
+                Student s = student.get();
                 if (autoLearnMeetIdentity(participant,
-                        student.get()::getGoogleUserId, student.get()::setGoogleUserId,
-                        student.get()::getMeetDisplayName, student.get()::setMeetDisplayName,
-                        "student " + student.get().getName())) {
-                    studentRepository.save(student.get());
+                        s::getGoogleUserId, s::setGoogleUserId,
+                        s::getMeetDisplayName, s::setMeetDisplayName,
+                        "student " + s.getName())) {
+                    studentRepository.save(s);
                 }
-                studentIds.add(student.get().getId());
+                studentIds.add(s.getId());
                 continue;
             }
 
-            Optional<Teacher> teacher = Optional.empty();
-            if (participant.googleUserId() != null) {
-                teacher = teacherRepository.findByGoogleUserIdAndActiveTrue(participant.googleUserId());
-            }
-            if (teacher.isEmpty() && participant.displayName() != null) {
-                teacher = teacherRepository.findByMeetDisplayNameIgnoreCaseAndActiveTrue(participant.displayName())
-                        .or(() -> teacherRepository.findByNameIgnoreCaseAndActiveTrue(participant.displayName()));
-            }
+            Optional<Teacher> teacher = resolveFromDb(participant,
+                    teacherRepository::findByGoogleUserIdAndActiveTrue,
+                    dn -> teacherRepository.findByMeetDisplayNameIgnoreCaseAndActiveTrue(dn)
+                            .or(() -> teacherRepository.findByNameIgnoreCaseAndActiveTrue(dn)));
             if (teacher.isPresent()) {
+                Teacher t = teacher.get();
                 if (autoLearnMeetIdentity(participant,
-                        teacher.get()::getGoogleUserId, teacher.get()::setGoogleUserId,
-                        teacher.get()::getMeetDisplayName, teacher.get()::setMeetDisplayName,
-                        "teacher " + teacher.get().getName())) {
-                    teacherRepository.save(teacher.get());
+                        t::getGoogleUserId, t::setGoogleUserId,
+                        t::getMeetDisplayName, t::setMeetDisplayName,
+                        "teacher " + t.getName())) {
+                    teacherRepository.save(t);
                 }
-                teacherIds.add(teacher.get().getId());
+                teacherIds.add(t.getId());
             }
         }
         return new ResolvedParticipants(studentIds, teacherIds);
+    }
+
+    /**
+     * Looks up an entity by Google user ID first; if not found, falls back to display name / name.
+     */
+    private <T> Optional<T> resolveFromDb(MeetParticipant participant,
+                                           Function<String, Optional<T>> findByGoogleUserId,
+                                           Function<String, Optional<T>> findByDisplayNameOrName) {
+        if (participant.googleUserId() != null) {
+            Optional<T> found = findByGoogleUserId.apply(participant.googleUserId());
+            if (found.isPresent()) return found;
+        }
+        if (participant.displayName() != null) {
+            return findByDisplayNameOrName.apply(participant.displayName());
+        }
+        return Optional.empty();
     }
 
     /**

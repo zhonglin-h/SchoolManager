@@ -98,12 +98,12 @@ public class MeetSessionHandler {
             ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
             for (Student student : expected.students()) {
                 if (!resolved.studentIds().contains(student.getId())) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(student));
+                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentSubject(student));
                 }
             }
             for (Teacher teacher : expected.teachers()) {
                 if (!resolved.teacherIds().contains(teacher.getId())) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, new TeacherRecipient(teacher));
+                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, new TeacherSubject(teacher));
                 }
             }
             processUnmatchedGuests(event, expected, participants);
@@ -243,7 +243,7 @@ public class MeetSessionHandler {
             notificationService.notify(
                     NotificationType.UNMATCHED_GUESTS,
                     event,
-                    new GuestRecipient(unmatchedInvitees, unmatchedParticipants));
+                    new GuestSubject(unmatchedInvitees, unmatchedParticipants));
         }
     }
 
@@ -264,12 +264,12 @@ public class MeetSessionHandler {
                                Set<Long> seenStudentIds, Set<Long> seenTeacherIds) {
         for (Student student : expected.students()) {
             if (!seenStudentIds.contains(student.getId())) {
-                notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(student));
+                notificationService.notify(NotificationType.NOT_YET_JOINED, event, new StudentSubject(student));
             }
         }
         for (Teacher teacher : expected.teachers()) {
             if (!seenTeacherIds.contains(teacher.getId())) {
-                notificationService.notify(NotificationType.NOT_YET_JOINED, event, new TeacherRecipient(teacher));
+                notificationService.notify(NotificationType.NOT_YET_JOINED, event, new TeacherSubject(teacher));
             }
         }
     }
@@ -314,13 +314,13 @@ public class MeetSessionHandler {
                         student.getName(), joinTimeByUserId, joinTimeByDisplayName);
                 if (joinTime == null) {
                     attendanceHelper.recordStudentAttendance(student, event, AttendanceStatus.ABSENT);
-                    notificationService.notify(NotificationType.ABSENT, event, new StudentRecipient(student));
+                    notificationService.notify(NotificationType.ABSENT, event, new StudentSubject(student));
                 } else if (joinTime.isAfter(classStart.plusSeconds(lateBufferMinutes * 60L))) {
                     attendanceHelper.recordStudentAttendance(student, event, AttendanceStatus.LATE);
-                    notificationService.notify(NotificationType.LATE, event, new StudentRecipient(student));
+                    notificationService.notify(NotificationType.LATE, event, new StudentSubject(student));
                 } else {
                     attendanceHelper.recordStudentAttendance(student, event, AttendanceStatus.PRESENT);
-                    notificationService.notify(NotificationType.ARRIVAL, event, new StudentRecipient(student));
+                    notificationService.notify(NotificationType.ARRIVAL, event, new StudentSubject(student));
                 }
             }
         }
@@ -332,13 +332,13 @@ public class MeetSessionHandler {
                         teacher.getName(), joinTimeByUserId, joinTimeByDisplayName);
                 if (joinTime == null) {
                     attendanceHelper.recordTeacherAttendance(teacher, event, AttendanceStatus.ABSENT);
-                    notificationService.notify(NotificationType.TEACHER_ABSENT, event, new TeacherRecipient(teacher));
+                    notificationService.notify(NotificationType.TEACHER_ABSENT, event, new TeacherSubject(teacher));
                 } else if (joinTime.isAfter(classStart.plusSeconds(lateBufferMinutes * 60L))) {
                     attendanceHelper.recordTeacherAttendance(teacher, event, AttendanceStatus.LATE);
-                    notificationService.notify(NotificationType.TEACHER_LATE, event, new TeacherRecipient(teacher));
+                    notificationService.notify(NotificationType.TEACHER_LATE, event, new TeacherSubject(teacher));
                 } else {
                     attendanceHelper.recordTeacherAttendance(teacher, event, AttendanceStatus.PRESENT);
-                    notificationService.notify(NotificationType.TEACHER_ARRIVED, event, new TeacherRecipient(teacher));
+                    notificationService.notify(NotificationType.TEACHER_ARRIVED, event, new TeacherSubject(teacher));
                 }
             }
         }

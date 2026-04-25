@@ -115,8 +115,8 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(event);
 
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(event), eq(new StudentRecipient(alice)));
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(bob));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(event), eq(new StudentSubject(alice)));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new StudentSubject(bob));
     }
 
     @Test
@@ -129,8 +129,8 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(event);
 
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(event), eq(new StudentRecipient(alice)));
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(bob));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(event), eq(new StudentSubject(alice)));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new StudentSubject(bob));
     }
 
     @Test
@@ -170,8 +170,8 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(event);
 
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new StudentRecipient(bob));
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(event), eq(new StudentRecipient(alice)));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new StudentSubject(bob));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(event), eq(new StudentSubject(alice)));
     }
 
     @Test
@@ -188,7 +188,7 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(teacherEvent);
 
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, teacherEvent, new TeacherRecipient(carol));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, teacherEvent, new TeacherSubject(carol));
     }
 
     @Test
@@ -206,7 +206,7 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(teacherEvent);
 
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(teacherEvent), eq(new TeacherRecipient(carol)));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(teacherEvent), eq(new TeacherSubject(carol)));
     }
 
     @Test
@@ -228,9 +228,9 @@ class MeetSessionHandlerTest {
 
         sessionHandler.checkPreClassJoins(teacherEvent);
 
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, teacherEvent, new StudentRecipient(bob));
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(teacherEvent), eq(new StudentRecipient(alice)));
-        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(teacherEvent), eq(new TeacherRecipient(carol)));
+        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, teacherEvent, new StudentSubject(bob));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(teacherEvent), eq(new StudentSubject(alice)));
+        verify(notificationService, never()).notify(eq(NotificationType.NOT_YET_JOINED), eq(teacherEvent), eq(new TeacherSubject(carol)));
     }
 
     // --- startSessionPolling (initial snapshot) ---
@@ -304,7 +304,7 @@ class MeetSessionHandlerTest {
         verify(attendanceRepository, atLeastOnce()).save(attendanceCaptor.capture());
         assertThat(attendanceCaptor.getAllValues())
                 .anyMatch(a -> a.getStudent().equals(alice) && a.getStatus() == AttendanceStatus.LATE);
-        verify(notificationService).notify(NotificationType.LATE, event, new StudentRecipient(alice));
+        verify(notificationService).notify(NotificationType.LATE, event, new StudentSubject(alice));
     }
 
     @Test
@@ -385,7 +385,7 @@ class MeetSessionHandlerTest {
         runnableCaptor.getValue().run();
 
         verify(notificationService, times(1)).notify(eq(NotificationType.MEETING_NOT_STARTED_15), eq(event), isNull());
-        verify(notificationService).notify(any(), eq(event), eq(new StudentRecipient(alice)));
+        verify(notificationService).notify(any(), eq(event), eq(new StudentSubject(alice)));
     }
 
     // --- finalizeSession ---
@@ -403,8 +403,8 @@ class MeetSessionHandlerTest {
         ArgumentCaptor<Attendance> captor = ArgumentCaptor.forClass(Attendance.class);
         verify(attendanceRepository, times(2)).save(captor.capture());
         assertThat(captor.getAllValues()).allMatch(a -> a.getStatus() == AttendanceStatus.ABSENT);
-        verify(notificationService).notify(NotificationType.ABSENT, event, new StudentRecipient(alice));
-        verify(notificationService).notify(NotificationType.ABSENT, event, new StudentRecipient(bob));
+        verify(notificationService).notify(NotificationType.ABSENT, event, new StudentSubject(alice));
+        verify(notificationService).notify(NotificationType.ABSENT, event, new StudentSubject(bob));
     }
 
     @Test
@@ -421,8 +421,8 @@ class MeetSessionHandlerTest {
 
         sessionHandler.finalizeSession(event);
 
-        verify(notificationService, never()).notify(eq(NotificationType.ABSENT), eq(event), eq(new StudentRecipient(alice)));
-        verify(notificationService).notify(NotificationType.ABSENT, event, new StudentRecipient(bob));
+        verify(notificationService, never()).notify(eq(NotificationType.ABSENT), eq(event), eq(new StudentSubject(alice)));
+        verify(notificationService).notify(NotificationType.ABSENT, event, new StudentSubject(bob));
     }
 
     @Test
@@ -441,7 +441,7 @@ class MeetSessionHandlerTest {
         ArgumentCaptor<Attendance> captor = ArgumentCaptor.forClass(Attendance.class);
         verify(attendanceRepository).save(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(AttendanceStatus.ABSENT);
-        verify(notificationService).notify(NotificationType.TEACHER_ABSENT, teacherEvent, new TeacherRecipient(carol));
+        verify(notificationService).notify(NotificationType.TEACHER_ABSENT, teacherEvent, new TeacherSubject(carol));
     }
 
     @Test
@@ -463,7 +463,7 @@ class MeetSessionHandlerTest {
         ArgumentCaptor<Attendance> captor = ArgumentCaptor.forClass(Attendance.class);
         verify(attendanceRepository).save(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(AttendanceStatus.LATE);
-        verify(notificationService).notify(NotificationType.TEACHER_LATE, teacherEvent, new TeacherRecipient(carol));
+        verify(notificationService).notify(NotificationType.TEACHER_LATE, teacherEvent, new TeacherSubject(carol));
     }
 
     @Test
@@ -485,7 +485,7 @@ class MeetSessionHandlerTest {
         ArgumentCaptor<Attendance> captor = ArgumentCaptor.forClass(Attendance.class);
         verify(attendanceRepository).save(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(AttendanceStatus.PRESENT);
-        verify(notificationService).notify(NotificationType.TEACHER_ARRIVED, teacherEvent, new TeacherRecipient(carol));
+        verify(notificationService).notify(NotificationType.TEACHER_ARRIVED, teacherEvent, new TeacherSubject(carol));
     }
 
     @Test
@@ -504,7 +504,7 @@ class MeetSessionHandlerTest {
         sessionHandler.finalizeSession(teacherEvent);
 
         verify(attendanceRepository, never()).save(argThat(a -> a.getTeacher() != null && a.getTeacher().equals(carol)));
-        verify(notificationService, never()).notify(any(), eq(teacherEvent), eq(new TeacherRecipient(carol)));
+        verify(notificationService, never()).notify(any(), eq(teacherEvent), eq(new TeacherSubject(carol)));
     }
 
     // --- resumeSessionPolling ---
@@ -591,7 +591,7 @@ class MeetSessionHandlerTest {
         verify(notificationService).notify(
                 NotificationType.UNMATCHED_GUESTS,
                 eventWithUnknown,
-                new GuestRecipient(List.of("unknown@meet.com"), List.of()));
+                new GuestSubject(List.of("unknown@meet.com"), List.of()));
     }
 
     @Test
@@ -620,7 +620,7 @@ class MeetSessionHandlerTest {
         verify(notificationService).notify(
                 eq(NotificationType.UNMATCHED_GUESTS),
                 eq(eventWithPrincipal),
-                argThat(r -> r instanceof GuestRecipient gr
+                argThat(r -> r instanceof GuestSubject gr
                         && gr.unmatchedInvitees().equals(List.of(PRINCIPAL_EMAIL, "unknown@meet.com"))
                         && gr.unmatchedParticipants().equals(List.of("Mystery Person"))));
     }
@@ -667,7 +667,7 @@ class MeetSessionHandlerTest {
         verify(notificationService, times(3)).notify(
                 NotificationType.UNMATCHED_GUESTS,
                 eventWithUnknown,
-                new GuestRecipient(List.of("unknown@meet.com"), List.of()));
+                new GuestSubject(List.of("unknown@meet.com"), List.of()));
     }
 
     // --- ALL_PRESENT calls cancelPollingFor (removes registry entry) ---

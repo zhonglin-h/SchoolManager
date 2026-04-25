@@ -1,6 +1,7 @@
 package com.school.dto;
 
 import com.school.entity.AttendanceStatus;
+import com.school.entity.PersonType;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -23,7 +24,7 @@ public record AttendanceSummaryResponse(
 ) {
     public record AttendanceEntry(
             Long personId,
-            String personType,
+            PersonType personType,
             String name,
             String email,
             AttendanceStatus status,
@@ -36,7 +37,7 @@ public record AttendanceSummaryResponse(
             String googleUserId,
             String displayName,
             Long personId,
-            String personType,
+            PersonType personType,
             String registeredName
     ) {}
 }
