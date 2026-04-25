@@ -2,8 +2,7 @@ package com.school.service;
 
 import com.school.entity.NotificationChannel;
 import com.school.entity.NotificationLog;
-import com.school.entity.Student;
-import com.school.entity.Teacher;
+import com.school.entity.Person;
 import com.school.integration.EmailClient;
 import com.school.integration.TelegramClient;
 import com.school.model.CalendarEvent;
@@ -67,8 +66,9 @@ public class NotificationService {
     public void notify(NotificationType type, CalendarEvent event, @Nullable NotificationSubject subject) {
         if (!notificationsEnabled) return;
 
-        Student student = subject instanceof StudentSubject ss ? ss.student() : null;
-        Teacher teacher = subject instanceof TeacherSubject ts ? ts.teacher() : null;
+        Person person = subject instanceof StudentSubject ss ? ss.student()
+                : subject instanceof TeacherSubject ts ? ts.teacher()
+                : null;
 
         // --- Email path ---
         if (emailNotificationsEnabled && type.shouldSendEmail()) {
@@ -90,21 +90,20 @@ public class NotificationService {
                         log.error("Failed to send {} email to principal: {}", type.name(), e.getMessage());
                     }
                 }
-                if (type.toParentViaEmail && student != null
-                        && student.getParentEmail() != null && !student.getParentEmail().isBlank()) {
-                    recipients.add(student.getParentEmail());
+                if (type.toParentViaEmail && person != null
+                        && person.getParentEmail() != null && !person.getParentEmail().isBlank()) {
+                    recipients.add(person.getParentEmail());
                     try {
-                        emailClient.send(student.getParentEmail(), emailSubject, body);
+                        emailClient.send(person.getParentEmail(), emailSubject, body);
                     } catch (Exception e) {
                         failureReason = e.getMessage();
                         log.error("Failed to send {} email to parent of {}: {}", type.name(),
-                                student.getName(), e.getMessage());
+                                person.getName(), e.getMessage());
                     }
                 }
 
                 NotificationLog emailEntry = NotificationLog.builder()
-                        .student(student)
-                        .teacher(teacher)
+                        .person(person)
                         .calendarEventId(event.getId())
                         .date(LocalDate.now())
                         .type(type.name())
@@ -136,8 +135,7 @@ public class NotificationService {
                 }
 
                 NotificationLog telegramEntry = NotificationLog.builder()
-                        .student(student)
-                        .teacher(teacher)
+                        .person(person)
                         .calendarEventId(event.getId())
                         .date(LocalDate.now())
                         .type(type.name())
@@ -178,15 +176,15 @@ public class NotificationService {
                                NotificationType type, NotificationChannel channel) {
         if (subject instanceof StudentSubject ss) {
             return notificationLogRepository
-                    .existsByStudentIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
+                    .existsByPersonIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                             ss.getId(), event.getId(), LocalDate.now(), type.name(), channel);
         } else if (subject instanceof TeacherSubject ts) {
             return notificationLogRepository
-                    .existsByTeacherIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
+                    .existsByPersonIdAndCalendarEventIdAndDateAndTypeAndChannelAndSuccessTrue(
                             ts.getId(), event.getId(), LocalDate.now(), type.name(), channel);
         } else {
             return notificationLogRepository
-                    .existsByCalendarEventIdAndDateAndTypeAndChannelAndStudentIsNullAndSuccessTrue(
+                    .existsByCalendarEventIdAndDateAndTypeAndChannelAndPersonIsNullAndSuccessTrue(
                             event.getId(), LocalDate.now(), type.name(), channel);
         }
     }

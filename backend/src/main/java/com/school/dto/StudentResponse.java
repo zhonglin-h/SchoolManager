@@ -1,6 +1,6 @@
 package com.school.dto;
 
-import com.school.entity.Student;
+import com.school.entity.Person;
 
 public record StudentResponse(
         Long id,
@@ -12,7 +12,7 @@ public record StudentResponse(
         String parentPhone,
         boolean active
 ) {
-    public static StudentResponse from(Student s) {
+    public static StudentResponse from(Person s) {
         return new StudentResponse(
                 s.getId(),
                 s.getName(),

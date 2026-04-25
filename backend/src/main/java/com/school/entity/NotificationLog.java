@@ -28,10 +28,7 @@ public class NotificationLog {
     private Long id;
 
     @ManyToOne(optional = true)
-    private Student student;
-
-    @ManyToOne(optional = true)
-    private Teacher teacher;
+    private Person person;
 
     private String calendarEventId;
 
