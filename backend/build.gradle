@@ -107,6 +107,16 @@ tasks.register('manualTest', Test) {
     classpath = sourceSets.test.runtimeClasspath
 }
 
+// Install Playwright browser binaries (used by the auto-join feature)
+tasks.register('playwrightInstall', JavaExec) {
+    group = 'build'
+    description = 'Download Playwright browser binaries required for Meet auto-join'
+    dependsOn classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.microsoft.playwright.CLI'
+    args = ['install', 'chromium']
+}
+
 bootRun {
     systemProperty 'spring.profiles.active', 'local'
 }

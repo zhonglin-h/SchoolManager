@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Runs at startup and logs clear ERROR messages for any missing credential
+ * Runs at startup and logs clear WARN messages for any missing credential
  * file or blank required property. Prevents cryptic NPEs later.
  *
  * <p>The application continues to run so that non-credential features (e.g.

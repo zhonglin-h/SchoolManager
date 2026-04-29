@@ -93,11 +93,12 @@ if errorlevel 1 (
 )
 
 :: Install Playwright browser binaries required for Meet auto-join
-call gradlew.bat playwright-install -q 2>nul
+call gradlew.bat playwrightInstall -q
 if errorlevel 1 (
-    echo  NOTE: playwright-install task not found — browser binaries were not downloaded.
-    echo        Run 'java -jar backend\build\libs\*.jar --playwright-install' after building
-    echo        if you plan to use the auto-join feature.
+    echo  NOTE: playwrightInstall task failed — browser binaries were not downloaded.
+    echo        This is only needed for the Meet auto-join feature.
+    echo        To install manually, build the project first, then run:
+    echo          cd backend ^&^& gradlew.bat playwrightInstall
 )
 popd
 echo  OK — backend dependencies ready.

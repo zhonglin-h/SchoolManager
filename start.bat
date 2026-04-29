@@ -35,18 +35,16 @@ if "%JAR_PATH%"=="" (
 echo  JAR: %JAR_PATH%
 
 :: --------------------------------------------------------------------------
-:: Start the application in the background, save PID
+:: Start the application in the background via PowerShell (captures PID reliably)
 :: --------------------------------------------------------------------------
 echo Starting School Manager...
-start /b java -jar "%JAR_PATH%" --spring.profiles.active=local > school-manager.log 2>&1
-:: Capture PID of the java process just launched
-for /f "tokens=2" %%p in ('tasklist /fi "imagename eq java.exe" /fo csv /nh 2^>nul ^| head -1') do (
-    set APP_PID=%%p
-)
-:: Fallback: use wmic to get the latest java PID
-for /f "skip=1 tokens=1" %%p in ('wmic process where "name='java.exe'" get ProcessId 2^>nul') do (
-    if not "%%p"=="" set APP_PID=%%p
-)
+for /f %%p in ('powershell -NoProfile -Command ^
+    "Start-Process -FilePath java ^
+        -ArgumentList @('-jar', '%JAR_PATH%', '--spring.profiles.active=local') ^
+        -RedirectStandardOutput school-manager.log ^
+        -RedirectStandardError school-manager-err.log ^
+        -PassThru ^
+     | Select-Object -ExpandProperty Id"') do set APP_PID=%%p
 echo %APP_PID% > .pid
 echo  PID: %APP_PID% saved to .pid
 
