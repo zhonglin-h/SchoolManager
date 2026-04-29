@@ -543,7 +543,9 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
                 || detail.contains("target closed")
                 || detail.contains("browser has been closed")
                 || detail.contains("browser closed")
-                || detail.contains("connection refused");
+                || detail.contains("connection refused")
+                || detail.contains("connection closed")
+                || detail.contains("playwright connection closed");
     }
 
     private Path resolveProfilePath() {
