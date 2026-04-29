@@ -54,6 +54,13 @@ tasks.register('manualTest', Test) {
     useJUnitPlatform {
         includeTags 'manual'
     }
+    testLogging {
+        events 'failed'
+        exceptionFormat 'full'
+        showExceptions true
+        showCauses true
+        showStackTraces false
+    }
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
 }

@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -75,8 +74,20 @@ class PlaywrightJoinAutomationClientManualSmokeTest {
         if (!Files.exists(path)) {
             return properties;
         }
-        try (InputStream in = Files.newInputStream(path)) {
-            properties.load(in);
+        try {
+            for (String rawLine : Files.readAllLines(path)) {
+                String line = rawLine.trim();
+                if (line.isEmpty() || line.startsWith("#") || line.startsWith("!")) {
+                    continue;
+                }
+                int equalsIdx = line.indexOf('=');
+                if (equalsIdx <= 0) {
+                    continue;
+                }
+                String key = line.substring(0, equalsIdx).trim();
+                String value = line.substring(equalsIdx + 1).trim();
+                properties.setProperty(key, value);
+            }
             return properties;
         } catch (IOException ignored) {
             return new Properties();

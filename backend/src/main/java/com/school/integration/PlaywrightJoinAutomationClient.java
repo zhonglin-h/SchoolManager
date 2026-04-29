@@ -2,6 +2,7 @@ package com.school.integration;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.InvalidPathException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -135,7 +136,8 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             context.setDefaultTimeout(timeoutMs);
             Page page = context.pages().isEmpty() ? context.newPage() : context.pages().get(0);
 
-            page.navigate(event.getMeetLink(), new Page.NavigateOptions().setTimeout((double) timeoutMs));
+            String meetLink = normalizeMeetLink(event.getMeetLink());
+            page.navigate(meetLink, new Page.NavigateOptions().setTimeout((double) timeoutMs));
             clickIfVisible(page, CONTINUE_WITHOUT_MEDIA_PATTERN, 2_000);
             disableMediaIfEnabled(page);
 
@@ -183,7 +185,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
                 ));
         String normalizedChromePath = normalizeConfiguredPath(chromePath);
         if (!isBlank(normalizedChromePath)) {
-            options.setExecutablePath(Paths.get(normalizedChromePath));
+            options.setExecutablePath(toPathOrThrow("app.autojoin.chrome-path", normalizedChromePath));
         }
         return playwright.chromium().launchPersistentContext(profilePath, options);
     }
@@ -303,7 +305,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         if (isBlank(normalizedProfileDir)) {
             return Paths.get(System.getProperty("java.io.tmpdir"), "schoolmanager-autojoin-profile");
         }
-        return Paths.get(normalizedProfileDir);
+        return toPathOrThrow("app.autojoin.chrome-profile-dir", normalizedProfileDir);
     }
 
     private static long toTimeoutMs(int timeoutSeconds) {
@@ -344,9 +346,66 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         }
         String trimmed = value.trim();
         if (trimmed.length() >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
-            return trimmed.substring(1, trimmed.length() - 1).trim();
+            trimmed = trimmed.substring(1, trimmed.length() - 1).trim();
         }
-        return trimmed;
+        return repairLikelyWindowsPath(trimmed);
+    }
+
+    private static Path toPathOrThrow(String key, String value) {
+        if (looksLikeMalformedWindowsPath(value)) {
+            throw new IllegalArgumentException(key + " looks malformed: '" + value + "'. "
+                    + "If this value comes from a .properties file on Windows, use forward slashes "
+                    + "(e.g. C:/Program Files/Google/Chrome/Application/chrome.exe) or escape backslashes (\\\\).");
+        }
+        try {
+            return Paths.get(value);
+        } catch (InvalidPathException e) {
+            throw new IllegalArgumentException(key + " is not a valid filesystem path: '" + value + "'", e);
+        }
+    }
+
+    private static boolean looksLikeMalformedWindowsPath(String value) {
+        return value != null
+                && value.matches("^[A-Za-z]:[^\\\\/].*");
+    }
+
+    private static String normalizeMeetLink(String raw) {
+        String value = nullToEmpty(raw).trim();
+        if (value.isEmpty()) {
+            return value;
+        }
+        if (value.startsWith("http://") || value.startsWith("https://")) {
+            return value;
+        }
+        if (value.startsWith("meet.google.com/") || value.startsWith("www.meet.google.com/")) {
+            return "https://" + value;
+        }
+        return value;
+    }
+
+    private static String repairLikelyWindowsPath(String value) {
+        if (value == null || value.isBlank()) {
+            return value;
+        }
+        if (!looksLikeMalformedWindowsPath(value)) {
+            return value;
+        }
+
+        String repaired = value;
+        repaired = repaired.replace("Program Files (x86)GoogleChromeApplicationchrome.exe",
+                "Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe");
+        repaired = repaired.replace("Program FilesGoogleChromeApplicationchrome.exe",
+                "Program Files\\Google\\Chrome\\Application\\chrome.exe");
+        repaired = repaired.replace("GoogleChromeApplicationchrome.exe",
+                "Google\\Chrome\\Application\\chrome.exe");
+        repaired = repaired.replace("AppDataLocalGoogleChromeUser Data",
+                "AppData\\Local\\Google\\Chrome\\User Data");
+
+        // If there is still no separator immediately after the drive letter, add one.
+        if (repaired.matches("^[A-Za-z]:[^\\\\/].*")) {
+            repaired = repaired.substring(0, 2) + "\\" + repaired.substring(2);
+        }
+        return repaired;
     }
 
     private void sleepQuietly(long millis) {
