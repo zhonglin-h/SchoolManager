@@ -7,8 +7,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
+
+import jakarta.annotation.PreDestroy;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -39,8 +42,11 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>Grant Meet permission for camera/microphone inside that profile.</li>
  * </ol>
  *
- * <p>This client launches a persistent Chrome profile, opens the Meet URL, disables media,
- * clicks <i>Join now</i> or <i>Ask to join</i>, and waits for in-call state.
+ * <p>This client maintains a <em>persistent</em> browser context that is shared across all
+ * join attempts. Each attempt opens a new tab inside that shared context and closes it
+ * afterwards, avoiding the overhead of relaunching a full browser process per meeting.
+ * If the browser crashes or the context becomes unreachable the runner transparently
+ * recreates it on the next attempt.
  */
 @Slf4j
 @Component
@@ -65,10 +71,13 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     @Value("${app.autojoin.require-principal-profile-signed-in:true}")
     private boolean requireProfileSignedIn;
 
-    @Value("${app.autojoin.keep-browser-open:false}")
-    private boolean keepBrowserOpen;
-
     private Supplier<Playwright> playwrightFactory = Playwright::create;
+
+    // --- persistent browser state ---
+    /** Guards creation and teardown of the shared browser context. */
+    private final ReentrantLock contextLock = new ReentrantLock();
+    private volatile Playwright sharedPlaywright;
+    private volatile BrowserContext sharedContext;
 
     private static final Pattern JOIN_NOW_PATTERN =
             Pattern.compile("join now|rejoin|join meeting|join the meeting now|join the call now",
@@ -140,17 +149,13 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     }
 
     private JoinResult attemptOnce(CalendarEvent event) {
-        Path profilePath = resolveProfilePath();
-        Playwright playwright = null;
-        BrowserContext context = null;
+        Page page = null;
         try {
-            playwright = playwrightFactory.get();
-            context = launchContext(playwright, profilePath);
+            BrowserContext context = getOrCreateContext();
             long timeoutMs = toTimeoutMs(joinTimeoutSeconds);
-            context.setDefaultTimeout(timeoutMs);
             // Always use a fresh tab for join flow; reused startup tabs can remain on
             // chrome:// pages or extension UIs and behave inconsistently.
-            Page page = context.newPage();
+            page = context.newPage();
 
             String meetLink = normalizeMeetLink(event.getMeetLink());
             log.info("Playwright page before navigate: {}", page.url());
@@ -209,16 +214,104 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             return new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN,
                     "Join click completed but in-call state not detected");
         } catch (Exception e) {
+            invalidateContextIfDead(e);
             JoinAttemptStatus status = classifyErrorMessage(e.getMessage());
             log.error("Playwright auto-join attempt failed: {}", e.getMessage());
             return new JoinResult(status, safeDetailMessage(e));
         } finally {
-            if (!keepBrowserOpen) {
-                closeQuietly(context);
-                closeQuietly(playwright);
-            } else {
-                log.info("app.autojoin.keep-browser-open=true; leaving browser open for inspection");
+            // Close only the tab; the shared context/browser remains alive for the next run.
+            closeQuietly(page);
+        }
+    }
+
+    /**
+     * Returns the shared {@link BrowserContext}, creating (or recreating) it if necessary.
+     *
+     * <p>Thread-safe: at most one thread at a time may create the context. Others wait on the
+     * lock and then find the already-created context on the double-checked read.
+     */
+    BrowserContext getOrCreateContext() {
+        // Fast path — context exists and is healthy
+        if (isContextAlive(sharedContext)) {
+            return sharedContext;
+        }
+        contextLock.lock();
+        try {
+            // Double-check under lock
+            if (isContextAlive(sharedContext)) {
+                return sharedContext;
             }
+            log.info("Creating new persistent browser context");
+            closeQuietly(sharedContext);
+            closeQuietly(sharedPlaywright);
+            sharedContext = null;
+            sharedPlaywright = null;
+
+            Playwright pw = playwrightFactory.get();
+            Path profilePath = resolveProfilePath();
+            BrowserContext ctx = launchContext(pw, profilePath);
+            ctx.setDefaultTimeout(toTimeoutMs(joinTimeoutSeconds));
+            sharedPlaywright = pw;
+            sharedContext = ctx;
+            log.info("Persistent browser context created successfully");
+            return ctx;
+        } finally {
+            contextLock.unlock();
+        }
+    }
+
+    /**
+     * Returns {@code true} if {@code context} is non-null and the underlying browser process
+     * is still reachable (i.e. listing open pages does not throw).
+     */
+    private boolean isContextAlive(BrowserContext context) {
+        if (context == null) {
+            return false;
+        }
+        try {
+            context.pages();
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * If the exception looks like a browser/context crash, invalidates the shared state so
+     * the next attempt triggers a fresh browser launch.
+     */
+    private void invalidateContextIfDead(Exception e) {
+        String msg = nullToEmpty(e.getMessage()).toLowerCase(Locale.ROOT);
+        boolean looksLikeCrash = msg.contains("browser has been closed")
+                || msg.contains("target closed")
+                || msg.contains("browser closed")
+                || msg.contains("connection refused");
+        if (looksLikeCrash || !isContextAlive(sharedContext)) {
+            log.warn("Browser context appears dead ({}); will recreate on next attempt", e.getMessage());
+            contextLock.lock();
+            try {
+                closeQuietly(sharedContext);
+                closeQuietly(sharedPlaywright);
+                sharedContext = null;
+                sharedPlaywright = null;
+            } finally {
+                contextLock.unlock();
+            }
+        }
+    }
+
+    /** Cleanly closes the shared browser context and Playwright instance on app shutdown. */
+    @PreDestroy
+    public void shutdown() {
+        log.info("PlaywrightJoinAutomationClient shutting down; closing shared browser context");
+        contextLock.lock();
+        try {
+            closeQuietly(sharedContext);
+            closeQuietly(sharedPlaywright);
+            sharedContext = null;
+            sharedPlaywright = null;
+        } finally {
+            contextLock.unlock();
         }
     }
 
