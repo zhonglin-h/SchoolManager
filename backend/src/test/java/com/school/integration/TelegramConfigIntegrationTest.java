@@ -1,6 +1,8 @@
 package com.school.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
+import com.school.integration.JoinAutomationClient;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +33,9 @@ class TelegramConfigIntegrationTest {
 
     @MockBean
     JavaMailSender javaMailSender;
+
+    @MockBean
+    JoinAutomationClient joinAutomationClient;
 
     @TestConfiguration
     static class TestConfig {

@@ -120,7 +120,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             return new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN,
                     "Event has no Meet link for Playwright automation");
         }
-        if (requireProfileSignedIn && isBlank(chromeProfileDir)) {
+        if (requireProfileSignedIn && isBlank(normalizeConfiguredPath(chromeProfileDir))) {
             return new JoinResult(JoinAttemptStatus.FAILED_AUTH,
                     "app.autojoin.chrome-profile-dir is required when signed-in profile is enforced");
         }
@@ -181,8 +181,9 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
                         "--use-fake-ui-for-media-stream",
                         "--disable-infobars"
                 ));
-        if (!isBlank(chromePath)) {
-            options.setExecutablePath(Paths.get(chromePath));
+        String normalizedChromePath = normalizeConfiguredPath(chromePath);
+        if (!isBlank(normalizedChromePath)) {
+            options.setExecutablePath(Paths.get(normalizedChromePath));
         }
         return playwright.chromium().launchPersistentContext(profilePath, options);
     }
@@ -298,10 +299,11 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     }
 
     private Path resolveProfilePath() {
-        if (isBlank(chromeProfileDir)) {
+        String normalizedProfileDir = normalizeConfiguredPath(chromeProfileDir);
+        if (isBlank(normalizedProfileDir)) {
             return Paths.get(System.getProperty("java.io.tmpdir"), "schoolmanager-autojoin-profile");
         }
-        return Paths.get(chromeProfileDir);
+        return Paths.get(normalizedProfileDir);
     }
 
     private static long toTimeoutMs(int timeoutSeconds) {
@@ -334,6 +336,17 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static String normalizeConfiguredPath(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+            return trimmed.substring(1, trimmed.length() - 1).trim();
+        }
+        return trimmed;
     }
 
     private void sleepQuietly(long millis) {
