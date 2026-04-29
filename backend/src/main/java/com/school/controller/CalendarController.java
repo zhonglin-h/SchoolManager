@@ -5,6 +5,7 @@ import com.school.model.CalendarEvent;
 import com.school.service.CalendarSyncService;
 import com.school.service.JoinAttemptService;
 import com.school.service.MeetAttendanceMonitor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/calendar")
 public class CalendarController {
@@ -77,6 +79,7 @@ public class CalendarController {
         try {
             todayEvents = calendarSyncService.getTodaysEvents();
         } catch (Exception e) {
+            log.error("Failed to fetch today's events for manual join trigger on '{}': {}", eventId, e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
         CalendarEvent event = todayEvents.stream()

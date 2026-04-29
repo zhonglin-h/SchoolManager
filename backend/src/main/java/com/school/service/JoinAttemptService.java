@@ -124,7 +124,7 @@ public class JoinAttemptService {
 
     private JoinAttemptLog saveAndNotify(CalendarEvent event, String triggerType,
                                           LocalDate date, JoinResult result) {
-        JoinAttemptLog log = JoinAttemptLog.builder()
+        JoinAttemptLog entry = JoinAttemptLog.builder()
                 .calendarEventId(event.getId())
                 .scheduledStart(event.getStartTime())
                 .attemptedAt(LocalDateTime.now())
@@ -134,8 +134,8 @@ public class JoinAttemptService {
                 .triggerType(triggerType)
                 .build();
 
-        JoinAttemptLog saved = joinAttemptLogRepository.save(log);
-        JoinAttemptService.log.info("Join attempt recorded for event '{}': status={}, detail={}",
+        JoinAttemptLog saved = joinAttemptLogRepository.save(entry);
+        log.info("Join attempt recorded for event '{}': status={}, detail={}",
                 event.getTitle(), result.status(), result.detailMessage());
 
         sendNotification(event, result);
