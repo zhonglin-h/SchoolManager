@@ -6,6 +6,7 @@ import java.nio.file.InvalidPathException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.ArrayList;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
@@ -176,18 +177,24 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     }
 
     private BrowserContext launchContext(Playwright playwright, Path profilePath) {
+        ChromeProfileLaunchTarget target = resolveChromeLaunchTarget(profilePath);
+        List<String> launchArgs = new ArrayList<>(List.of(
+                "--disable-blink-features=AutomationControlled",
+                "--use-fake-ui-for-media-stream",
+                "--disable-infobars"
+        ));
+        if (target.profileDirectoryName() != null) {
+            launchArgs.add("--profile-directory=" + target.profileDirectoryName());
+        }
+
         BrowserType.LaunchPersistentContextOptions options = new BrowserType.LaunchPersistentContextOptions()
                 .setHeadless(false)
-                .setArgs(List.of(
-                        "--disable-blink-features=AutomationControlled",
-                        "--use-fake-ui-for-media-stream",
-                        "--disable-infobars"
-                ));
+                .setArgs(launchArgs);
         String normalizedChromePath = normalizeConfiguredPath(chromePath);
         if (!isBlank(normalizedChromePath)) {
             options.setExecutablePath(toPathOrThrow("app.autojoin.chrome-path", normalizedChromePath));
         }
-        return playwright.chromium().launchPersistentContext(profilePath, options);
+        return playwright.chromium().launchPersistentContext(target.userDataDir(), options);
     }
 
     private JoinAction clickJoinAction(Page page, long timeoutMs) {
@@ -407,6 +414,27 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         }
         return repaired;
     }
+
+    private static ChromeProfileLaunchTarget resolveChromeLaunchTarget(Path configuredPath) {
+        if (configuredPath == null) {
+            return new ChromeProfileLaunchTarget(null, null);
+        }
+        Path normalized = configuredPath.normalize();
+        Path fileName = normalized.getFileName();
+        if (fileName == null) {
+            return new ChromeProfileLaunchTarget(normalized, null);
+        }
+        String lastSegment = fileName.toString();
+        if ("Default".equalsIgnoreCase(lastSegment) || lastSegment.matches("(?i)^Profile\\s+\\d+$")) {
+            Path parent = normalized.getParent();
+            if (parent != null) {
+                return new ChromeProfileLaunchTarget(parent, lastSegment);
+            }
+        }
+        return new ChromeProfileLaunchTarget(normalized, null);
+    }
+
+    private record ChromeProfileLaunchTarget(Path userDataDir, String profileDirectoryName) {}
 
     private void sleepQuietly(long millis) {
         if (millis <= 0) {
