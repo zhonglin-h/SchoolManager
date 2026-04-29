@@ -1,0 +1,41 @@
+# Credential files — never copy into image
+service-account.json
+client_secret.json
+*.env
+.env.local
+.env.*.local
+
+# Local config
+backend/src/main/resources/application-local.properties
+backend/src/test/resources/application-local.properties
+backend/src/test/resources/manual-smoke.local.properties
+
+# Runtime data
+data/
+backups/
+school-manager.log
+.pid
+
+# Node modules
+frontend/node_modules/
+
+# Gradle caches and build output
+backend/.gradle/
+backend/.gradle-local/
+backend/build/
+backend/out/
+
+# Frontend build output (copied by Docker during build)
+frontend/dist/
+backend/src/main/resources/static/
+
+# IDE / OS
+.idea/
+.vscode/settings.json
+*.iml
+*.iws
+.DS_Store
+Thumbs.db
+
+# Git
+.git/

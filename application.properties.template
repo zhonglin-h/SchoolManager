@@ -1,0 +1,47 @@
+# ============================================================
+# application.properties.template
+# Copy this file to backend/src/main/resources/application-local.properties
+# and fill in every placeholder marked with < >.
+# Lines starting with # are comments and will be ignored at runtime.
+# ============================================================
+
+# ----- Google Calendar --------------------------------------------------------
+# The calendar ID (usually an email address) that the app monitors.
+google.calendar.id=<your-calendar-email@gmail.com>
+
+# ----- Principal details ------------------------------------------------------
+app.principal.name=<Full Name>
+app.principal.email=<principal-email@gmail.com>
+# Find your Google user ID at: https://developers.google.com/people/api/rest/v1/people/get
+app.principal.google-user-id=<numeric-google-user-id>
+
+# ----- Gmail SMTP (email notifications) ---------------------------------------
+# Use a Gmail App Password, NOT your account password.
+# Generate one at: myaccount.google.com -> Security -> App passwords
+spring.mail.username=<your-gmail@gmail.com>
+spring.mail.password=<16-char-app-password>
+
+# ----- Google OAuth (client_secret.json) --------------------------------------
+# Download from Google Cloud Console -> APIs & Services -> Credentials -> OAuth 2.0 Client ID.
+# Save the file as client_secret.json at the repository root.
+google.client-secret.path=./client_secret.json
+
+# ----- Notifications ----------------------------------------------------------
+app.notifications.enabled=true
+app.notifications.email.enabled=true
+
+# ----- Meet mock (set false for real Meet API calls) --------------------------
+app.meet.mock=false
+app.meet.mock.active-names=
+
+# ----- Playwright auto-join (optional) ----------------------------------------
+# Set app.autojoin.enabled=true to activate scheduled browser-automation join.
+app.autojoin.enabled=false
+app.autojoin.provider=playwright
+# Windows path to a dedicated Chrome profile (use forward slashes).
+app.autojoin.chrome-profile-dir=C:/chrome-autojoin/UserData/Profile 1
+app.autojoin.chrome-path=C:/Program Files/Google/Chrome/Application/chrome.exe
+app.autojoin.join-timeout-seconds=45
+app.autojoin.retry.max-attempts=1
+app.autojoin.retry.backoff-ms=1000
+app.autojoin.require-principal-profile-signed-in=true

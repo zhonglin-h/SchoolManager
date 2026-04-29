@@ -1,6 +1,56 @@
 # School Manager
 
-## Setup
+## Getting Started (Windows)
+
+### Prerequisites
+
+| Tool | Minimum version | Install command |
+|------|----------------|-----------------|
+| Java JDK | 21 | `winget install Microsoft.OpenJDK.21` |
+| Node.js | 20 LTS | `winget install OpenJS.NodeJS.LTS` |
+| pnpm | latest | `npm install -g pnpm` (setup.bat does this automatically) |
+
+### One-Time Setup
+
+```bat
+:: Clone the repository
+git clone https://github.com/zhonglin-h/SchoolManager.git
+cd SchoolManager
+
+:: Run the setup script — checks prerequisites, installs deps, creates config file
+setup.bat
+```
+
+`setup.bat` will:
+1. Verify Java 21 and Node.js are installed.
+2. Install pnpm if missing.
+3. Pre-fetch all frontend and backend dependencies.
+4. Download Playwright browser binaries (needed for Meet auto-join).
+5. Create `backend/src/main/resources/application-local.properties` from the template and open it in Notepad.
+
+After setup, follow **`credentials-checklist.md`** to fill in your Google OAuth credentials, Gmail App Password, and other required values.
+
+### Daily Use
+
+```bat
+start.bat    :: Build if needed, launch the app, open http://localhost:8080
+stop.bat     :: Stop the running app
+```
+
+### Docker (Mac / Linux / Windows)
+
+```bash
+# One-time: place credentials, then:
+docker compose up --build    # first run
+docker compose up -d         # subsequent runs
+docker compose down
+```
+
+See `credentials-checklist.md` for credential placement instructions.
+
+---
+
+## Development Setup
 
 ### Local Files To Create
 
