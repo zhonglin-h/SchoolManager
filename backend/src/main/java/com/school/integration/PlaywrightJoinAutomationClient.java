@@ -132,13 +132,38 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     private JoinResult attemptOnce(CalendarEvent event) {
         Path profilePath = resolveProfilePath();
         try (Playwright playwright = playwrightFactory.get();
-             BrowserContext context = launchContext(playwright, profilePath)) {
+            BrowserContext context = launchContext(playwright, profilePath)) {
             long timeoutMs = toTimeoutMs(joinTimeoutSeconds);
             context.setDefaultTimeout(timeoutMs);
-            Page page = context.pages().isEmpty() ? context.newPage() : context.pages().get(0);
+            // Always use a fresh tab for join flow; reused startup tabs can remain on
+            // chrome:// pages or extension UIs and behave inconsistently.
+            Page page = context.newPage();
+            page.waitForTimeout(1_500);
 
             String meetLink = normalizeMeetLink(event.getMeetLink());
+            log.info("Playwright page before navigate: {}", page.url());
+            log.info("Playwright navigating to Meet link: {}", meetLink);
             page.navigate(meetLink, new Page.NavigateOptions().setTimeout((double) timeoutMs));
+            log.info("Playwright page after navigate: {}", page.url());
+            if (isBlankPage(page.url())) {
+                log.warn("Navigation remained on blank page; retrying once with a new tab");
+                try {
+                    page.close();
+                } catch (Exception ignored) {
+                    // no-op
+                }
+                page = context.newPage();
+                page.waitForTimeout(1_000);
+                page.navigate(meetLink, new Page.NavigateOptions().setTimeout((double) timeoutMs));
+                log.info("Playwright page after retry navigate: {}", page.url());
+            }
+            if (isBlankPage(page.url())) {
+                return new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN,
+                        "Browser stayed on about:blank after navigation attempts; "
+                                + "automation could not control the page. "
+                                + "Likely Chrome profile/policy DevTools restriction. "
+                                + "Use a dedicated non-default user-data profile for automation.");
+            }
             clickIfVisible(page, CONTINUE_WITHOUT_MEDIA_PATTERN, 2_000);
             disableMediaIfEnabled(page);
 
@@ -345,6 +370,11 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static boolean isBlankPage(String url) {
+        String normalized = nullToEmpty(url).trim().toLowerCase(Locale.ROOT);
+        return normalized.isEmpty() || normalized.equals("about:blank");
     }
 
     private static String normalizeConfiguredPath(String value) {
