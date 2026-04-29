@@ -138,7 +138,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             // Always use a fresh tab for join flow; reused startup tabs can remain on
             // chrome:// pages or extension UIs and behave inconsistently.
             Page page = context.newPage();
-            page.waitForTimeout(1_500);
+            page.waitForTimeout(10_000);
 
             String meetLink = normalizeMeetLink(event.getMeetLink());
             log.info("Playwright page before navigate: {}", page.url());
@@ -153,7 +153,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
                     // no-op
                 }
                 page = context.newPage();
-                page.waitForTimeout(1_000);
+                page.waitForTimeout(10_000);
                 page.navigate(meetLink, new Page.NavigateOptions().setTimeout((double) timeoutMs));
                 log.info("Playwright page after retry navigate: {}", page.url());
             }
