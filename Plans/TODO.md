@@ -8,7 +8,7 @@
 NEW FEATURES
 - [X] open meeting automatically
 - [X] Playwright: build a persistent long-lived runner that reuses one browser context/window across runs (new tab per run)
-- [ ] package into manner than can be more portable
+- [ ] package into manner than can be more portable (needs testing now)
 - [ ] create versioning and backups for database (online?)
 - [ ] uptime checks
 - [ ] edit msg for guest but not matched
