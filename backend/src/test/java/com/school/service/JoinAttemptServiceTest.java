@@ -40,7 +40,6 @@ class JoinAttemptServiceTest {
     void setUp() {
         service = new JoinAttemptService(joinAutomationClient, joinAttemptLogRepository, notificationService);
         ReflectionTestUtils.setField(service, "enabled", true);
-        ReflectionTestUtils.setField(service, "notifyOnSuccess", false);
 
         event = new CalendarEvent(
                 "evt-1",
@@ -107,18 +106,7 @@ class JoinAttemptServiceTest {
     }
 
     @Test
-    void attemptJoin_doesNotNotifyOnSuccessWhenFlagIsFalse() {
-        when(joinAutomationClient.attemptJoin(event))
-                .thenReturn(new JoinResult(JoinAttemptStatus.JOINED, "ok"));
-
-        service.attemptJoin(event, "AUTO");
-
-        verify(notificationService, never()).notify(eq(NotificationType.AUTO_JOIN_SUCCESS), any(), any());
-    }
-
-    @Test
-    void attemptJoin_notifiesOnSuccessWhenFlagIsTrue() {
-        ReflectionTestUtils.setField(service, "notifyOnSuccess", true);
+    void attemptJoin_notifiesOnSuccessForAutoTrigger() {
         when(joinAutomationClient.attemptJoin(event))
                 .thenReturn(new JoinResult(JoinAttemptStatus.JOINED, "ok"));
 
@@ -137,6 +125,20 @@ class JoinAttemptServiceTest {
         assertThat(result.getStatus()).isEqualTo(JoinAttemptStatus.FAILED_AUTH);
         assertThat(result.getDetailMessage()).isEqualTo("Token expired");
         verify(notificationService).notify(NotificationType.AUTO_JOIN_FAILED, event, null);
+    }
+
+    @Test
+    void attemptJoin_manualTriggerDoesNotSendNotificationsOnSuccessOrFailure() {
+        when(joinAutomationClient.attemptJoin(event))
+                .thenReturn(new JoinResult(JoinAttemptStatus.JOINED, "ok"));
+        service.attemptJoin(event, "MANUAL");
+
+        when(joinAutomationClient.attemptJoin(event))
+                .thenReturn(new JoinResult(JoinAttemptStatus.FAILED_AUTH, "auth failed"));
+        service.attemptJoin(event, "MANUAL");
+
+        verify(notificationService, never()).notify(eq(NotificationType.AUTO_JOIN_SUCCESS), any(), any());
+        verify(notificationService, never()).notify(eq(NotificationType.AUTO_JOIN_FAILED), any(), any());
     }
 
     @Test

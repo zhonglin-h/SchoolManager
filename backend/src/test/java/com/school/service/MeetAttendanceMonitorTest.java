@@ -40,7 +40,6 @@ class MeetAttendanceMonitorTest {
         monitor = new MeetAttendanceMonitor(calendarSyncService, sessionHandler,
                 notificationService, taskScheduler, upcomingChecksRegistry, joinAttemptService);
         ReflectionTestUtils.setField(monitor, "autoJoinEnabled", false);
-        ReflectionTestUtils.setField(monitor, "autoJoinTriggerOffsetSeconds", 60);
     }
 
     // --- scheduleEventsForToday: upcoming checks ---
@@ -320,6 +319,50 @@ class MeetAttendanceMonitorTest {
         List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
         assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
                 .contains("AUTO_JOIN");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_tMinus15AutoJoinAttemptsWhenMeetingNotActive() throws Exception {
+        ReflectionTestUtils.setField(monitor, "autoJoinEnabled", true);
+        CalendarEvent future = new CalendarEvent("evt-autojoin-fire", "Auto Join Fire",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of("alice@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(future));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenAnswer(invocation -> {
+                    Runnable task = invocation.getArgument(0);
+                    task.run();
+                    return mock(ScheduledFuture.class);
+                });
+        when(sessionHandler.isMeetingActive(future)).thenReturn(false);
+
+        monitor.scheduleEventsForToday();
+
+        verify(joinAttemptService).attemptJoinIfEnabled(future, "AUTO");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_tMinus15AutoJoinSkipsWhenMeetingAlreadyActive() throws Exception {
+        ReflectionTestUtils.setField(monitor, "autoJoinEnabled", true);
+        CalendarEvent future = new CalendarEvent("evt-autojoin-skip", "Auto Join Skip",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of("alice@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(future));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenAnswer(invocation -> {
+                    Runnable task = invocation.getArgument(0);
+                    task.run();
+                    return mock(ScheduledFuture.class);
+                });
+        when(sessionHandler.isMeetingActive(future)).thenReturn(true);
+
+        monitor.scheduleEventsForToday();
+
+        verify(joinAttemptService, never()).attemptJoinIfEnabled(future, "AUTO");
     }
 
     @Test

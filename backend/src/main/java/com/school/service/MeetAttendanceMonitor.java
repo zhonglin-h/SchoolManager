@@ -49,9 +49,6 @@ public class MeetAttendanceMonitor {
     @Value("${app.autojoin.enabled:false}")
     private boolean autoJoinEnabled;
 
-    @Value("${app.autojoin.trigger-offset-seconds:60}")
-    private int autoJoinTriggerOffsetSeconds;
-
     private final Map<String, List<ScheduledFuture<?>>> oneTimeFutures = new ConcurrentHashMap<>();
     private final Map<String, Instant> lastScheduledStartTime = new ConcurrentHashMap<>();
 
@@ -151,10 +148,27 @@ public class MeetAttendanceMonitor {
                     .atZone(ZoneId.systemDefault()).toInstant();
 
             if (minus15.isAfter(now)) {
+                if (autoJoinEnabled) {
+                    log.info("Scheduling AUTO_JOIN gate at T-15 for event '{}' ({}) at {}",
+                            event.getTitle(), event.getId(), minus15);
+                }
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "MEETING_NOT_STARTED_15", minus15));
                 futures.add(taskScheduler.schedule(() -> {
                     upcomingChecksRegistry.remove(event.getId(), "MEETING_NOT_STARTED_15");
                     sessionHandler.checkMeetingStarted(event, NotificationType.MEETING_NOT_STARTED_15);
+                    if (autoJoinEnabled) {
+                        boolean activeAtTMinus15 = sessionHandler.isMeetingActive(event);
+                        log.info("AUTO_JOIN gate fired for event '{}' ({}): meetingActiveAtTMinus15={}",
+                                event.getTitle(), event.getId(), activeAtTMinus15);
+                        if (!activeAtTMinus15) {
+                            log.info("AUTO_JOIN proceeding for event '{}' ({}) because meeting is not active",
+                                    event.getTitle(), event.getId());
+                            joinAttemptService.attemptJoinIfEnabled(event, "AUTO");
+                        } else {
+                            log.info("AUTO_JOIN skipped for event '{}' ({}) because meeting is already active",
+                                    event.getTitle(), event.getId());
+                        }
+                    }
                 }, minus15));
             }
             if (minus3.isAfter(now)) {
@@ -185,16 +199,8 @@ public class MeetAttendanceMonitor {
                 }, end));
             }
 
-            if (autoJoinEnabled) {
-                Instant joinTrigger = event.getStartTime().minusSeconds(autoJoinTriggerOffsetSeconds)
-                        .atZone(ZoneId.systemDefault()).toInstant();
-                if (joinTrigger.isAfter(now)) {
-                    upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "AUTO_JOIN", joinTrigger));
-                    futures.add(taskScheduler.schedule(() -> {
-                        upcomingChecksRegistry.remove(event.getId(), "AUTO_JOIN");
-                        joinAttemptService.attemptJoinIfEnabled(event, "AUTO");
-                    }, joinTrigger));
-                }
+            if (autoJoinEnabled && minus15.isAfter(now)) {
+                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "AUTO_JOIN", minus15));
             }
 
             oneTimeFutures.put(event.getId(), futures);

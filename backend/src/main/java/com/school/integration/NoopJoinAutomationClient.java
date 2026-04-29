@@ -3,7 +3,7 @@ package com.school.integration;
 import com.school.entity.JoinAttemptStatus;
 import com.school.model.CalendarEvent;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@ConditionalOnMissingBean(JoinAutomationClient.class)
+@ConditionalOnProperty(name = "app.autojoin.provider", havingValue = "noop", matchIfMissing = true)
 public class NoopJoinAutomationClient implements JoinAutomationClient {
 
     @Override

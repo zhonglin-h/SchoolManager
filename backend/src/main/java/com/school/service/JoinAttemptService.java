@@ -36,9 +36,6 @@ public class JoinAttemptService {
     @Value("${app.autojoin.enabled:false}")
     private boolean enabled;
 
-    @Value("${app.autojoin.notify-on-success:false}")
-    private boolean notifyOnSuccess;
-
     public JoinAttemptService(JoinAutomationClient joinAutomationClient,
                                JoinAttemptLogRepository joinAttemptLogRepository,
                                NotificationService notificationService) {
@@ -56,6 +53,8 @@ public class JoinAttemptService {
      * @param triggerType identifier for this trigger source (e.g. {@code "AUTO"})
      */
     public void attemptJoinIfEnabled(CalendarEvent event, String triggerType) {
+        log.info("Received join request: triggerType={}, eventId={}, title='{}', autoJoinEnabled={}",
+                triggerType, event.getId(), event.getTitle(), enabled);
         if (!enabled) {
             log.debug("Auto-join is disabled; skipping join for event '{}'", event.getTitle());
             return;
@@ -85,12 +84,16 @@ public class JoinAttemptService {
         // Invoke the automation client
         JoinResult result;
         try {
-            log.info("Invoking join automation for event '{}' (triggerType={})", event.getTitle(), triggerType);
+            log.info("Invoking join automation for event '{}' (id={}, triggerType={}, spaceCode={}, meetLink={})",
+                    event.getTitle(), event.getId(), triggerType, event.getSpaceCode(), event.getMeetLink());
             result = joinAutomationClient.attemptJoin(event);
         } catch (Exception e) {
             log.error("Join automation threw an exception for event '{}': {}", event.getTitle(), e.getMessage());
             result = new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN, e.getMessage());
         }
+
+        log.info("Join automation completed for event '{}' (id={}, triggerType={}): status={}, detail={}",
+                event.getTitle(), event.getId(), triggerType, result.status(), result.detailMessage());
 
         return saveAndNotify(event, triggerType, result);
     }
@@ -122,17 +125,21 @@ public class JoinAttemptService {
         log.info("Join attempt recorded for event '{}': status={}, detail={}",
                 event.getTitle(), result.status(), result.detailMessage());
 
-        sendNotification(event, result);
+        if (isAutoTrigger(triggerType)) {
+            sendNotification(event, result);
+        }
         return saved;
     }
 
     private void sendNotification(CalendarEvent event, JoinResult result) {
         if (result.status() == JoinAttemptStatus.JOINED) {
-            if (notifyOnSuccess) {
-                notificationService.notify(NotificationType.AUTO_JOIN_SUCCESS, event, null);
-            }
+            notificationService.notify(NotificationType.AUTO_JOIN_SUCCESS, event, null);
         } else {
             notificationService.notify(NotificationType.AUTO_JOIN_FAILED, event, null);
         }
+    }
+
+    private boolean isAutoTrigger(String triggerType) {
+        return "AUTO".equalsIgnoreCase(triggerType);
     }
 }

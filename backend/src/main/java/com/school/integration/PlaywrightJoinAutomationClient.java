@@ -216,7 +216,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         } catch (Exception e) {
             invalidateContextIfDead(e);
             JoinAttemptStatus status = classifyErrorMessage(e.getMessage());
-            log.error("Playwright auto-join attempt failed: {}", e.getMessage());
+            log.error("Playwright auto-join attempt failed: {}", e.getMessage(), e);
             return new JoinResult(status, safeDetailMessage(e));
         } finally {
             // Close only the tab; the shared context/browser remains alive for the next run.
@@ -285,7 +285,8 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         boolean looksLikeCrash = msg.contains("browser has been closed")
                 || msg.contains("target closed")
                 || msg.contains("browser closed")
-                || msg.contains("connection refused");
+                || msg.contains("connection refused")
+                || msg.contains("object doesn't exist");
         if (looksLikeCrash || !isContextAlive(sharedContext)) {
             log.warn("Browser context appears dead ({}); will recreate on next attempt", e.getMessage());
             contextLock.lock();
