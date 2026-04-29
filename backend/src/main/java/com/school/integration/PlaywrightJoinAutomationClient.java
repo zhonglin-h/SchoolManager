@@ -81,6 +81,9 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     private static final List<String> AUTH_MARKERS = List.of(
             "accounts.google.com", "choose an account", "sign in"
     );
+    private static final List<String> AUTH_URL_MARKERS = List.of(
+            "accounts.google.com"
+    );
     private static final List<String> PERMISSION_MARKERS = List.of(
             "you can't join this", "not allowed to join", "don't have permission"
     );
@@ -241,7 +244,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
 
     private JoinResult detectBlockingState(Page page) {
         String url = nullToEmpty(page.url()).toLowerCase(Locale.ROOT);
-        String authUrlMarker = firstMatchingMarker(url, AUTH_MARKERS);
+        String authUrlMarker = firstMatchingMarker(url, AUTH_URL_MARKERS);
         if (authUrlMarker != null) {
             log.info("Blocking state detected from URL auth marker: '{}', url='{}'", authUrlMarker, page.url());
             return new JoinResult(JoinAttemptStatus.FAILED_AUTH,
@@ -252,12 +255,6 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             content = nullToEmpty(page.content()).toLowerCase(Locale.ROOT);
         } catch (Exception e) {
             return null;
-        }
-        String authContentMarker = firstMatchingMarker(content, AUTH_MARKERS);
-        if (authContentMarker != null) {
-            log.info("Blocking state detected from content auth marker: '{}'", authContentMarker);
-            return new JoinResult(JoinAttemptStatus.FAILED_AUTH,
-                    "Google sign-in is required in browser profile (content marker: '" + authContentMarker + "')");
         }
         String permissionMarker = firstMatchingMarker(content, PERMISSION_MARKERS);
         if (permissionMarker != null) {
