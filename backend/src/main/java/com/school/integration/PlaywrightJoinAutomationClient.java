@@ -1,27 +1,29 @@
 package com.school.integration;
 
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.InvalidPathException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.ArrayList;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
-import com.school.entity.JoinAttemptStatus;
-import com.school.model.CalendarEvent;
-import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.BrowserType;
-import com.microsoft.playwright.Locator;
-import com.microsoft.playwright.options.LoadState;
-import com.microsoft.playwright.Page;
-import com.microsoft.playwright.Playwright;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+
+import com.microsoft.playwright.BrowserContext;
+import com.microsoft.playwright.BrowserType;
+import com.microsoft.playwright.Locator;
+import com.microsoft.playwright.Page;
+import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.options.LoadState;
+import com.school.entity.JoinAttemptStatus;
+import com.school.model.CalendarEvent;
+
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Playwright-backed {@link JoinAutomationClient} that drives a Chrome browser session to
@@ -66,7 +68,8 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     private Supplier<Playwright> playwrightFactory = Playwright::create;
 
     private static final Pattern JOIN_NOW_PATTERN =
-            Pattern.compile("join now|rejoin|join meeting", Pattern.CASE_INSENSITIVE);
+            Pattern.compile("join now|rejoin|join meeting|join the meeting now|join the call now",
+                    Pattern.CASE_INSENSITIVE);
     private static final Pattern ASK_TO_JOIN_PATTERN =
             Pattern.compile("ask to join", Pattern.CASE_INSENSITIVE);
     private static final Pattern CONTINUE_WITHOUT_MEDIA_PATTERN =
