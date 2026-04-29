@@ -18,6 +18,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.school.model.CalendarEvent;
 
@@ -28,6 +29,7 @@ class MeetAttendanceMonitorTest {
     @Mock MeetSessionHandler sessionHandler;
     @Mock NotificationService notificationService;
     @Mock ThreadPoolTaskScheduler taskScheduler;
+    @Mock JoinAttemptService joinAttemptService;
 
     // Use a real registry so getUpcomingChecks() works correctly
     private final UpcomingChecksRegistry upcomingChecksRegistry = new UpcomingChecksRegistry();
@@ -36,7 +38,9 @@ class MeetAttendanceMonitorTest {
     @BeforeEach
     void setUp() {
         monitor = new MeetAttendanceMonitor(calendarSyncService, sessionHandler,
-                notificationService, taskScheduler, upcomingChecksRegistry);
+                notificationService, taskScheduler, upcomingChecksRegistry, joinAttemptService);
+        ReflectionTestUtils.setField(monitor, "autoJoinEnabled", false);
+        ReflectionTestUtils.setField(monitor, "autoJoinTriggerOffsetSeconds", 60);
     }
 
     // --- scheduleEventsForToday: upcoming checks ---
@@ -295,5 +299,45 @@ class MeetAttendanceMonitorTest {
 
         assertThat(monitor.getUpcomingChecks())
                 .noneMatch(c -> "SESSION_POLLING".equals(c.checkType()));
+    }
+
+    // --- AUTO_JOIN trigger ---
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_addsAutoJoinCheckWhenEnabled() throws Exception {
+        ReflectionTestUtils.setField(monitor, "autoJoinEnabled", true);
+        CalendarEvent future = new CalendarEvent("evt-autojoin", "Auto Join Class",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of("alice@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(future));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.scheduleEventsForToday();
+
+        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
+        assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
+                .contains("AUTO_JOIN");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_doesNotAddAutoJoinCheckWhenDisabled() throws Exception {
+        // autoJoinEnabled defaults to false in setUp()
+        CalendarEvent future = new CalendarEvent("evt-no-autojoin", "No Auto Join Class",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of("alice@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(future));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.scheduleEventsForToday();
+
+        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
+        assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
+                .doesNotContain("AUTO_JOIN");
     }
 }

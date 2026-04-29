@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -43,6 +44,13 @@ public class MeetAttendanceMonitor {
     private final NotificationService notificationService;
     private final ThreadPoolTaskScheduler taskScheduler;
     private final UpcomingChecksRegistry upcomingChecksRegistry;
+    private final JoinAttemptService joinAttemptService;
+
+    @Value("${app.autojoin.enabled:false}")
+    private boolean autoJoinEnabled;
+
+    @Value("${app.autojoin.trigger-offset-seconds:60}")
+    private int autoJoinTriggerOffsetSeconds;
 
     private final Map<String, List<ScheduledFuture<?>>> oneTimeFutures = new ConcurrentHashMap<>();
     private final Map<String, Instant> lastScheduledStartTime = new ConcurrentHashMap<>();
@@ -54,12 +62,14 @@ public class MeetAttendanceMonitor {
                                   MeetSessionHandler sessionHandler,
                                   NotificationService notificationService,
                                   ThreadPoolTaskScheduler taskScheduler,
-                                  UpcomingChecksRegistry upcomingChecksRegistry) {
+                                  UpcomingChecksRegistry upcomingChecksRegistry,
+                                  JoinAttemptService joinAttemptService) {
         this.calendarSyncService = calendarSyncService;
         this.sessionHandler = sessionHandler;
         this.notificationService = notificationService;
         this.taskScheduler = taskScheduler;
         this.upcomingChecksRegistry = upcomingChecksRegistry;
+        this.joinAttemptService = joinAttemptService;
     }
 
     /** Returns all checks whose scheduled time is still in the future, sorted ascending. */
@@ -173,6 +183,18 @@ public class MeetAttendanceMonitor {
                     upcomingChecksRegistry.remove(event.getId(), "SESSION_FINALIZE");
                     sessionHandler.finalizeSession(event);
                 }, end));
+            }
+
+            if (autoJoinEnabled) {
+                Instant joinTrigger = event.getStartTime().minusSeconds(autoJoinTriggerOffsetSeconds)
+                        .atZone(ZoneId.systemDefault()).toInstant();
+                if (joinTrigger.isAfter(now)) {
+                    upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "AUTO_JOIN", joinTrigger));
+                    futures.add(taskScheduler.schedule(() -> {
+                        upcomingChecksRegistry.remove(event.getId(), "AUTO_JOIN");
+                        joinAttemptService.attemptJoinIfEnabled(event, "AUTO");
+                    }, joinTrigger));
+                }
             }
 
             oneTimeFutures.put(event.getId(), futures);

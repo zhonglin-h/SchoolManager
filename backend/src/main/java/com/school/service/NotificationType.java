@@ -42,6 +42,16 @@ public enum NotificationType {
             (e, r) -> "Unknown People in Session: " + e.getTitle(),
             (e, r) -> "",
             true, true, false
+    ),
+    AUTO_JOIN_FAILED(
+            (e, r) -> "Auto-Join Failed: " + e.getTitle(),
+            (e, r) -> "Auto-join attempt for \"" + e.getTitle() + "\" failed. Check join attempt logs for details.",
+            true, true, false
+    ),
+    AUTO_JOIN_SUCCESS(
+            (e, r) -> "Auto-Join Successful: " + e.getTitle(),
+            (e, r) -> "Auto-join for \"" + e.getTitle() + "\" succeeded.",
+            true, true, false
     );
 
     private final BiFunction<CalendarEvent, NotificationSubject, String> subjectFn;
