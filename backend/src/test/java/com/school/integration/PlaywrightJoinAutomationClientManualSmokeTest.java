@@ -60,11 +60,12 @@ class PlaywrightJoinAutomationClientManualSmokeTest {
         );
 
         JoinResult result = client.attemptJoin(event);
-        System.out.println("Playwright smoke result status: " + result.status());
-        System.out.println("Playwright smoke result detail: " + result.detailMessage());
 
         assertThat(result).isNotNull();
-        assertThat(result.status()).isEqualTo(JoinAttemptStatus.JOINED);
+        assertThat(result.status())
+                .withFailMessage("Expected JOINED but was %s. Detail: %s",
+                        result.status(), result.detailMessage())
+                .isEqualTo(JoinAttemptStatus.JOINED);
         assertThat(result.detailMessage()).isNotBlank();
     }
 
