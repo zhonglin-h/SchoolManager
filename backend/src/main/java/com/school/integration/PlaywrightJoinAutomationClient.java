@@ -228,11 +228,15 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     }
 
     private JoinAction clickJoinAction(Page page, long timeoutMs) {
-        if (clickIfVisible(page, JOIN_NOW_PATTERN, timeoutMs)) {
-            return JoinAction.JOIN_NOW;
-        }
-        if (clickIfVisible(page, ASK_TO_JOIN_PATTERN, timeoutMs)) {
-            return JoinAction.ASK_TO_JOIN;
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            if (clickIfVisible(page, JOIN_NOW_PATTERN, 1_000)) {
+                return JoinAction.JOIN_NOW;
+            }
+            if (clickIfVisible(page, ASK_TO_JOIN_PATTERN, 1_000)) {
+                return JoinAction.ASK_TO_JOIN;
+            }
+            sleepQuietly(500);
         }
         return JoinAction.NONE;
     }
