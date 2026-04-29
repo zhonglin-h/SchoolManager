@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.TestPropertySource;
 
 import java.time.LocalDateTime;
@@ -32,6 +34,9 @@ class PlaywrightJoinAutomationClientManualSmokeTest {
 
     @Autowired
     private PlaywrightJoinAutomationClient client;
+
+    @MockBean
+    private JavaMailSender javaMailSender;
 
     @Value("${smoke.meet.link:}")
     private String meetLinkFromProps;
