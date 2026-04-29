@@ -65,6 +65,9 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     @Value("${app.autojoin.require-principal-profile-signed-in:true}")
     private boolean requireProfileSignedIn;
 
+    @Value("${app.autojoin.keep-browser-open:false}")
+    private boolean keepBrowserOpen;
+
     private Supplier<Playwright> playwrightFactory = Playwright::create;
 
     private static final Pattern JOIN_NOW_PATTERN =
@@ -138,8 +141,11 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
 
     private JoinResult attemptOnce(CalendarEvent event) {
         Path profilePath = resolveProfilePath();
-        try (Playwright playwright = playwrightFactory.get();
-            BrowserContext context = launchContext(playwright, profilePath)) {
+        Playwright playwright = null;
+        BrowserContext context = null;
+        try {
+            playwright = playwrightFactory.get();
+            context = launchContext(playwright, profilePath);
             long timeoutMs = toTimeoutMs(joinTimeoutSeconds);
             context.setDefaultTimeout(timeoutMs);
             // Always use a fresh tab for join flow; reused startup tabs can remain on
@@ -206,6 +212,13 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             JoinAttemptStatus status = classifyErrorMessage(e.getMessage());
             log.error("Playwright auto-join attempt failed: {}", e.getMessage());
             return new JoinResult(status, safeDetailMessage(e));
+        } finally {
+            if (!keepBrowserOpen) {
+                closeQuietly(context);
+                closeQuietly(playwright);
+            } else {
+                log.info("app.autojoin.keep-browser-open=true; leaving browser open for inspection");
+            }
         }
     }
 
@@ -521,6 +534,17 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    private void closeQuietly(AutoCloseable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (Exception ignored) {
+            // no-op
         }
     }
 
