@@ -6,7 +6,7 @@
 - [X] in NotificationService, it marks the people the notifications are about as recipients, when they are the subjects.
 
 NEW FEATURES
-- [ ] open meeting automatically
+- [X] open meeting automatically
 - [X] Playwright: build a persistent long-lived runner that reuses one browser context/window across runs (new tab per run)
 - [ ] package into manner than can be more portable
 - [ ] create versioning and backups for database (online?)
