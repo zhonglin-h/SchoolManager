@@ -86,6 +86,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     );
 
     private static final String JOINED_MESSAGE = "Joined the meeting successfully";
+    private static final int MAX_DETAIL_MESSAGE_LENGTH = 400;
 
     /**
      * Attempts to join the Meet session by launching a Chrome browser with the principal's
@@ -284,8 +285,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             return JoinAttemptStatus.FAILED_WAITING_ROOM_TIMEOUT;
         }
         if (normalized.contains("selector")
-                || normalized.contains("join now")
-                || normalized.contains("ask to join")) {
+                || normalized.contains("join now")) {
             return JoinAttemptStatus.FAILED_UI_NOT_FOUND;
         }
         return JoinAttemptStatus.FAILED_UNKNOWN;
@@ -322,8 +322,8 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         if (message.isEmpty()) {
             return e.getClass().getSimpleName();
         }
-        if (message.length() > 400) {
-            return message.substring(0, 400);
+        if (message.length() > MAX_DETAIL_MESSAGE_LENGTH) {
+            return message.substring(0, MAX_DETAIL_MESSAGE_LENGTH);
         }
         return message;
     }

@@ -74,7 +74,8 @@ public class JoinAttemptService {
     @Transactional
     public JoinAttemptLog attemptJoin(CalendarEvent event, String triggerType) {
         // Guard: event must have a Meet link and space code
-        if (event.getMeetLink() == null || event.getSpaceCode() == null) {
+        if (event.getMeetLink() == null || event.getMeetLink().isBlank()
+                || event.getSpaceCode() == null || event.getSpaceCode().isBlank()) {
             log.warn("Event '{}' has no Meet link or space code; recording failed attempt", event.getTitle());
             return saveAndNotify(event, triggerType,
                     new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN,
