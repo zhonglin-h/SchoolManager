@@ -15,6 +15,7 @@ import com.school.model.CalendarEvent;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Locator;
+import com.microsoft.playwright.options.LoadState;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import lombok.extern.slf4j.Slf4j;
@@ -138,12 +139,13 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             // Always use a fresh tab for join flow; reused startup tabs can remain on
             // chrome:// pages or extension UIs and behave inconsistently.
             Page page = context.newPage();
-            page.waitForTimeout(10_000);
+            waitForPageReady(page, timeoutMs);
 
             String meetLink = normalizeMeetLink(event.getMeetLink());
             log.info("Playwright page before navigate: {}", page.url());
             log.info("Playwright navigating to Meet link: {}", meetLink);
             page.navigate(meetLink, new Page.NavigateOptions().setTimeout((double) timeoutMs));
+            waitForPageReady(page, timeoutMs);
             log.info("Playwright page after navigate: {}", page.url());
             if (isBlankPage(page.url())) {
                 log.warn("Navigation remained on blank page; retrying once with a new tab");
@@ -153,8 +155,9 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
                     // no-op
                 }
                 page = context.newPage();
-                page.waitForTimeout(10_000);
+                waitForPageReady(page, timeoutMs);
                 page.navigate(meetLink, new Page.NavigateOptions().setTimeout((double) timeoutMs));
+                waitForPageReady(page, timeoutMs);
                 log.info("Playwright page after retry navigate: {}", page.url());
             }
             if (isBlankPage(page.url())) {
@@ -239,7 +242,9 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
 
     private JoinResult detectBlockingState(Page page) {
         String url = nullToEmpty(page.url()).toLowerCase(Locale.ROOT);
-        if (containsAny(url, AUTH_MARKERS)) {
+        String authUrlMarker = firstMatchingMarker(url, AUTH_MARKERS);
+        if (authUrlMarker != null) {
+            log.info("Blocking state detected from URL auth marker: '{}', url='{}'", authUrlMarker, page.url());
             return new JoinResult(JoinAttemptStatus.FAILED_AUTH, "Google sign-in is required in browser profile");
         }
         String content;
@@ -248,13 +253,19 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         } catch (Exception e) {
             return null;
         }
-        if (containsAny(content, AUTH_MARKERS)) {
+        String authContentMarker = firstMatchingMarker(content, AUTH_MARKERS);
+        if (authContentMarker != null) {
+            log.info("Blocking state detected from content auth marker: '{}'", authContentMarker);
             return new JoinResult(JoinAttemptStatus.FAILED_AUTH, "Google sign-in is required in browser profile");
         }
-        if (containsAny(content, PERMISSION_MARKERS)) {
+        String permissionMarker = firstMatchingMarker(content, PERMISSION_MARKERS);
+        if (permissionMarker != null) {
+            log.info("Blocking state detected from permission marker: '{}'", permissionMarker);
             return new JoinResult(JoinAttemptStatus.FAILED_PERMISSION, "Meeting access denied by host/domain policy");
         }
-        if (containsAny(content, WAITING_MARKERS)) {
+        String waitingMarker = firstMatchingMarker(content, WAITING_MARKERS);
+        if (waitingMarker != null) {
+            log.info("Blocking state detected from waiting-room marker: '{}'", waitingMarker);
             return new JoinResult(JoinAttemptStatus.FAILED_WAITING_ROOM_TIMEOUT,
                     "Still waiting for host approval to join");
         }
@@ -353,6 +364,15 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         return false;
     }
 
+    private static String firstMatchingMarker(String haystack, List<String> markers) {
+        for (String marker : markers) {
+            if (haystack.contains(marker)) {
+                return marker;
+            }
+        }
+        return null;
+    }
+
     private static String safeDetailMessage(Exception e) {
         String message = nullToEmpty(e.getMessage()).trim();
         if (message.isEmpty()) {
@@ -375,6 +395,28 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     private static boolean isBlankPage(String url) {
         String normalized = nullToEmpty(url).trim().toLowerCase(Locale.ROOT);
         return normalized.isEmpty() || normalized.equals("about:blank");
+    }
+
+    private void waitForPageReady(Page page, long timeoutMs) {
+        long deadline = System.currentTimeMillis() + Math.min(timeoutMs, 15_000L);
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                page.waitForLoadState(LoadState.DOMCONTENTLOADED,
+                        new Page.WaitForLoadStateOptions().setTimeout(1_000));
+            } catch (Exception ignored) {
+                // keep polling until deadline
+            }
+            String currentUrl;
+            try {
+                currentUrl = page.url();
+            } catch (Exception e) {
+                return;
+            }
+            if (!isBlankPage(currentUrl)) {
+                return;
+            }
+            page.waitForTimeout(250);
+        }
     }
 
     private static String normalizeConfiguredPath(String value) {
