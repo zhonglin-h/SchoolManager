@@ -88,6 +88,76 @@ If you enable the planned browser auto-join flow:
 
 No separate new Google OAuth system is required for auto-join.
 
+### Meet Auto-Join Setup (Playwright)
+
+Auto-join uses Playwright + a dedicated Chrome profile on the local machine.  
+Use a separate automation profile, not your regular daily-use Chrome profile.
+
+#### 1. Required properties
+
+Add these to `backend/src/main/resources/application-local.properties`:
+
+```properties
+# Enable auto-join scheduler
+app.autojoin.enabled=true
+
+# Use Playwright provider
+app.autojoin.provider=playwright
+
+# Browser automation settings
+app.autojoin.chrome-profile-dir=C:/chrome-autojoin/UserData/Profile 1
+app.autojoin.chrome-path=C:/Program Files/Google/Chrome/Application/chrome.exe
+app.autojoin.require-principal-profile-signed-in=true
+
+# Join behavior
+app.autojoin.join-timeout-seconds=45
+app.autojoin.retry.max-attempts=1
+app.autojoin.retry.backoff-ms=1000
+```
+
+Notes:
+- Use forward slashes in Windows paths in `.properties`.
+- `bootRun` uses the `local` profile in this project, so put overrides in `application-local.properties`.
+
+#### 2. Create a dedicated Chrome automation profile
+
+1. Create a new local folder, for example `C:/chrome-autojoin/UserData`.
+2. Launch Chrome once using that user data dir to create the profile:
+   - `"C:/Program Files/Google/Chrome/Application/chrome.exe" --user-data-dir="C:/chrome-autojoin/UserData"`
+3. In that Chrome window:
+   - Sign in as the principal Google account.
+   - Open a Meet once and grant mic/camera permissions.
+   - Disable extensions that might interfere with automation.
+4. Close Chrome.
+
+Why this matters:
+- Avoids policy/extension conflicts from your normal profile.
+- Keeps automation state isolated and predictable.
+
+#### 3. Verify manual join endpoint
+
+Sync events, find today's space codes, then trigger manual join:
+
+```bash
+curl -X POST "http://localhost:8080/calendar/sync"
+curl "http://localhost:8080/attendance/today/space-codes"
+curl -X POST "http://localhost:8080/calendar/<eventId>/join"
+```
+
+Expected:
+- Join attempt recorded with status `JOINED` (or `ALREADY_OPEN_ELSEWHERE` when Meet is already open elsewhere).
+
+#### 4. Verify scheduled AUTO_JOIN at T-15
+
+When `app.autojoin.enabled=true`, auto-join is gated at T-15:
+- If meeting is not active at T-15 -> app attempts auto-join.
+- If already active -> app skips auto-join.
+
+Helpful log lines:
+- `Scheduling AUTO_JOIN gate at T-15 ...`
+- `AUTO_JOIN gate fired ...`
+- `AUTO_JOIN proceeding ...` or `AUTO_JOIN skipped ...`
+
 ---
 
 ## Running the App
