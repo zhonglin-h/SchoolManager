@@ -17,13 +17,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,39 +33,38 @@ class JoinAttemptServiceTest {
     @Mock NotificationService notificationService;
 
     private JoinAttemptService service;
-
     private CalendarEvent event;
 
     @BeforeEach
     void setUp() {
-        service = new JoinAttemptService(joinAutomationClient, joinAttemptLogRepository,
-                notificationService);
+        service = new JoinAttemptService(joinAutomationClient, joinAttemptLogRepository, notificationService);
         ReflectionTestUtils.setField(service, "enabled", true);
         ReflectionTestUtils.setField(service, "notifyOnSuccess", false);
 
-        event = new CalendarEvent("evt-1", "Math Class",
-                "https://meet.google.com/abc-def", "abc-def",
-                LocalDateTime.now().plusMinutes(1), LocalDateTime.now().plusMinutes(61),
-                List.of("alice@meet.com"));
+        event = new CalendarEvent(
+                "evt-1",
+                "Math Class",
+                "https://meet.google.com/abc-def",
+                "abc-def",
+                LocalDateTime.now().plusMinutes(1),
+                LocalDateTime.now().plusMinutes(61),
+                List.of("alice@meet.com")
+        );
 
-        // Lenient defaults: not every test will invoke these
-        lenient().when(joinAttemptLogRepository.findByCalendarEventIdAndDateAndTriggerType(
-                anyString(), any(LocalDate.class), anyString()))
-                .thenReturn(Optional.empty());
-        lenient().when(joinAttemptLogRepository.save(any(JoinAttemptLog.class)))
-                .thenAnswer(inv -> {
-                    JoinAttemptLog l = inv.getArgument(0);
-                    ReflectionTestUtils.setField(l, "id", 1L);
-                    return l;
+        when(joinAttemptLogRepository.save(any(JoinAttemptLog.class)))
+                .thenAnswer(invocation -> {
+                    JoinAttemptLog entry = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(entry, "id", 1L);
+                    return entry;
                 });
     }
-
-    // --- attemptJoinIfEnabled ---
 
     @Test
     void attemptJoinIfEnabled_doesNothingWhenDisabled() {
         ReflectionTestUtils.setField(service, "enabled", false);
+
         service.attemptJoinIfEnabled(event, "AUTO");
+
         verify(joinAutomationClient, never()).attemptJoin(any());
         verify(joinAttemptLogRepository, never()).save(any());
     }
@@ -83,41 +79,18 @@ class JoinAttemptServiceTest {
         verify(joinAutomationClient).attemptJoin(event);
     }
 
-    // --- attemptJoin: idempotency ---
-
-    @Test
-    void attemptJoin_returnsExistingLogWhenAlreadyAttempted() {
-        JoinAttemptLog existing = JoinAttemptLog.builder()
-                .id(99L).calendarEventId("evt-1").date(LocalDate.now())
-                .triggerType("AUTO").status(JoinAttemptStatus.JOINED)
-                .attemptedAt(LocalDateTime.now()).build();
-        when(joinAttemptLogRepository.findByCalendarEventIdAndDateAndTriggerType(
-                "evt-1", LocalDate.now(), "AUTO"))
-                .thenReturn(Optional.of(existing));
-
-        JoinAttemptLog result = service.attemptJoin(event, "AUTO");
-
-        assertThat(result.getId()).isEqualTo(99L);
-        verify(joinAutomationClient, never()).attemptJoin(any());
-        verify(joinAttemptLogRepository, never()).save(any());
-    }
-
-    // --- attemptJoin: missing Meet link ---
-
     @Test
     void attemptJoin_recordsFailedUnknownWhenNoMeetLink() {
-        CalendarEvent noLink = new CalendarEvent("evt-noop", "No Link",
-                null, null,
-                LocalDateTime.now().plusMinutes(1), LocalDateTime.now().plusMinutes(61),
-                List.of());
+        CalendarEvent noLink = new CalendarEvent(
+                "evt-noop", "No Link", null, null,
+                LocalDateTime.now().plusMinutes(1), LocalDateTime.now().plusMinutes(61), List.of()
+        );
 
         JoinAttemptLog result = service.attemptJoin(noLink, "AUTO");
 
         assertThat(result.getStatus()).isEqualTo(JoinAttemptStatus.FAILED_UNKNOWN);
         verify(joinAutomationClient, never()).attemptJoin(any());
     }
-
-    // --- attemptJoin: success ---
 
     @Test
     void attemptJoin_recordsJoinedStatusOnSuccess() {
@@ -152,8 +125,6 @@ class JoinAttemptServiceTest {
 
         verify(notificationService).notify(NotificationType.AUTO_JOIN_SUCCESS, event, null);
     }
-
-    // --- attemptJoin: failure classification ---
 
     @Test
     void attemptJoin_recordsFailureStatusAndNotifiesOnFailure() {
@@ -190,24 +161,26 @@ class JoinAttemptServiceTest {
         JoinAttemptLog saved = captor.getValue();
         assertThat(saved.getCalendarEventId()).isEqualTo("evt-1");
         assertThat(saved.getScheduledStart()).isEqualTo(event.getStartTime());
-        assertThat(saved.getDate()).isEqualTo(LocalDate.now());
         assertThat(saved.getTriggerType()).isEqualTo("MANUAL");
     }
-
-    // --- getTodayAttempts ---
 
     @Test
     void getTodayAttempts_delegatesToRepository() {
         JoinAttemptLog log = JoinAttemptLog.builder()
-                .id(5L).calendarEventId("evt-1").date(LocalDate.now())
-                .triggerType("AUTO").status(JoinAttemptStatus.JOINED)
-                .attemptedAt(LocalDateTime.now()).build();
-        when(joinAttemptLogRepository.findByDateOrderByAttemptedAtDesc(LocalDate.now()))
+                .id(5L)
+                .calendarEventId("evt-1")
+                .triggerType("AUTO")
+                .status(JoinAttemptStatus.JOINED)
+                .attemptedAt(LocalDateTime.now())
+                .build();
+        LocalDateTime start = LocalDate.now().atStartOfDay();
+        LocalDateTime end = start.plusDays(1);
+        when(joinAttemptLogRepository.findByAttemptedAtBetweenOrderByAttemptedAtDesc(start, end))
                 .thenReturn(List.of(log));
 
         List<JoinAttemptLog> result = service.getTodayAttempts();
 
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getId()).isEqualTo(5L);
+        assertThat(result.getFirst().getId()).isEqualTo(5L);
     }
 }
