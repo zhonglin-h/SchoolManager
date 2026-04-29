@@ -139,7 +139,6 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             // Always use a fresh tab for join flow; reused startup tabs can remain on
             // chrome:// pages or extension UIs and behave inconsistently.
             Page page = context.newPage();
-            waitForPageReady(page, timeoutMs);
 
             String meetLink = normalizeMeetLink(event.getMeetLink());
             log.info("Playwright page before navigate: {}", page.url());
@@ -245,7 +244,8 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         String authUrlMarker = firstMatchingMarker(url, AUTH_MARKERS);
         if (authUrlMarker != null) {
             log.info("Blocking state detected from URL auth marker: '{}', url='{}'", authUrlMarker, page.url());
-            return new JoinResult(JoinAttemptStatus.FAILED_AUTH, "Google sign-in is required in browser profile");
+            return new JoinResult(JoinAttemptStatus.FAILED_AUTH,
+                    "Google sign-in is required in browser profile (URL marker: '" + authUrlMarker + "')");
         }
         String content;
         try {
@@ -256,7 +256,8 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         String authContentMarker = firstMatchingMarker(content, AUTH_MARKERS);
         if (authContentMarker != null) {
             log.info("Blocking state detected from content auth marker: '{}'", authContentMarker);
-            return new JoinResult(JoinAttemptStatus.FAILED_AUTH, "Google sign-in is required in browser profile");
+            return new JoinResult(JoinAttemptStatus.FAILED_AUTH,
+                    "Google sign-in is required in browser profile (content marker: '" + authContentMarker + "')");
         }
         String permissionMarker = firstMatchingMarker(content, PERMISSION_MARKERS);
         if (permissionMarker != null) {
