@@ -29,8 +29,8 @@ public class CalendarController {
     private int upcomingChecksLimit;
 
     public CalendarController(MeetAttendanceMonitor meetAttendanceMonitor,
-                               CalendarSyncService calendarSyncService,
-                               JoinAttemptService joinAttemptService) {
+                              CalendarSyncService calendarSyncService,
+                              JoinAttemptService joinAttemptService) {
         this.meetAttendanceMonitor = meetAttendanceMonitor;
         this.calendarSyncService = calendarSyncService;
         this.joinAttemptService = joinAttemptService;
@@ -67,8 +67,7 @@ public class CalendarController {
 
     /**
      * Manually triggers an auto-join attempt for the given calendar event (today's schedule only).
-     * Uses trigger type {@code "MANUAL"} and respects the idempotency constraint — a second call
-     * with the same event on the same day returns the existing log entry.
+     * Uses trigger type {@code "MANUAL"} and always records a timestamped join attempt log entry.
      *
      * @param eventId the Google Calendar event ID
      * @return 200 with the {@link JoinAttemptLog}, or 404 if the event is not on today's schedule

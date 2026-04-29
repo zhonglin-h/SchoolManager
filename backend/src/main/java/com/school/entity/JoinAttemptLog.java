@@ -8,20 +8,15 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "join_attempt_log", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_join_attempt_log_event_date_trigger",
-                columnNames = {"calendar_event_id", "date", "trigger_type"})
-})
+@Table(name = "join_attempt_log")
 @Data
 @Builder
 @NoArgsConstructor
@@ -47,9 +42,6 @@ public class JoinAttemptLog {
 
     @Column(name = "detail_message", length = 1000)
     private String detailMessage;
-
-    @Column(nullable = false)
-    private LocalDate date;
 
     @Column(name = "trigger_type", nullable = false)
     private String triggerType;

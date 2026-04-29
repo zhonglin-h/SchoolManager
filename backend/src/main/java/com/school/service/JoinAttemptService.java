@@ -3,7 +3,6 @@ package com.school.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -24,8 +23,7 @@ import lombok.extern.slf4j.Slf4j;
  * <p>Call {@link #attemptJoinIfEnabled} from the scheduler (respects the enabled flag).
  * Call {@link #attemptJoin} directly for manual/admin triggers (always attempts).
  *
- * <p>Both methods are idempotent per {@code (calendarEventId, date, triggerType)}: a second
- * call with the same key returns the existing log entry without invoking the automation client.
+ * <p>Each invocation records its own timestamped log entry.
  */
 @Slf4j
 @Service
@@ -69,31 +67,16 @@ public class JoinAttemptService {
      * Unconditionally attempts to join the Meet session, regardless of the enabled flag.
      * Used for manual/admin-triggered joins.
      *
-     * <p>Idempotent: if a log entry already exists for
-     * {@code (calendarEventId, today, triggerType)}, the existing entry is returned
-     * without invoking the automation client again.
-     *
      * @param event       the calendar event whose Meet session should be joined
      * @param triggerType identifier for this trigger source (e.g. {@code "MANUAL"})
-     * @return the created or existing {@link JoinAttemptLog}
+     * @return the created {@link JoinAttemptLog}
      */
     @Transactional
     public JoinAttemptLog attemptJoin(CalendarEvent event, String triggerType) {
-        LocalDate today = LocalDate.now();
-
-        // Idempotency: return existing attempt if already performed today for this trigger
-        Optional<JoinAttemptLog> existing = joinAttemptLogRepository
-                .findByCalendarEventIdAndDateAndTriggerType(event.getId(), today, triggerType);
-        if (existing.isPresent()) {
-            log.debug("Join attempt already recorded for event '{}' triggerType='{}'; skipping",
-                    event.getTitle(), triggerType);
-            return existing.get();
-        }
-
         // Guard: event must have a Meet link and space code
         if (event.getMeetLink() == null || event.getSpaceCode() == null) {
             log.warn("Event '{}' has no Meet link or space code; recording failed attempt", event.getTitle());
-            return saveAndNotify(event, triggerType, today,
+            return saveAndNotify(event, triggerType,
                     new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN,
                             "Event has no Meet link or space code"));
         }
@@ -108,29 +91,29 @@ public class JoinAttemptService {
             result = new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN, e.getMessage());
         }
 
-        return saveAndNotify(event, triggerType, today, result);
+        return saveAndNotify(event, triggerType, result);
     }
 
     /**
      * Returns all join attempt log entries for today, newest first.
      */
     public List<JoinAttemptLog> getTodayAttempts() {
-        return joinAttemptLogRepository.findByDateOrderByAttemptedAtDesc(LocalDate.now());
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LocalDateTime startOfTomorrow = startOfDay.plusDays(1);
+        return joinAttemptLogRepository.findByAttemptedAtBetweenOrderByAttemptedAtDesc(startOfDay, startOfTomorrow);
     }
 
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
-    private JoinAttemptLog saveAndNotify(CalendarEvent event, String triggerType,
-                                          LocalDate date, JoinResult result) {
+    private JoinAttemptLog saveAndNotify(CalendarEvent event, String triggerType, JoinResult result) {
         JoinAttemptLog entry = JoinAttemptLog.builder()
                 .calendarEventId(event.getId())
                 .scheduledStart(event.getStartTime())
                 .attemptedAt(LocalDateTime.now())
                 .status(result.status())
                 .detailMessage(result.detailMessage())
-                .date(date)
                 .triggerType(triggerType)
                 .build();
 
