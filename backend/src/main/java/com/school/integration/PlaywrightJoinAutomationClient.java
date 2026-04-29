@@ -127,10 +127,17 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         }
 
         int attempts = Math.max(1, maxAttempts);
+        boolean selfHealRetryUsed = false;
         JoinResult lastResult = new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN, "Auto-join attempt did not run");
         for (int attempt = 1; attempt <= attempts; attempt++) {
             lastResult = attemptOnce(event);
             if (!isRetryable(lastResult.status()) || attempt == attempts) {
+                if (attempt == attempts && !selfHealRetryUsed && isLikelyDeadContextFailure(lastResult)) {
+                    selfHealRetryUsed = true;
+                    log.warn("Detected likely dead browser context on final configured attempt; "
+                                    + "performing one self-heal retry immediately");
+                    lastResult = attemptOnce(event);
+                }
                 return lastResult;
             }
             log.warn("Auto-join attempt {}/{} failed for '{}' with {}; retrying in {} ms",
@@ -525,6 +532,18 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         return status == JoinAttemptStatus.FAILED_NETWORK
                 || status == JoinAttemptStatus.FAILED_UI_NOT_FOUND
                 || status == JoinAttemptStatus.FAILED_UNKNOWN;
+    }
+
+    private static boolean isLikelyDeadContextFailure(JoinResult result) {
+        if (result == null) {
+            return false;
+        }
+        String detail = nullToEmpty(result.detailMessage()).toLowerCase(Locale.ROOT);
+        return detail.contains("object doesn't exist")
+                || detail.contains("target closed")
+                || detail.contains("browser has been closed")
+                || detail.contains("browser closed")
+                || detail.contains("connection refused");
     }
 
     private Path resolveProfilePath() {
