@@ -277,6 +277,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             Playwright pw = playwrightFactory.get();
             Path profilePath = resolveProfilePath();
             BrowserContext ctx = launchContext(pw, profilePath);
+            registerContextCloseInvalidation(ctx);
             ctx.setDefaultTimeout(toTimeoutMs(joinTimeoutSeconds));
             sharedPlaywright = pw;
             sharedContext = ctx;
@@ -453,6 +454,32 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             return locator.isVisible(new Locator.IsVisibleOptions().setTimeout((double) timeoutMs));
         } catch (Exception ignored) {
             return false;
+        }
+    }
+
+    /**
+     * Registers a close listener so externally closing the browser window/context immediately
+     * invalidates shared state and forces clean recreation on next attempt.
+     */
+    private void registerContextCloseInvalidation(BrowserContext ctx) {
+        try {
+            ctx.onClose(closedContext -> {
+                contextLock.lock();
+                try {
+                    if (sharedContext == ctx) {
+                        log.warn("Persistent browser context was closed externally; invalidating shared state");
+                        closeQuietly(sharedContext);
+                        closeQuietly(sharedPlaywright);
+                        sharedContext = null;
+                        sharedPlaywright = null;
+                    }
+                } finally {
+                    contextLock.unlock();
+                }
+            });
+        } catch (Exception e) {
+            log.warn("Could not register context close listener: {}", e.getMessage());
+            // Best-effort only. Health checks + exception invalidation still protect recovery.
         }
     }
 
