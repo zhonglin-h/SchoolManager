@@ -77,13 +77,21 @@ public class MeetSessionHandler {
      * Used for both the T−15 and any repeat reminders while the meeting hasn't started.
      */
     public void checkMeetingStarted(CalendarEvent event, NotificationType type) {
+        if (!isMeetingActive(event)) {
+            notificationService.notify(type, event, null);
+        }
+    }
+
+    /**
+     * Returns whether the Meet room is currently active.
+     * On API failures, returns false and logs a warning.
+     */
+    public boolean isMeetingActive(CalendarEvent event) {
         try {
-            boolean active = googleMeetClient.isMeetingActive(event.getSpaceCode());
-            if (!active) {
-                notificationService.notify(type, event, null);
-            }
+            return googleMeetClient.isMeetingActive(event.getSpaceCode());
         } catch (Exception e) {
             log.warn("Failed to check meeting started for {}: {}", event.getId(), e.getMessage());
+            return false;
         }
     }
 

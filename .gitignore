@@ -12,6 +12,7 @@ backups/
 
 # Local config overrides
 backend/src/main/resources/application-local.properties
+backend/src/test/resources/manual-smoke.local.properties
 backend/bin/
 
 # Backend — Gradle
@@ -42,3 +43,4 @@ Thumbs.db
 
 # Logs
 *.log
+backend/src/test/resources/application-local.properties
