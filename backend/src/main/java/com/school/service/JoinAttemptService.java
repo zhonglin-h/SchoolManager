@@ -132,7 +132,7 @@ public class JoinAttemptService {
     }
 
     private void sendNotification(CalendarEvent event, JoinResult result) {
-        if (result.status() == JoinAttemptStatus.JOINED) {
+        if (isSuccessfulAutoJoinStatus(result.status())) {
             notificationService.notify(NotificationType.AUTO_JOIN_SUCCESS, event, null);
         } else {
             notificationService.notify(NotificationType.AUTO_JOIN_FAILED, event, null);
@@ -141,5 +141,10 @@ public class JoinAttemptService {
 
     private boolean isAutoTrigger(String triggerType) {
         return "AUTO".equalsIgnoreCase(triggerType);
+    }
+
+    private boolean isSuccessfulAutoJoinStatus(JoinAttemptStatus status) {
+        return status == JoinAttemptStatus.JOINED
+                || status == JoinAttemptStatus.ALREADY_OPEN_ELSEWHERE;
     }
 }

@@ -84,6 +84,8 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern ASK_TO_JOIN_PATTERN =
             Pattern.compile("ask to join", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SWITCH_HERE_PATTERN =
+            Pattern.compile("switch here", Pattern.CASE_INSENSITIVE);
     private static final Pattern CONTINUE_WITHOUT_MEDIA_PATTERN =
             Pattern.compile("continue without microphone and camera", Pattern.CASE_INSENSITIVE);
 
@@ -107,6 +109,8 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     );
 
     private static final String JOINED_MESSAGE = "Joined the meeting successfully";
+    private static final String ALREADY_OPEN_ELSEWHERE_MESSAGE =
+            "Meeting already open in another tab/window ('Switch here' shown)";
     private static final int MAX_DETAIL_MESSAGE_LENGTH = 400;
 
     /**
@@ -150,6 +154,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
 
     private JoinResult attemptOnce(CalendarEvent event) {
         Page page = null;
+        JoinResult result = new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN, "Auto-join attempt did not run");
         try {
             BrowserContext context = getOrCreateContext();
             long timeoutMs = toTimeoutMs(joinTimeoutSeconds);
@@ -186,6 +191,12 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             clickIfVisible(page, CONTINUE_WITHOUT_MEDIA_PATTERN, 2_000);
             disableMediaIfEnabled(page);
 
+            JoinResult alreadyOpen = detectAlreadyOpenElsewhere(page);
+            if (alreadyOpen != null) {
+                result = alreadyOpen;
+                return result;
+            }
+
             JoinResult blocker = detectBlockingState(page);
             if (blocker != null) {
                 return blocker;
@@ -199,7 +210,8 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
 
             boolean joined = waitForInCallState(page, timeoutMs);
             if (joined) {
-                return new JoinResult(JoinAttemptStatus.JOINED, JOINED_MESSAGE);
+                result = new JoinResult(JoinAttemptStatus.JOINED, JOINED_MESSAGE);
+                return result;
             }
 
             JoinResult afterActionBlocker = detectBlockingState(page);
@@ -207,20 +219,35 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
                 return afterActionBlocker;
             }
 
-            if (action == JoinAction.ASK_TO_JOIN) {
-                return new JoinResult(JoinAttemptStatus.FAILED_WAITING_ROOM_TIMEOUT,
-                        "Timed out waiting for host approval after 'Ask to join'");
+            JoinResult afterActionAlreadyOpen = detectAlreadyOpenElsewhere(page);
+            if (afterActionAlreadyOpen != null) {
+                result = afterActionAlreadyOpen;
+                return result;
             }
-            return new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN,
+
+            if (action == JoinAction.ASK_TO_JOIN) {
+                result = new JoinResult(JoinAttemptStatus.FAILED_WAITING_ROOM_TIMEOUT,
+                        "Timed out waiting for host approval after 'Ask to join'");
+                return result;
+            }
+            result = new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN,
                     "Join click completed but in-call state not detected");
+            return result;
         } catch (Exception e) {
             invalidateContextIfDead(e);
             JoinAttemptStatus status = classifyErrorMessage(e.getMessage());
             log.error("Playwright auto-join attempt failed: {}", e.getMessage(), e);
-            return new JoinResult(status, safeDetailMessage(e));
+            result = new JoinResult(status, safeDetailMessage(e));
+            return result;
         } finally {
-            // Close only the tab; the shared context/browser remains alive for the next run.
-            closeQuietly(page);
+            // Keep joined tab open so the principal remains in the meeting unless disabled.
+            boolean shouldKeepOpen = result.status() == JoinAttemptStatus.JOINED;
+            if (shouldKeepOpen) {
+                log.info("Joined successfully; keeping tab open for event '{}'",
+                        event.getTitle());
+            } else {
+                closeQuietly(page);
+            }
         }
     }
 
@@ -384,6 +411,14 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         return null;
     }
 
+    private JoinResult detectAlreadyOpenElsewhere(Page page) {
+        if (clickTargetVisible(page, SWITCH_HERE_PATTERN, 1_000)) {
+            log.info("Detected 'Switch here' for meeting; treating as already joined elsewhere");
+            return new JoinResult(JoinAttemptStatus.ALREADY_OPEN_ELSEWHERE, ALREADY_OPEN_ELSEWHERE_MESSAGE);
+        }
+        return null;
+    }
+
     private boolean waitForInCallState(Page page, long timeoutMs) {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < deadline) {
@@ -409,6 +444,16 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             // fallthrough
         }
         return false;
+    }
+
+    private boolean clickTargetVisible(Page page, Pattern buttonNamePattern, long timeoutMs) {
+        try {
+            Locator locator = page.getByRole(com.microsoft.playwright.options.AriaRole.BUTTON,
+                    new Page.GetByRoleOptions().setName(buttonNamePattern)).first();
+            return locator.isVisible(new Locator.IsVisibleOptions().setTimeout((double) timeoutMs));
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private boolean isVisible(Page page, String selector, long timeoutMs) {

@@ -116,6 +116,16 @@ class JoinAttemptServiceTest {
     }
 
     @Test
+    void attemptJoin_notifiesOnSuccessForAlreadyOpenElsewhereAutoTrigger() {
+        when(joinAutomationClient.attemptJoin(event))
+                .thenReturn(new JoinResult(JoinAttemptStatus.ALREADY_OPEN_ELSEWHERE, "switch here"));
+
+        service.attemptJoin(event, "AUTO");
+
+        verify(notificationService).notify(NotificationType.AUTO_JOIN_SUCCESS, event, null);
+    }
+
+    @Test
     void attemptJoin_recordsFailureStatusAndNotifiesOnFailure() {
         when(joinAutomationClient.attemptJoin(event))
                 .thenReturn(new JoinResult(JoinAttemptStatus.FAILED_AUTH, "Token expired"));
