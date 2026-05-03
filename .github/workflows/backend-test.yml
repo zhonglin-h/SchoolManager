@@ -20,6 +20,17 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enable corepack and install pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+          pnpm --version
+
       - name: Run backend tests
         working-directory: backend
         run: ./gradlew test
