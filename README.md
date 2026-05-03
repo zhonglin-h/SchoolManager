@@ -18,17 +18,17 @@ A local, single-user web application for managing students, classes, attendance,
 
 ### 1. Clone and run setup
 
-```bat
+```powershell
 git clone https://github.com/zhonglin-h/SchoolManager.git
 cd SchoolManager
-setup.bat
+.\setup.ps1
 ```
 
-`setup.bat` will verify prerequisites, install frontend and backend dependencies, download Playwright browser binaries, and create `backend/src/main/resources/application-local.properties` from the template.
+`setup.ps1` will verify prerequisites, install frontend and backend dependencies, download Playwright browser binaries, and create `backend/src/main/resources/application-local.properties` from the template.
 
 ### 2. Configure credentials
 
-Open `backend/src/main/resources/application-local.properties` (setup.bat opens it automatically) and fill in:
+Open `backend/src/main/resources/application-local.properties` (`setup.ps1` opens it automatically) and fill in:
 
 ```properties
 google.calendar.id=<calendar email>
@@ -43,7 +43,7 @@ app.meet.mock=false
 app.notifications.enabled=true
 ```
 
-Generate a Gmail App Password at: myaccount.google.com → Security → 2-Step Verification → App passwords.
+Generate a Gmail App Password at: myaccount.google.com -> Security -> 2-Step Verification -> App passwords.
 
 Also create `frontend/.env.local`:
 
@@ -57,12 +57,12 @@ This app uses Google OAuth (user-based) for Calendar and Meet API access.
 
 1. **Create or select a Google Cloud project** in the Google Cloud Console.
 2. **Enable APIs**: Google Calendar API and Google Meet API.
-3. **Configure the OAuth consent screen** — add these scopes:
+3. **Configure the OAuth consent screen** - add these scopes:
    - `https://www.googleapis.com/auth/calendar.readonly`
    - `https://www.googleapis.com/auth/meetings.space.readonly`
    - If app status is *Testing*, add the principal account as a test user.
-4. **Create an OAuth 2.0 Client ID** of type *Desktop app*, download the JSON, and save it as `client_secret.json` at the repository root.
-5. **First run** — start the backend once (`./gradlew bootRun` inside `backend/`). A browser window will open for Google consent. Approve the scopes. Tokens are cached at `./data/tokens` and reused on subsequent starts.
+4. **Create an OAuth 2.0 Client ID** of type *Desktop app*, download the JSON, and save it as `backend/client_secret.json`.
+5. **First run** - run `./start.ps1` from the repository root. If Google consent is required, the script opens the OAuth URL in your browser. Approve the scopes. Tokens are cached at `./data/tokens` and reused on subsequent starts.
 
 ### 4. Set up Meet auto-join (optional)
 
@@ -70,7 +70,7 @@ Auto-join uses Playwright with a dedicated Chrome profile signed in as the princ
 
 **Create the Chrome profile:**
 
-```bat
+```powershell
 "C:/Program Files/Google/Chrome/Application/chrome.exe" --user-data-dir="C:/chrome-autojoin/UserData"
 ```
 
@@ -89,15 +89,15 @@ app.autojoin.retry.max-attempts=1
 app.autojoin.retry.backoff-ms=1000
 ```
 
-Use forward slashes in Windows paths inside `.properties` files. Auto-join fires at T−15 min if the meeting is not yet active; it is skipped if already active.
+Use forward slashes in Windows paths inside `.properties` files. Auto-join fires at T-15 min if the meeting is not yet active; it is skipped if already active.
 
 ---
 
 ## Daily Use
 
-```bat
-start.bat   :: Build if needed, start the app, open http://localhost:8080
-stop.bat    :: Stop the running app
+```powershell
+.\start.ps1   # Build if needed, start the app, open http://localhost:8080
+.\stop.ps1    # Stop the running app
 ```
 
 ### Docker (Mac / Linux / Windows)
@@ -115,11 +115,11 @@ docker compose down
 Run the backend and frontend separately for hot-reload during development:
 
 ```bash
-# Terminal 1 — backend on :8080
+# Terminal 1 - backend on :8080
 cd backend
 ./gradlew bootRun
 
-# Terminal 2 — frontend on :3000
+# Terminal 2 - frontend on :3000
 cd frontend
 pnpm install   # first time only
 pnpm dev
