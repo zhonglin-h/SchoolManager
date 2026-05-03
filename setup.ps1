@@ -48,23 +48,39 @@ if (-not $javaMajor -or $javaMajor -lt 21) {
 Write-Host " OK - Java $javaVersion"
 
 # ---------------------------------------------------------------------------
-# 2. Check PostgreSQL
+# 2. Check PostgreSQL tools
 # ---------------------------------------------------------------------------
 Write-Host "[2/7] Checking PostgreSQL..."
-$pgFound = $true
+$psqlFound = $true
 try {
     $pgVersion = (& psql --version 2>&1).ToString().Trim()
 } catch {
-    $pgFound = $false
+    $psqlFound = $false
 }
-if (-not $pgFound -or $LASTEXITCODE -ne 0) {
+if (-not $psqlFound -or $LASTEXITCODE -ne 0) {
     Write-Host " ERROR: PostgreSQL (psql / pg_dump) is not installed or not on PATH."
     Write-Host " Install PostgreSQL 16 with:"
     Write-Host "   winget install PostgreSQL.PostgreSQL"
     Write-Host " Then re-run setup.ps1."
     throw "PostgreSQL not found"
 }
+
+$pgDumpFound = $true
+try {
+    $pgDumpVersion = (& pg_dump --version 2>&1).ToString().Trim()
+} catch {
+    $pgDumpFound = $false
+}
+if (-not $pgDumpFound -or $LASTEXITCODE -ne 0) {
+    Write-Host " ERROR: pg_dump is not installed or not on PATH."
+    Write-Host " It is required for nightly backups."
+    Write-Host " Install PostgreSQL 16 with:"
+    Write-Host "   winget install PostgreSQL.PostgreSQL"
+    Write-Host " Then re-run setup.ps1."
+    throw "pg_dump not found"
+}
 Write-Host " OK - $pgVersion"
+Write-Host " OK - $pgDumpVersion"
 
 # ---------------------------------------------------------------------------
 # 3. Check Node.js
