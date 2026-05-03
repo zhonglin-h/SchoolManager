@@ -10,6 +10,9 @@ backend/client_secret.json
 data/
 backups/
 school-manager.log
+school-manager-err.log
+school-manager.log.*
+school-manager-err.log.*
 .pid
 
 # Local config overrides

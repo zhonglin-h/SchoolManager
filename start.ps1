@@ -53,19 +53,40 @@ Write-Host "Starting School Manager..."
 $stdoutLog = Join-Path $root "school-manager.log"
 $stderrLog = Join-Path $root "school-manager-err.log"
 
-# Rotate logs on each start to keep file sizes manageable.
-if (Test-Path -LiteralPath "$stdoutLog.1") {
-    Remove-Item -LiteralPath "$stdoutLog.1" -Force -ErrorAction SilentlyContinue
+function Rotate-LogFile([string]$logPath, [int]$keepCount = 4) {
+    if (-not (Test-Path -LiteralPath $logPath)) {
+        return
+    }
+
+    $oldestToDelete = "$logPath.$($keepCount + 1)"
+    if (Test-Path -LiteralPath $oldestToDelete) {
+        $answer = Read-Host "Delete archives older than .$keepCount for $(Split-Path -Leaf $logPath)? (y/N)"
+        if ($answer -match '^(y|yes)$') {
+            Get-ChildItem -LiteralPath (Split-Path -Parent $logPath) -File |
+                Where-Object { $_.Name -match ("^{0}\.\d+$" -f [regex]::Escape((Split-Path -Leaf $logPath))) } |
+                ForEach-Object {
+                    $suffix = [int]($_.Name.Split(".")[-1])
+                    if ($suffix -gt $keepCount) {
+                        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+                    }
+                }
+        }
+    }
+
+    for ($i = $keepCount; $i -ge 1; $i--) {
+        $src = "$logPath.$i"
+        $dst = "$logPath.$($i + 1)"
+        if (Test-Path -LiteralPath $src) {
+            Move-Item -LiteralPath $src -Destination $dst -Force
+        }
+    }
+
+    Move-Item -LiteralPath $logPath -Destination "$logPath.1" -Force
 }
-if (Test-Path -LiteralPath $stdoutLog) {
-    Move-Item -LiteralPath $stdoutLog -Destination "$stdoutLog.1" -Force
-}
-if (Test-Path -LiteralPath "$stderrLog.1") {
-    Remove-Item -LiteralPath "$stderrLog.1" -Force -ErrorAction SilentlyContinue
-}
-if (Test-Path -LiteralPath $stderrLog) {
-    Move-Item -LiteralPath $stderrLog -Destination "$stderrLog.1" -Force
-}
+
+# Rotate logs on each start, keep the 4 most recent archives (.1 to .4).
+Rotate-LogFile -logPath $stdoutLog -keepCount 4
+Rotate-LogFile -logPath $stderrLog -keepCount 4
 
 $proc = Start-Process -FilePath "java" `
     -ArgumentList @("-jar", $jarPath, "--spring.profiles.active=local", "--google.client-secret.path=$clientSecretPath") `
