@@ -4,6 +4,17 @@ Set-StrictMode -Version Latest
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
+function Get-PropertyValue([string]$filePath, [string]$propertyName) {
+    if (-not (Test-Path -LiteralPath $filePath)) { return $null }
+    $pattern = "^\s*" + [regex]::Escape($propertyName) + "\s*=\s*(.*)\s*$"
+    foreach ($line in Get-Content -LiteralPath $filePath) {
+        if ($line -match $pattern) {
+            return $matches[1].Trim()
+        }
+    }
+    return $null
+}
+
 Write-Host "============================================================"
 Write-Host " School Manager - Start"
 Write-Host "============================================================"
@@ -48,6 +59,34 @@ if (-not (Test-Path -LiteralPath $clientSecretPath)) {
     throw "Missing required client_secret.json"
 }
 Write-Host " Google client secret: $clientSecretPath"
+
+$localProps = Join-Path $root "backend\src\main\resources\application-local.properties"
+$backupFolderId = Get-PropertyValue -filePath $localProps -propertyName "app.backup.drive-folder-id"
+$backupPgUser = Get-PropertyValue -filePath $localProps -propertyName "app.backup.postgres.username"
+$backupPgPassword = Get-PropertyValue -filePath $localProps -propertyName "app.backup.postgres.password"
+
+$backupWarnings = @()
+if (-not $backupFolderId -or $backupFolderId -match "^<.*>$") {
+    $backupWarnings += "app.backup.drive-folder-id"
+}
+if (-not $backupPgUser -or $backupPgUser -match "^<.*>$") {
+    $backupWarnings += "app.backup.postgres.username"
+}
+if (-not $backupPgPassword -or $backupPgPassword -match "^<.*>$") {
+    $backupWarnings += "app.backup.postgres.password"
+}
+
+if ($backupWarnings.Count -gt 0) {
+    Write-Host ""
+    Write-Host " WARNING: Backup setup is incomplete in application-local.properties:"
+    foreach ($field in $backupWarnings) {
+        Write-Host "   - $field"
+    }
+    Write-Host " Nightly backups may fail until these are configured."
+}
+else {
+    Write-Host " Backup configuration fields are set."
+}
 
 Write-Host "Starting School Manager..."
 $stdoutLog = Join-Path $root "school-manager.log"
