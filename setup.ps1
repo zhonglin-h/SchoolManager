@@ -25,7 +25,8 @@ Write-Host ""
 # ---------------------------------------------------------------------------
 Write-Host "[1/7] Checking Java..."
 try {
-    $javaVersionLine = (& java -version 2>&1 | Select-Object -First 1)
+    $javaVersionOutput = (& java --version 2>&1)
+    $javaVersionLine = ($javaVersionOutput | Select-Object -First 1)
 }
 catch {
     Write-Host " ERROR: Java is not installed or not on PATH."
@@ -36,6 +37,9 @@ catch {
 
 $javaVersion = ""
 if ($javaVersionLine -match '"([^"]+)"') {
+    $javaVersion = $matches[1]
+}
+elseif ($javaVersionLine -match '^\S+\s+([0-9][^\s]*)') {
     $javaVersion = $matches[1]
 }
 $javaMajor = Get-MajorVersionFromSemver $javaVersion
@@ -60,7 +64,7 @@ try {
 if (-not $psqlFound -or $LASTEXITCODE -ne 0) {
     Write-Host " ERROR: PostgreSQL (psql / pg_dump) is not installed or not on PATH."
     Write-Host " Install PostgreSQL 16 with:"
-    Write-Host "   winget install PostgreSQL.PostgreSQL"
+    Write-Host "   winget install --id PostgreSQL.PostgreSQL.16 -e"
     Write-Host " Then re-run setup.ps1."
     throw "PostgreSQL not found"
 }
@@ -75,7 +79,7 @@ if (-not $pgDumpFound -or $LASTEXITCODE -ne 0) {
     Write-Host " ERROR: pg_dump is not installed or not on PATH."
     Write-Host " It is required for nightly backups."
     Write-Host " Install PostgreSQL 16 with:"
-    Write-Host "   winget install PostgreSQL.PostgreSQL"
+    Write-Host "   winget install --id PostgreSQL.PostgreSQL.16 -e"
     Write-Host " Then re-run setup.ps1."
     throw "pg_dump not found"
 }
