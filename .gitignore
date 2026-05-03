@@ -9,6 +9,11 @@ backend/client_secret.json
 # Runtime data
 data/
 backups/
+school-manager.log
+school-manager-err.log
+school-manager.log.*
+school-manager-err.log.*
+.pid
 
 # Local config overrides
 backend/src/main/resources/application-local.properties
@@ -24,12 +29,14 @@ backend/out/
 # Compiled class files (anywhere)
 **/*.class
 
-
 # Frontend
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 frontend/package-lock.json
+
+# Generated static resources (produced by copyFrontend Gradle task)
+backend/src/main/resources/static/
 
 # IDE
 .vscode/settings.json
@@ -44,3 +51,19 @@ Thumbs.db
 # Logs
 *.log
 backend/src/test/resources/application-local.properties
+
+*creds.txt
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl

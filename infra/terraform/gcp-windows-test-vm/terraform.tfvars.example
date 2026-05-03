@@ -1,0 +1,13 @@
+project_id               = "your-gcp-project-id"
+region                   = "us-central1"
+zone                     = "us-central1-a"
+vm_name                  = "schoolmanager-win-clean"
+machine_type             = "e2-standard-4"
+network                  = "REPLACE_WITH_YOUR_VPC_NAME"
+# Set to a subnet name in the same region as `zone` for custom-mode VPCs; keep null for auto-mode.
+subnetwork               = null
+boot_disk_size_gb        = 100
+create_rdp_firewall_rule = true
+
+# Strongly recommended: restrict this to your own public IP, e.g. ["203.0.113.10/32"].
+rdp_source_ranges = ["0.0.0.0/0"]

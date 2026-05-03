@@ -4,6 +4,52 @@ plugins {
     id 'java'
 }
 
+// ---------------------------------------------------------------------------
+// Frontend build integration
+// ---------------------------------------------------------------------------
+def frontendDir = file("${rootDir}/frontend")
+if (!frontendDir.exists()) {
+    // When running Gradle from `backend/`, rootDir is the backend directory.
+    frontendDir = file("${rootDir}/../frontend")
+}
+def frontendDist = file("${frontendDir}/dist")
+def staticResourcesDir = file("${sourceSets.main.resources.srcDirs.first()}/static")
+
+tasks.register('buildFrontend', Exec) {
+    group = 'build'
+    description = 'Install npm deps and build the React frontend'
+    workingDir frontendDir
+
+    // Use pnpm if available, else fall back to npx pnpm (CI friendly)
+    def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+    if (isWindows) {
+        commandLine 'cmd', '/c', 'pnpm install && pnpm build'
+    } else {
+        commandLine 'sh', '-c', 'pnpm install && pnpm build'
+    }
+
+    inputs.dir("${frontendDir}/src")
+    inputs.file("${frontendDir}/package.json")
+    inputs.file("${frontendDir}/vite.config.ts")
+    outputs.dir(frontendDist)
+}
+
+tasks.register('copyFrontend', Copy) {
+    group = 'build'
+    description = 'Copy built React app into Spring Boot static resources'
+    dependsOn buildFrontend
+    from frontendDist
+    into staticResourcesDir
+}
+
+// Wire frontend copy into the normal resource processing so bootJar picks it up
+processResources.dependsOn copyFrontend
+
+// Also clean generated static files on `clean`
+clean {
+    delete staticResourcesDir
+}
+
 group = 'com.school'
 version = '0.0.1-SNAPSHOT'
 
@@ -63,6 +109,16 @@ tasks.register('manualTest', Test) {
     }
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
+}
+
+// Install Playwright browser binaries (used by the auto-join feature)
+tasks.register('playwrightInstall', JavaExec) {
+    group = 'build'
+    description = 'Download Playwright browser binaries required for Meet auto-join'
+    dependsOn classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.microsoft.playwright.CLI'
+    args = ['install', 'chromium']
 }
 
 bootRun {

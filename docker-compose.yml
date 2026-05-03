@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      # H2 database files — persist between container restarts
+      - ./data:/app/data
+      # Google OAuth credentials
+      - ./client_secret.json:/app/client_secret.json:ro
+      # Local configuration overrides (fill in credentials here)
+      - ./backend/src/main/resources/application-local.properties:/app/application-local.properties:ro
+      # Optional: service account JSON (only if you use a service account)
+      # - ./service-account.json:/app/service-account.json:ro
+    environment:
+      - SPRING_PROFILES_ACTIVE=local
+      # Override the client-secret path to match where we mount it inside the container
+      - GOOGLE_CLIENT_SECRET_PATH=/app/client_secret.json
+    restart: unless-stopped
