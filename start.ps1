@@ -52,6 +52,21 @@ Write-Host " Google client secret: $clientSecretPath"
 Write-Host "Starting School Manager..."
 $stdoutLog = Join-Path $root "school-manager.log"
 $stderrLog = Join-Path $root "school-manager-err.log"
+
+# Rotate logs on each start to keep file sizes manageable.
+if (Test-Path -LiteralPath "$stdoutLog.1") {
+    Remove-Item -LiteralPath "$stdoutLog.1" -Force -ErrorAction SilentlyContinue
+}
+if (Test-Path -LiteralPath $stdoutLog) {
+    Move-Item -LiteralPath $stdoutLog -Destination "$stdoutLog.1" -Force
+}
+if (Test-Path -LiteralPath "$stderrLog.1") {
+    Remove-Item -LiteralPath "$stderrLog.1" -Force -ErrorAction SilentlyContinue
+}
+if (Test-Path -LiteralPath $stderrLog) {
+    Move-Item -LiteralPath $stderrLog -Destination "$stderrLog.1" -Force
+}
+
 $proc = Start-Process -FilePath "java" `
     -ArgumentList @("-jar", $jarPath, "--spring.profiles.active=local", "--google.client-secret.path=$clientSecretPath") `
     -RedirectStandardOutput $stdoutLog `
@@ -97,8 +112,9 @@ for ($i = 0; $i -lt 45 -and -not $ready; $i++) {
             }
         }
 
-        $httpCode = curl.exe -s -o NUL -w "%{http_code}" --max-time 2 http://localhost:8080/actuator/health
-        if ($httpCode -eq "200") {
+        $healthCode = curl.exe -s -o NUL -w "%{http_code}" --max-time 2 http://localhost:8080/actuator/health
+        $rootCode = curl.exe -s -o NUL -w "%{http_code}" --max-time 2 http://localhost:8080/
+        if ($healthCode -eq "200" -or $rootCode -eq "200") {
             $ready = $true
         }
     }
