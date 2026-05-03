@@ -8,6 +8,10 @@ plugins {
 // Frontend build integration
 // ---------------------------------------------------------------------------
 def frontendDir = file("${rootDir}/frontend")
+if (!frontendDir.exists()) {
+    // When running Gradle from `backend/`, rootDir is the backend directory.
+    frontendDir = file("${rootDir}/../frontend")
+}
 def frontendDist = file("${frontendDir}/dist")
 def staticResourcesDir = file("${sourceSets.main.resources.srcDirs.first()}/static")
 
