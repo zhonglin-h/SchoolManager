@@ -23,7 +23,7 @@ Write-Host ""
 # ---------------------------------------------------------------------------
 # 1. Check Java 21+
 # ---------------------------------------------------------------------------
-Write-Host "[1/6] Checking Java..."
+Write-Host "[1/7] Checking Java..."
 try {
     $javaVersionLine = (& java -version 2>&1 | Select-Object -First 1)
 }
@@ -48,9 +48,28 @@ if (-not $javaMajor -or $javaMajor -lt 21) {
 Write-Host " OK - Java $javaVersion"
 
 # ---------------------------------------------------------------------------
-# 2. Check Node.js
+# 2. Check PostgreSQL
 # ---------------------------------------------------------------------------
-Write-Host "[2/6] Checking Node.js..."
+Write-Host "[2/7] Checking PostgreSQL..."
+$pgFound = $true
+try {
+    $pgVersion = (& psql --version 2>&1).ToString().Trim()
+} catch {
+    $pgFound = $false
+}
+if (-not $pgFound -or $LASTEXITCODE -ne 0) {
+    Write-Host " ERROR: PostgreSQL (psql / pg_dump) is not installed or not on PATH."
+    Write-Host " Install PostgreSQL 16 with:"
+    Write-Host "   winget install PostgreSQL.PostgreSQL"
+    Write-Host " Then re-run setup.ps1."
+    throw "PostgreSQL not found"
+}
+Write-Host " OK - $pgVersion"
+
+# ---------------------------------------------------------------------------
+# 3. Check Node.js
+# ---------------------------------------------------------------------------
+Write-Host "[3/7] Checking Node.js..."
 try {
     $nodeVersion = (& node --version).Trim()
 }
@@ -63,9 +82,9 @@ catch {
 Write-Host " OK - Node.js $nodeVersion"
 
 # ---------------------------------------------------------------------------
-# 3. Check / install pnpm
+# 4. Check / install pnpm
 # ---------------------------------------------------------------------------
-Write-Host "[3/6] Checking pnpm..."
+Write-Host "[4/7] Checking pnpm..."
 $pnpmVersion = $null
 try {
     $pnpmVersion = (& pnpm --version).Trim()
@@ -82,9 +101,9 @@ catch {
 Write-Host " OK - pnpm $pnpmVersion"
 
 # ---------------------------------------------------------------------------
-# 4. Pre-fetch frontend npm dependencies
+# 5. Pre-fetch frontend npm dependencies
 # ---------------------------------------------------------------------------
-Write-Host "[4/6] Installing frontend dependencies..."
+Write-Host "[5/7] Installing frontend dependencies..."
 Push-Location (Join-Path $root "frontend")
 try {
     & pnpm install
@@ -98,9 +117,9 @@ finally {
 Write-Host " OK - frontend dependencies installed."
 
 # ---------------------------------------------------------------------------
-# 5. Pre-fetch backend dependencies and download Playwright browsers
+# 6. Pre-fetch backend dependencies and download Playwright browsers
 # ---------------------------------------------------------------------------
-Write-Host "[5/6] Pre-fetching backend dependencies and Playwright browsers..."
+Write-Host "[6/7] Pre-fetching backend dependencies and Playwright browsers..."
 Push-Location (Join-Path $root "backend")
 try {
     & .\gradlew.bat dependencies -q
@@ -122,9 +141,9 @@ finally {
 Write-Host " OK - backend dependencies ready."
 
 # ---------------------------------------------------------------------------
-# 6. Create application-local.properties if missing
+# 7. Create application-local.properties if missing
 # ---------------------------------------------------------------------------
-Write-Host "[6/6] Checking credential configuration..."
+Write-Host "[7/7] Checking credential configuration..."
 $localProps = Join-Path $root "backend\src\main\resources\application-local.properties"
 if (-not (Test-Path -LiteralPath $localProps)) {
     $template = Join-Path $root "application.properties.template"

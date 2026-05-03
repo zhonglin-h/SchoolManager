@@ -5,6 +5,16 @@
 # Lines starting with # are comments and will be ignored at runtime.
 # ============================================================
 
+# ----- PostgreSQL database ----------------------------------------------------
+spring.datasource.username=school
+spring.datasource.password=<your-postgres-password>
+
+# ----- Nightly backup ---------------------------------------------------------
+# Create a folder in Google Drive and paste its ID here (from the URL: /folders/<id>).
+app.backup.drive-folder-id=<Google Drive folder ID>
+app.backup.postgres.username=school
+app.backup.postgres.password=<your-postgres-password>
+
 # ----- Google Calendar --------------------------------------------------------
 # The calendar ID (usually an email address) that the app monitors.
 google.calendar.id=<your-calendar-email@gmail.com>

@@ -11,6 +11,7 @@ A local, single-user web application for managing students, classes, attendance,
 | Java JDK | 21 | `winget install Microsoft.OpenJDK.21` |
 | Node.js | 20 LTS | `winget install OpenJS.NodeJS.LTS` |
 | pnpm | latest | `npm install -g pnpm` |
+| PostgreSQL | 16 | `winget install PostgreSQL.PostgreSQL` |
 
 ---
 
@@ -26,7 +27,26 @@ cd SchoolManager
 
 `setup.ps1` will verify prerequisites, install frontend and backend dependencies, download Playwright browser binaries, and create `backend/src/main/resources/application-local.properties` from the template.
 
-### 2. Configure credentials
+### 2. Set up PostgreSQL
+
+After installing PostgreSQL, create the database user and database once:
+
+```powershell
+psql -U postgres -c "CREATE USER school WITH PASSWORD 'yourpassword';"
+psql -U postgres -c "CREATE DATABASE schooldb OWNER school;"
+```
+
+Then add to `backend/src/main/resources/application-local.properties`:
+
+```properties
+spring.datasource.username=school
+spring.datasource.password=yourpassword
+app.backup.drive-folder-id=<Google Drive folder ID>
+app.backup.postgres.username=school
+app.backup.postgres.password=yourpassword
+```
+
+### 3. Configure credentials
 
 Open `backend/src/main/resources/application-local.properties` (`setup.ps1` opens it automatically) and fill in:
 
@@ -51,20 +71,21 @@ Also create `frontend/.env.local`:
 VITE_API_BASE_URL=http://localhost:8080
 ```
 
-### 3. Set up Google Cloud
+### 4. Set up Google Cloud
 
 This app uses Google OAuth (user-based) for Calendar and Meet API access.
 
 1. **Create or select a Google Cloud project** in the Google Cloud Console.
-2. **Enable APIs**: Google Calendar API and Google Meet API.
+2. **Enable APIs**: Google Calendar API, Google Meet API, and Google Drive API.
 3. **Configure the OAuth consent screen** - add these scopes:
    - `https://www.googleapis.com/auth/calendar.readonly`
    - `https://www.googleapis.com/auth/meetings.space.readonly`
+   - `https://www.googleapis.com/auth/drive.file`
    - If app status is *Testing*, add the principal account as a test user.
 4. **Create an OAuth 2.0 Client ID** of type *Desktop app*, download the JSON, and save it as `backend/client_secret.json`.
 5. **First run** - run `./start.ps1` from the repository root. If Google consent is required, the script opens the OAuth URL in your browser. Approve the scopes. Tokens are cached at `./data/tokens` and reused on subsequent starts.
 
-### 4. Set up Meet auto-join (optional)
+### 5. Set up Meet auto-join (optional)
 
 Auto-join uses Playwright with a dedicated Chrome profile signed in as the principal account.
 
@@ -144,3 +165,23 @@ cd backend
 ./gradlew test           # runs all tests (excludes @Tag("manual") tests)
 ./gradlew manualTest     # runs only @Tag("manual") integration/long-running tests
 ```
+
+---
+
+## Backups
+
+The app runs a nightly `pg_dump` at 2 AM, compresses the output, uploads it to the configured Google Drive folder (`app.backup.drive-folder-id`), and deletes copies older than 30 days. No manual action is required once configured.
+
+### Restoring from a backup
+
+1. Download the `.sql.gz` file from Google Drive.
+2. Recreate the database:
+   ```powershell
+   psql -U postgres -c "DROP DATABASE IF EXISTS schooldb;"
+   psql -U postgres -c "CREATE DATABASE schooldb OWNER school;"
+   ```
+3. Restore:
+   ```powershell
+   cmd /c "gunzip -c schooldb-2025-06-01-0200.sql.gz | psql -U school -d schooldb"
+   ```
+4. Start the app normally — Flyway detects that migrations are already applied and skips them.

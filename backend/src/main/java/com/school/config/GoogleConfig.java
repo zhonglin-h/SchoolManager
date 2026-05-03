@@ -11,6 +11,8 @@ import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.CalendarScopes;
+import com.google.api.services.drive.Drive;
+import com.google.api.services.drive.DriveScopes;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,7 +34,8 @@ public class GoogleConfig {
 
     private static final List<String> SCOPES = List.of(
             CalendarScopes.CALENDAR_READONLY,
-            "https://www.googleapis.com/auth/meetings.space.readonly"
+            "https://www.googleapis.com/auth/meetings.space.readonly",
+            DriveScopes.DRIVE_FILE
     );
 
     @Bean
@@ -63,6 +66,13 @@ public class GoogleConfig {
     @Bean
     public Calendar googleCalendar(NetHttpTransport httpTransport, Credential credential) throws GeneralSecurityException, IOException {
         return new Calendar.Builder(httpTransport, GsonFactory.getDefaultInstance(), credential)
+                .setApplicationName("SchoolManager")
+                .build();
+    }
+
+    @Bean
+    public Drive googleDrive(NetHttpTransport httpTransport, Credential credential) {
+        return new Drive.Builder(httpTransport, GsonFactory.getDefaultInstance(), credential)
                 .setApplicationName("SchoolManager")
                 .build();
     }
