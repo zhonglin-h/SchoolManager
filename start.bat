@@ -1,9 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
-title School Manager — Starting...
+title School Manager - Starting...
 
 echo ============================================================
-echo  School Manager — Start
+echo  School Manager - Start
 echo ============================================================
 echo.
 
@@ -26,7 +26,12 @@ echo  Build OK.
 :: Find the JAR
 :: --------------------------------------------------------------------------
 set JAR_PATH=
-for %%f in (backend\build\libs\*.jar) do set JAR_PATH=%%f
+for %%f in (backend\build\libs\*.jar) do (
+    echo %%~nxf | findstr /i /c:"plain" >nul
+    if errorlevel 1 (
+        set JAR_PATH=%%f
+    )
+)
 if "%JAR_PATH%"=="" (
     echo  ERROR: No JAR found in backend\build\libs\.
     pause
@@ -40,11 +45,16 @@ echo  JAR: %JAR_PATH%
 echo Starting School Manager...
 for /f %%p in ('powershell -NoProfile -Command ^
     "Start-Process -FilePath java ^
-        -ArgumentList @('-jar', '%JAR_PATH%', '--spring.profiles.active=local') ^
+        -ArgumentList @(''-jar'', ''%JAR_PATH%'', ''--spring.profiles.active=local'') ^
         -RedirectStandardOutput school-manager.log ^
         -RedirectStandardError school-manager-err.log ^
         -PassThru ^
      | Select-Object -ExpandProperty Id"') do set APP_PID=%%p
+if "%APP_PID%"=="" (
+    echo  ERROR: Failed to start application (no PID returned). Check Java installation and logs.
+    pause
+    exit /b 1
+)
 echo %APP_PID% > .pid
 echo  PID: %APP_PID% saved to .pid
 
@@ -53,11 +63,12 @@ echo  PID: %APP_PID% saved to .pid
 :: --------------------------------------------------------------------------
 echo Waiting for server to start...
 set READY=0
+set HTTP_CODE=
 for /l %%i in (1,1,30) do (
     if !READY!==0 (
         timeout /t 2 /nobreak >nul
-        curl -s -o nul -w "%%{http_code}" http://localhost:8080/actuator/health >nul 2>&1
-        if not errorlevel 1 (
+        for /f %%h in ('curl -s -o nul -w "%%{http_code}" http://localhost:8080/actuator/health 2^>nul') do set HTTP_CODE=%%h
+        if "!HTTP_CODE!"=="200" (
             set READY=1
         )
     )
