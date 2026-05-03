@@ -24,7 +24,16 @@ copy terraform.tfvars.example terraform.tfvars
 Edit `terraform.tfvars`:
 - Set `project_id`
 - Optionally change `region`, `zone`, `machine_type`
+- Set `network` to an existing VPC name in your project.
+- If using a custom-mode VPC, set `subnetwork` to a subnet in the same region as your VM zone; keep `subnetwork = null` for auto-mode VPCs.
 - For security, set `rdp_source_ranges` to your public IP CIDR (for example `["203.0.113.10/32"]`)
+
+Helpful discovery commands:
+
+```powershell
+gcloud.cmd compute networks list --format="table(name,subnetMode)"
+gcloud.cmd compute networks subnets list --format="table(name,region,network)"
+```
 
 ## Create VM
 
