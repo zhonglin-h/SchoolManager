@@ -1,3 +1,5 @@
+HELLO
+
 # School Manager
 
 A local, single-user web application for managing students, classes, attendance, payments, and payroll. Runs entirely on `localhost`; no cloud deployment needed.
