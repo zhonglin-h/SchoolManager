@@ -73,14 +73,19 @@ public class DriveBackupService {
 
     private String createBackupFolderHierarchy(Path idFile) {
         try {
-            String parentId = findOrCreateFolder("automation", "root");
-            String folderId = findOrCreateFolder("SchoolManager", parentId);
+            String suffix = props.getFolderSuffix();
+            if (suffix == null || suffix.isBlank()) {
+                throw new IllegalStateException(
+                        "app.backup.folder-suffix must be set in application-local.properties");
+            }
+            String folderName = "SchoolManager" + suffix;
+            String folderId = findOrCreateFolder(folderName, "root");
             Files.createDirectories(idFile.getParent());
             Files.writeString(idFile, folderId);
-            log.info("Drive backup folder ready at automation/SchoolManager ({})", folderId);
+            log.info("Drive backup folder ready at {} ({})", folderName, folderId);
             return folderId;
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to create Drive backup folder hierarchy", e);
+            throw new IllegalStateException("Failed to create Drive backup folder", e);
         }
     }
 
@@ -116,7 +121,7 @@ public class DriveBackupService {
             uploadToDrive(tempFile, filename);
             pruneOldBackups();
             log.info("Backup completed: {}", filename);
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
             log.error("Backup failed: {}", e.getMessage(), e);
         } finally {
             try {

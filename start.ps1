@@ -84,6 +84,16 @@ else {
     Write-Host " Backup configuration fields are set."
 }
 
+$folderSuffix = Get-PropertyValue -filePath $localProps -propertyName "app.backup.folder-suffix"
+if (-not $folderSuffix -or $folderSuffix -match "^<.*>$") {
+    Write-Host ""
+    Write-Host " ERROR: app.backup.folder-suffix is required in application-local.properties."
+    Write-Host " It is appended to the Drive backup folder name (e.g. -YourName -> SchoolManager-YourName)."
+    Write-Host " Set it to a unique value that identifies this installation."
+    throw "Missing required app.backup.folder-suffix"
+}
+Write-Host " Drive backup folder: SchoolManager$folderSuffix"
+
 Write-Host "Starting School Manager..."
 $stdoutLog = Join-Path $root "school-manager.log"
 $stderrLog = Join-Path $root "school-manager-err.log"
