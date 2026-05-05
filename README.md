@@ -57,6 +57,22 @@ app.backup.postgres.username=school
 app.backup.postgres.password=yourpassword
 ```
 
+What these fields are:
+
+- `spring.datasource.username` / `spring.datasource.password`: credentials the app uses to connect to PostgreSQL.
+- `app.backup.postgres.username` / `app.backup.postgres.password`: credentials used by backup/restore (`pg_dump`/`psql`). Keep these the same as datasource unless you intentionally use a separate DB user.
+- `app.backup.drive-folder-id`: target Google Drive folder ID where nightly backups are uploaded.
+
+How to get `app.backup.drive-folder-id`:
+
+1. In Google Drive, create a folder for backups (for example `SchoolManager Backups`).
+2. Open that folder in your browser.
+3. Copy the ID from the URL:
+   - `https://drive.google.com/drive/folders/<FOLDER_ID>`
+4. Put `<FOLDER_ID>` into `app.backup.drive-folder-id`.
+
+Note credentials for drive access are configured in step 4.
+
 ### 3. Configure credentials
 
 Open `backend/src/main/resources/application-local.properties` (`setup.ps1` opens it automatically) and fill in:
@@ -94,7 +110,7 @@ This app uses Google OAuth (user-based) for Calendar and Meet API access.
    - `https://www.googleapis.com/auth/drive.file`
    - If app status is *Testing*, add the principal account as a test user.
 4. **Create an OAuth 2.0 Client ID** of type *Desktop app*, download the JSON, and save it as `backend/client_secret.json`.
-5. **First run** - run `./start.ps1` from the repository root. If Google consent is required, the script opens the OAuth URL in your browser. Approve the scopes. Tokens are cached at `./data/tokens` and reused on subsequent starts.
+5. **First run/authentication** - run `./start.ps1` from the repository root. The app opens a Google OAuth consent URL in your browser. Sign in with the same Google account that owns (or can edit) the Drive backup folder, then approve requested scopes. Tokens are cached at `./data/tokens` and reused on subsequent starts.
 
 ### 5. Set up Meet auto-join (optional)
 
