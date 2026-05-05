@@ -11,7 +11,7 @@ A local, single-user web application for managing students, classes, attendance,
 | Java JDK | 21 | `winget install Microsoft.OpenJDK.21` |
 | Node.js | 20 LTS | `winget install OpenJS.NodeJS.LTS` |
 | pnpm | latest | `npm install -g pnpm` |
-| PostgreSQL | 16 | `winget install PostgreSQL.PostgreSQL` |
+| PostgreSQL | 16 | Download: https://www.postgresql.org/download/windows/ |
 
 ---
 
@@ -29,7 +29,18 @@ cd SchoolManager
 
 ### 2. Set up PostgreSQL
 
-After installing PostgreSQL, create the database user and database once:
+After installing PostgreSQL, start the service and verify `psql` is available.
+
+```powershell
+# Find and start the PostgreSQL Windows service
+Get-Service *postgres*
+Start-Service -Name "postgresql-x64-16"   # use your installed service name
+
+# Verify psql is on PATH
+psql --version
+```
+
+Then create the database user and database once:
 
 ```powershell
 psql -U postgres -c "CREATE USER school WITH PASSWORD 'yourpassword';"
