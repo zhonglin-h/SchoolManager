@@ -36,14 +36,70 @@ public class DriveBackupService {
     private static final String BACKUP_FILENAME_PREFIX = "schooldb-";
     private static final String BACKUP_FILENAME_SUFFIX = ".sql.gz";
     private static final LocalTime SCHEDULED_BACKUP_TIME = LocalTime.of(2, 0);
+    private static final String FOLDER_ID_FILE = "./data/drive-folder-id";
+    private static final String FOLDER_MIME = "application/vnd.google-apps.folder";
 
     private final Drive googleDrive;
     private final BackupProperties props;
 
+    private String backupFolderId;
+
     @EventListener(ApplicationReadyEvent.class)
-    public void validateConfigurationAndRunCatchUpIfMissed() {
-        validateDriveFolderConfiguration();
+    public void initializeAndCatchUp() {
+        backupFolderId = resolveOrCreateBackupFolder();
         runStartupCatchUpIfMissed();
+    }
+
+    private String resolveOrCreateBackupFolder() {
+        Path idFile = Paths.get(FOLDER_ID_FILE);
+        if (Files.exists(idFile)) {
+            try {
+                String id = Files.readString(idFile).strip();
+                if (!id.isBlank()) {
+                    try {
+                        googleDrive.files().get(id).setFields("id,trashed").execute();
+                        log.info("Using cached Drive backup folder: {}", id);
+                        return id;
+                    } catch (IOException e) {
+                        log.warn("Cached Drive folder {} is inaccessible; recreating", id);
+                    }
+                }
+            } catch (IOException e) {
+                log.warn("Could not read {}: {}", FOLDER_ID_FILE, e.getMessage());
+            }
+        }
+        return createBackupFolderHierarchy(idFile);
+    }
+
+    private String createBackupFolderHierarchy(Path idFile) {
+        try {
+            String parentId = findOrCreateFolder("automation", "root");
+            String folderId = findOrCreateFolder("SchoolManager", parentId);
+            Files.createDirectories(idFile.getParent());
+            Files.writeString(idFile, folderId);
+            log.info("Drive backup folder ready at automation/SchoolManager ({})", folderId);
+            return folderId;
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to create Drive backup folder hierarchy", e);
+        }
+    }
+
+    private String findOrCreateFolder(String name, String parentId) throws IOException {
+        String query = String.format(
+                "name = '%s' and mimeType = '%s' and '%s' in parents and trashed = false",
+                name, FOLDER_MIME, parentId);
+        FileList existing = googleDrive.files().list()
+                .setQ(query)
+                .setFields("files(id)")
+                .execute();
+        if (existing.getFiles() != null && !existing.getFiles().isEmpty()) {
+            return existing.getFiles().get(0).getId();
+        }
+        File folder = new File();
+        folder.setName(name);
+        folder.setMimeType(FOLDER_MIME);
+        folder.setParents(Collections.singletonList(parentId));
+        return googleDrive.files().create(folder).setFields("id").execute().getId();
     }
 
     @Scheduled(cron = "${app.backup.cron:0 0 2 * * *}")
@@ -116,7 +172,7 @@ public class DriveBackupService {
     private void uploadToDrive(Path file, String filename) throws IOException {
         File metadata = new File();
         metadata.setName(filename);
-        metadata.setParents(Collections.singletonList(props.getDriveFolderId()));
+        metadata.setParents(Collections.singletonList(backupFolderId));
 
         FileContent content = new FileContent("application/gzip", file.toFile());
         googleDrive.files().create(metadata, content)
@@ -138,24 +194,6 @@ public class DriveBackupService {
                 googleDrive.files().delete(f.getId()).execute();
                 log.info("Pruned old backup: {}", f.getName());
             }
-        }
-    }
-
-    private void validateDriveFolderConfiguration() {
-        String folderId = props.getDriveFolderId();
-        if (folderId == null || folderId.isBlank()) {
-            throw new IllegalStateException("Backup is enabled, but app.backup.drive-folder-id is blank");
-        }
-        try {
-            File folder = googleDrive.files().get(folderId).setFields("id,mimeType,trashed").execute();
-            if (Boolean.TRUE.equals(folder.getTrashed())) {
-                throw new IllegalStateException("Configured Drive folder is trashed: " + folderId);
-            }
-            if (!"application/vnd.google-apps.folder".equals(folder.getMimeType())) {
-                throw new IllegalStateException("Configured drive-folder-id is not a folder: " + folderId);
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("Invalid app.backup.drive-folder-id: " + folderId, e);
         }
     }
 
@@ -191,7 +229,7 @@ public class DriveBackupService {
     private List<File> listBackupFiles() throws IOException {
         String query = String.format(
                 "'%s' in parents and name contains '%s' and name contains '%s' and trashed = false",
-                props.getDriveFolderId(),
+                backupFolderId,
                 BACKUP_FILENAME_PREFIX,
                 BACKUP_FILENAME_SUFFIX
         );

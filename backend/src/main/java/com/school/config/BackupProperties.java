@@ -13,7 +13,6 @@ public class BackupProperties {
 
     private boolean enabled = false;
     private String cron = "0 0 2 * * *";
-    private String driveFolderId = "";
     private int retentionDays = 30;
     private String pgDumpPath = "pg_dump";
     private Postgres postgres = new Postgres();

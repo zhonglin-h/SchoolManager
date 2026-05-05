@@ -61,14 +61,10 @@ if (-not (Test-Path -LiteralPath $clientSecretPath)) {
 Write-Host " Google client secret: $clientSecretPath"
 
 $localProps = Join-Path $root "backend\src\main\resources\application-local.properties"
-$backupFolderId = Get-PropertyValue -filePath $localProps -propertyName "app.backup.drive-folder-id"
 $backupPgUser = Get-PropertyValue -filePath $localProps -propertyName "app.backup.postgres.username"
 $backupPgPassword = Get-PropertyValue -filePath $localProps -propertyName "app.backup.postgres.password"
 
 $backupWarnings = @()
-if (-not $backupFolderId -or $backupFolderId -match "^<.*>$") {
-    $backupWarnings += "app.backup.drive-folder-id"
-}
 if (-not $backupPgUser -or $backupPgUser -match "^<.*>$") {
     $backupWarnings += "app.backup.postgres.username"
 }
@@ -189,7 +185,24 @@ if (-not $ready) {
     Write-Host " Opening app URL anyway..."
 }
 
-Start-Sleep -Seconds 2
+# Brief settle wait — ApplicationReadyEvent fires after the health endpoint is up,
+# so a startup listener failure can crash the process after we already saw 200.
+Start-Sleep -Seconds 3
+if ($proc.HasExited) {
+    $proc.WaitForExit()
+    Write-Host ""
+    Write-Host " ERROR: App crashed immediately after startup (exit code $($proc.ExitCode))."
+    if (Test-Path -LiteralPath $stdoutLog) {
+        Write-Host " Last app log lines:"
+        Get-Content -LiteralPath $stdoutLog -Tail 40 | ForEach-Object { Write-Host "  $_" }
+    }
+    if (Test-Path -LiteralPath $stderrLog) {
+        Write-Host " Last stderr lines:"
+        Get-Content -LiteralPath $stderrLog -Tail 10 | ForEach-Object { Write-Host "  $_" }
+    }
+    throw "Application crashed after startup."
+}
+
 Start-Process "http://localhost:8080"
 
 Write-Host ""
