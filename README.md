@@ -115,11 +115,11 @@ The app sends real-time class notifications to the principal via a Telegram bot 
 
 1. **Create a bot** — open Telegram and message `@BotFather`, then send `/newbot` and follow the prompts. Copy the **bot token** it gives you (format: `123456789:ABC-...`).
 
-2. **Get your chat ID** — start a chat with your new bot (send it any message), then open this URL in a browser (replace `<TOKEN>` with your bot token):
+2. **Get your chat ID** — in Telegram, search for your bot by the username you gave it and open that chat. Send it any message (e.g. `hello`). Then open this URL in a browser (replace `<TOKEN>` with your bot token):
    ```
    https://api.telegram.org/bot<TOKEN>/getUpdates
    ```
-   Find `"chat":{"id":...}` in the response and copy that number.
+   Find `"chat":{"id":...}` in the JSON response and copy that number.
 
 3. **Add to `application-local.properties`:**
    ```properties
