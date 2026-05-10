@@ -109,7 +109,25 @@ This app uses Google OAuth (user-based) for Calendar and Meet API access.
 4. **Create an OAuth 2.0 Client ID** of type *Desktop app*, download the JSON, and save it as `backend/client_secret.json`.
 5. **First run/authentication** - run `./start.ps1` from the repository root. The app opens a Google OAuth consent URL in your browser. Sign in with your Google account, then approve the requested scopes. Tokens are cached at `./data/tokens` and reused on subsequent starts. On the first backup run the app auto-creates `automation/SchoolManager` in your Drive.
 
-### 5. Set up Meet auto-join (optional)
+### 5. Set up Telegram notifications
+
+The app sends real-time class notifications to the principal via a Telegram bot (student arrivals, absences, auto-join failures, etc.).
+
+1. **Create a bot** — open Telegram and message `@BotFather`, then send `/newbot` and follow the prompts. Copy the **bot token** it gives you (format: `123456789:ABC-...`).
+
+2. **Get your chat ID** — start a chat with your new bot (send it any message), then open this URL in a browser (replace `<TOKEN>` with your bot token):
+   ```
+   https://api.telegram.org/bot<TOKEN>/getUpdates
+   ```
+   Find `"chat":{"id":...}` in the response and copy that number.
+
+3. **Add to `application-local.properties`:**
+   ```properties
+   telegram.bot-token=<your-bot-token>
+   telegram.chat-id=<your-chat-id>
+   ```
+
+### 6. Set up Meet auto-join (optional)
 
 Auto-join uses Playwright with a dedicated Chrome profile signed in as the principal account.
 
