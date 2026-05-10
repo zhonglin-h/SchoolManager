@@ -27,6 +27,8 @@ cd SchoolManager
 
 `setup.ps1` will verify prerequisites, install frontend and backend dependencies, download Playwright browser binaries, and create `backend/src/main/resources/application-local.properties` from the template.
 
+> **Note:** The first run may fail with a build approval prompt from pnpm. If so, `cd` into `frontend`, run `pnpm approve-builds`, approve `esbuild` when prompted, then re-run `setup.ps1`.
+
 ### 2. Set up PostgreSQL
 
 After installing PostgreSQL, start the service and verify `psql` is available.
