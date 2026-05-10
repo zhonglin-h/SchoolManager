@@ -5,6 +5,17 @@
 # Lines starting with # are comments and will be ignored at runtime.
 # ============================================================
 
+# ----- PostgreSQL database ----------------------------------------------------
+spring.datasource.username=school
+spring.datasource.password=<your-postgres-password>
+
+# ----- Nightly backup ---------------------------------------------------------
+# Suffix appended to the Drive backup folder name (e.g. -YourName → SchoolManager-YourName).
+# Required. Must be unique per installation so different setups don't share the same folder.
+app.backup.folder-suffix=<-your-unique-suffix>
+app.backup.postgres.username=school
+app.backup.postgres.password=<your-postgres-password>
+
 # ----- Google Calendar --------------------------------------------------------
 # The calendar ID (usually an email address) that the app monitors.
 google.calendar.id=<your-calendar-email@gmail.com>

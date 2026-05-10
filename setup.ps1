@@ -23,9 +23,10 @@ Write-Host ""
 # ---------------------------------------------------------------------------
 # 1. Check Java 21+
 # ---------------------------------------------------------------------------
-Write-Host "[1/6] Checking Java..."
+Write-Host "[1/7] Checking Java..."
 try {
-    $javaVersionLine = (& java -version 2>&1 | Select-Object -First 1)
+    $javaVersionOutput = (& java --version 2>&1)
+    $javaVersionLine = ($javaVersionOutput | Select-Object -First 1)
 }
 catch {
     Write-Host " ERROR: Java is not installed or not on PATH."
@@ -38,6 +39,9 @@ $javaVersion = ""
 if ($javaVersionLine -match '"([^"]+)"') {
     $javaVersion = $matches[1]
 }
+elseif ($javaVersionLine -match '^\S+\s+([0-9][^\s]*)') {
+    $javaVersion = $matches[1]
+}
 $javaMajor = Get-MajorVersionFromSemver $javaVersion
 if (-not $javaMajor -or $javaMajor -lt 21) {
     Write-Host " ERROR: Java 21 or later is required. Found: $javaVersion"
@@ -48,9 +52,44 @@ if (-not $javaMajor -or $javaMajor -lt 21) {
 Write-Host " OK - Java $javaVersion"
 
 # ---------------------------------------------------------------------------
-# 2. Check Node.js
+# 2. Check PostgreSQL tools
 # ---------------------------------------------------------------------------
-Write-Host "[2/6] Checking Node.js..."
+Write-Host "[2/7] Checking PostgreSQL..."
+$psqlFound = $true
+try {
+    $pgVersion = (& psql --version 2>&1).ToString().Trim()
+} catch {
+    $psqlFound = $false
+}
+if (-not $psqlFound -or $LASTEXITCODE -ne 0) {
+    Write-Host " ERROR: PostgreSQL (psql / pg_dump) is not installed or not on PATH."
+    Write-Host " Install PostgreSQL 16 with:"
+    Write-Host "   winget install --id PostgreSQL.PostgreSQL.16 -e"
+    Write-Host " Then re-run setup.ps1."
+    throw "PostgreSQL not found"
+}
+
+$pgDumpFound = $true
+try {
+    $pgDumpVersion = (& pg_dump --version 2>&1).ToString().Trim()
+} catch {
+    $pgDumpFound = $false
+}
+if (-not $pgDumpFound -or $LASTEXITCODE -ne 0) {
+    Write-Host " ERROR: pg_dump is not installed or not on PATH."
+    Write-Host " It is required for nightly backups."
+    Write-Host " Install PostgreSQL 16 with:"
+    Write-Host "   winget install --id PostgreSQL.PostgreSQL.16 -e"
+    Write-Host " Then re-run setup.ps1."
+    throw "pg_dump not found"
+}
+Write-Host " OK - $pgVersion"
+Write-Host " OK - $pgDumpVersion"
+
+# ---------------------------------------------------------------------------
+# 3. Check Node.js
+# ---------------------------------------------------------------------------
+Write-Host "[3/7] Checking Node.js..."
 try {
     $nodeVersion = (& node --version).Trim()
 }
@@ -63,9 +102,9 @@ catch {
 Write-Host " OK - Node.js $nodeVersion"
 
 # ---------------------------------------------------------------------------
-# 3. Check / install pnpm
+# 4. Check / install pnpm
 # ---------------------------------------------------------------------------
-Write-Host "[3/6] Checking pnpm..."
+Write-Host "[4/7] Checking pnpm..."
 $pnpmVersion = $null
 try {
     $pnpmVersion = (& pnpm --version).Trim()
@@ -82,9 +121,9 @@ catch {
 Write-Host " OK - pnpm $pnpmVersion"
 
 # ---------------------------------------------------------------------------
-# 4. Pre-fetch frontend npm dependencies
+# 5. Pre-fetch frontend npm dependencies
 # ---------------------------------------------------------------------------
-Write-Host "[4/6] Installing frontend dependencies..."
+Write-Host "[5/7] Installing frontend dependencies..."
 Push-Location (Join-Path $root "frontend")
 try {
     & pnpm install
@@ -98,9 +137,9 @@ finally {
 Write-Host " OK - frontend dependencies installed."
 
 # ---------------------------------------------------------------------------
-# 5. Pre-fetch backend dependencies and download Playwright browsers
+# 6. Pre-fetch backend dependencies and download Playwright browsers
 # ---------------------------------------------------------------------------
-Write-Host "[5/6] Pre-fetching backend dependencies and Playwright browsers..."
+Write-Host "[6/7] Pre-fetching backend dependencies and Playwright browsers..."
 Push-Location (Join-Path $root "backend")
 try {
     & .\gradlew.bat dependencies -q
@@ -122,9 +161,9 @@ finally {
 Write-Host " OK - backend dependencies ready."
 
 # ---------------------------------------------------------------------------
-# 6. Create application-local.properties if missing
+# 7. Create application-local.properties if missing
 # ---------------------------------------------------------------------------
-Write-Host "[6/6] Checking credential configuration..."
+Write-Host "[7/7] Checking credential configuration..."
 $localProps = Join-Path $root "backend\src\main\resources\application-local.properties"
 if (-not (Test-Path -LiteralPath $localProps)) {
     $template = Join-Path $root "application.properties.template"

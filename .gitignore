@@ -67,3 +67,5 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 .terraform.lock.hcl
+setup.ps1
+backend/src/main/resources/application-local copy.properties

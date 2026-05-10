@@ -4,6 +4,17 @@ Set-StrictMode -Version Latest
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
+function Get-PropertyValue([string]$filePath, [string]$propertyName) {
+    if (-not (Test-Path -LiteralPath $filePath)) { return $null }
+    $pattern = "^\s*" + [regex]::Escape($propertyName) + "\s*=\s*(.*)\s*$"
+    foreach ($line in Get-Content -LiteralPath $filePath) {
+        if ($line -match $pattern) {
+            return $matches[1].Trim()
+        }
+    }
+    return $null
+}
+
 Write-Host "============================================================"
 Write-Host " School Manager - Start"
 Write-Host "============================================================"
@@ -48,6 +59,40 @@ if (-not (Test-Path -LiteralPath $clientSecretPath)) {
     throw "Missing required client_secret.json"
 }
 Write-Host " Google client secret: $clientSecretPath"
+
+$localProps = Join-Path $root "backend\src\main\resources\application-local.properties"
+$backupPgUser = Get-PropertyValue -filePath $localProps -propertyName "app.backup.postgres.username"
+$backupPgPassword = Get-PropertyValue -filePath $localProps -propertyName "app.backup.postgres.password"
+
+$backupWarnings = @()
+if (-not $backupPgUser -or $backupPgUser -match "^<.*>$") {
+    $backupWarnings += "app.backup.postgres.username"
+}
+if (-not $backupPgPassword -or $backupPgPassword -match "^<.*>$") {
+    $backupWarnings += "app.backup.postgres.password"
+}
+
+if ($backupWarnings.Count -gt 0) {
+    Write-Host ""
+    Write-Host " WARNING: Backup setup is incomplete in application-local.properties:"
+    foreach ($field in $backupWarnings) {
+        Write-Host "   - $field"
+    }
+    Write-Host " Nightly backups may fail until these are configured."
+}
+else {
+    Write-Host " Backup configuration fields are set."
+}
+
+$folderSuffix = Get-PropertyValue -filePath $localProps -propertyName "app.backup.folder-suffix"
+if (-not $folderSuffix -or $folderSuffix -match "^<.*>$") {
+    Write-Host ""
+    Write-Host " ERROR: app.backup.folder-suffix is required in application-local.properties."
+    Write-Host " It is appended to the Drive backup folder name (e.g. -YourName -> SchoolManager-YourName)."
+    Write-Host " Set it to a unique value that identifies this installation."
+    throw "Missing required app.backup.folder-suffix"
+}
+Write-Host " Drive backup folder: SchoolManager$folderSuffix"
 
 Write-Host "Starting School Manager..."
 $stdoutLog = Join-Path $root "school-manager.log"
@@ -150,7 +195,24 @@ if (-not $ready) {
     Write-Host " Opening app URL anyway..."
 }
 
-Start-Sleep -Seconds 2
+# Brief settle wait — ApplicationReadyEvent fires after the health endpoint is up,
+# so a startup listener failure can crash the process after we already saw 200.
+Start-Sleep -Seconds 3
+if ($proc.HasExited) {
+    $proc.WaitForExit()
+    Write-Host ""
+    Write-Host " ERROR: App crashed immediately after startup (exit code $($proc.ExitCode))."
+    if (Test-Path -LiteralPath $stdoutLog) {
+        Write-Host " Last app log lines:"
+        Get-Content -LiteralPath $stdoutLog -Tail 40 | ForEach-Object { Write-Host "  $_" }
+    }
+    if (Test-Path -LiteralPath $stderrLog) {
+        Write-Host " Last stderr lines:"
+        Get-Content -LiteralPath $stderrLog -Tail 10 | ForEach-Object { Write-Host "  $_" }
+    }
+    throw "Application crashed after startup."
+}
+
 Start-Process "http://localhost:8080"
 
 Write-Host ""
