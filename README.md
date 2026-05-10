@@ -31,6 +31,11 @@ cd SchoolManager
 
 After installing PostgreSQL, start the service and verify `psql` is available.
 
+> **Note:** The `winget` installer sets the default `postgres` superuser password to `postgres`. Change it before proceeding:
+> ```powershell
+> psql -U postgres -c "ALTER USER postgres PASSWORD 'newpassword';"
+> ```
+
 ```powershell
 # Find and start the PostgreSQL Windows service
 Get-Service *postgres*
