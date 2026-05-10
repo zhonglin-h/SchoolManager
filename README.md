@@ -11,7 +11,7 @@ A local, single-user web application for managing students, classes, attendance,
 | Java JDK | 21 | `winget install Microsoft.OpenJDK.21` |
 | Node.js | 20 LTS | `winget install OpenJS.NodeJS.LTS` |
 | pnpm | latest | `npm install -g pnpm` |
-| PostgreSQL | 16 | Download: https://www.postgresql.org/download/windows/ |
+| PostgreSQL | 16 | `winget install PostgreSQL.PostgreSQL.16` |
 
 ---
 
