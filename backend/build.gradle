@@ -104,11 +104,12 @@ tasks.register('manualTest', Test) {
         includeTags 'manual'
     }
     testLogging {
-        events 'failed'
+        events 'started', 'passed', 'skipped', 'failed'
         exceptionFormat 'full'
         showExceptions true
         showCauses true
         showStackTraces false
+        showStandardStreams true
     }
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
