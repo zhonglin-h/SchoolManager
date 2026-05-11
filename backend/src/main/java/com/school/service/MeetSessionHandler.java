@@ -270,10 +270,14 @@ public class MeetSessionHandler {
         ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
         ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
         boolean isLate = Instant.now().isAfter(lateThreshold);
+        LocalDate today = LocalDate.now();
 
         for (Person student : expected.students()) {
             if (!seenStudentIds.contains(student.getId()) && resolved.studentIds().contains(student.getId())) {
                 seenStudentIds.add(student.getId());
+                if (attendanceRepository.findByPersonIdAndCalendarEventIdAndDate(student.getId(), event.getId(), today).isPresent()) {
+                    continue;
+                }
                 AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 attendanceHelper.recordAttendance(student, event, status);
                 notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL,
@@ -283,6 +287,9 @@ public class MeetSessionHandler {
         for (Person teacher : expected.teachers()) {
             if (!seenTeacherIds.contains(teacher.getId()) && resolved.teacherIds().contains(teacher.getId())) {
                 seenTeacherIds.add(teacher.getId());
+                if (attendanceRepository.findByPersonIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), today).isPresent()) {
+                    continue;
+                }
                 AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 attendanceHelper.recordAttendance(teacher, event, status);
                 notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL,
