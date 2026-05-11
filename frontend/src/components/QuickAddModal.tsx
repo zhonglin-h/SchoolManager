@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { createStudent, createTeacher, upsertAttendance } from '../services/api'
+import { createStudent, createTeacher } from '../services/api'
 
 interface Props {
   email: string
@@ -34,32 +34,10 @@ export default function QuickAddModal({ email, initialName = '', calendarEventId
           parentEmail: '',
           parentPhone: '',
         })
-        if (calendarEventId) {
-          await upsertAttendance(
-            person.id,
-            'STUDENT',
-            calendarEventId,
-            'PRESENT',
-            undefined,
-            eventTitle,
-            true,
-          )
-        }
         queryClient.invalidateQueries({ queryKey: ['students'] })
         onSaved?.(person.id, 'STUDENT')
       } else {
         const person = await createTeacher({ name, meetEmail, meetDisplayName, phone: '', hourlyRate: null })
-        if (calendarEventId) {
-          await upsertAttendance(
-            person.id,
-            'TEACHER',
-            calendarEventId,
-            'PRESENT',
-            undefined,
-            eventTitle,
-            true,
-          )
-        }
         queryClient.invalidateQueries({ queryKey: ['teachers'] })
         onSaved?.(person.id, 'TEACHER')
       }
