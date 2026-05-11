@@ -213,7 +213,15 @@ class PlaywrightJoinAutomationClientManualSmokeTest {
         }
 
         try {
-            int pageCount = context.pages().size();
+            java.util.List<com.microsoft.playwright.Page> pages = context.pages();
+            int pageCount = pages.size();
+            if (!pages.isEmpty()) {
+                try {
+                    pages.get(0).title();
+                } catch (Exception e) {
+                    return new CloseObservation(true, "page.title() probe threw " + summarizeException(e), pageCount);
+                }
+            }
             return new CloseObservation(false, "", pageCount);
         } catch (Exception e) {
             return new CloseObservation(true, "BrowserContext.pages() probe threw " + summarizeException(e), null);
