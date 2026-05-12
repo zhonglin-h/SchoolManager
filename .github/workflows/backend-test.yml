@@ -22,4 +22,4 @@ jobs:
 
       - name: Run backend tests
         working-directory: backend
-        run: ./gradlew test
+        run: ./gradlew test -x buildFrontend
