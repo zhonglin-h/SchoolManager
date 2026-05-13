@@ -272,10 +272,14 @@ public class MeetSessionHandler {
                                      Instant lateThreshold, boolean sendUnmatchedGuests) {
         ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
         ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
+        LocalDate today = LocalDate.now();
 
         for (Person student : expected.students()) {
             if (!seenStudentIds.contains(student.getId()) && resolved.studentIds().contains(student.getId())) {
                 seenStudentIds.add(student.getId());
+                if (attendanceRepository.findByPersonIdAndCalendarEventIdAndDate(student.getId(), event.getId(), today).isPresent()) {
+                    continue;
+                }
                 Instant joinTime = resolved.joinTimes().getOrDefault(student.getId(), Instant.now());
                 AttendanceStatus status = joinTime.isAfter(lateThreshold) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 attendanceHelper.recordAttendance(student, event, status);
@@ -286,6 +290,9 @@ public class MeetSessionHandler {
         for (Person teacher : expected.teachers()) {
             if (!seenTeacherIds.contains(teacher.getId()) && resolved.teacherIds().contains(teacher.getId())) {
                 seenTeacherIds.add(teacher.getId());
+                if (attendanceRepository.findByPersonIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), today).isPresent()) {
+                    continue;
+                }
                 Instant joinTime = resolved.joinTimes().getOrDefault(teacher.getId(), Instant.now());
                 AttendanceStatus status = joinTime.isAfter(lateThreshold) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 attendanceHelper.recordAttendance(teacher, event, status);
