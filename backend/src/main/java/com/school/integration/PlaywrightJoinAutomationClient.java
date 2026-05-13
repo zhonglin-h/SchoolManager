@@ -304,7 +304,10 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             return false;
         }
         try {
-            context.pages();
+            List<Page> pages = context.pages();
+            if (!pages.isEmpty()) {
+                pages.get(0).title();
+            }
             return true;
         } catch (Exception e) {
             return false;

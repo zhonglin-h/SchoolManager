@@ -103,18 +103,14 @@ function Rotate-LogFile([string]$logPath, [int]$keepCount = 4) {
         return
     }
 
-    $oldestToDelete = "$logPath.$($keepCount + 1)"
-    if (Test-Path -LiteralPath $oldestToDelete) {
-        $answer = Read-Host "Delete archives older than .$keepCount for $(Split-Path -Leaf $logPath)? (y/N)"
-        if ($answer -match '^(y|yes)$') {
-            Get-ChildItem -LiteralPath (Split-Path -Parent $logPath) -File |
-                Where-Object { $_.Name -match ("^{0}\.\d+$" -f [regex]::Escape((Split-Path -Leaf $logPath))) } |
-                ForEach-Object {
-                    $suffix = [int]($_.Name.Split(".")[-1])
-                    if ($suffix -gt $keepCount) {
-                        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
-                    }
-                }
+    $archivesToDelete = Get-ChildItem -LiteralPath (Split-Path -Parent $logPath) -File |
+        Where-Object { $_.Name -match ("^{0}\.\d+$" -f [regex]::Escape((Split-Path -Leaf $logPath))) } |
+        Where-Object { [int]($_.Name.Split(".")[-1]) -gt $keepCount }
+
+    if ($archivesToDelete) {
+        Write-Host "Deleting archives older than .$keepCount for $(Split-Path -Leaf $logPath)."
+        foreach ($archive in $archivesToDelete) {
+            Remove-Item -LiteralPath $archive.FullName -Force -ErrorAction SilentlyContinue
         }
     }
 

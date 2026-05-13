@@ -7,6 +7,7 @@ on:
 
 jobs:
   lint:
+    name: "Frontend Lint"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -17,7 +18,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Enable corepack and install pnpm
         run: corepack enable
