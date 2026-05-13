@@ -272,23 +272,24 @@ public class MeetSessionHandler {
                                      Instant lateThreshold, boolean sendUnmatchedGuests) {
         ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
         ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
-        boolean isLate = Instant.now().isAfter(lateThreshold);
 
         for (Person student : expected.students()) {
             if (!seenStudentIds.contains(student.getId()) && resolved.studentIds().contains(student.getId())) {
                 seenStudentIds.add(student.getId());
-                AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+                Instant joinTime = resolved.joinTimes().getOrDefault(student.getId(), Instant.now());
+                AttendanceStatus status = joinTime.isAfter(lateThreshold) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 attendanceHelper.recordAttendance(student, event, status);
-                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL,
+                notificationService.notify(status == AttendanceStatus.LATE ? NotificationType.LATE : NotificationType.ARRIVAL,
                         event, new PersonSubject(student));
             }
         }
         for (Person teacher : expected.teachers()) {
             if (!seenTeacherIds.contains(teacher.getId()) && resolved.teacherIds().contains(teacher.getId())) {
                 seenTeacherIds.add(teacher.getId());
-                AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+                Instant joinTime = resolved.joinTimes().getOrDefault(teacher.getId(), Instant.now());
+                AttendanceStatus status = joinTime.isAfter(lateThreshold) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 attendanceHelper.recordAttendance(teacher, event, status);
-                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL,
+                notificationService.notify(status == AttendanceStatus.LATE ? NotificationType.LATE : NotificationType.ARRIVAL,
                         event, new PersonSubject(teacher));
             }
         }
