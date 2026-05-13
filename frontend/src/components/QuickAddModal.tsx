@@ -1,18 +1,17 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { createStudent, createTeacher, upsertAttendance } from '../services/api'
+import { createStudent, createTeacher } from '../services/api'
 
 interface Props {
   email: string
   initialName?: string
-  calendarEventId?: string
   eventTitle?: string
   mode: 'student' | 'teacher'
   onClose: () => void
   onSaved?: (id: number, personType: 'STUDENT' | 'TEACHER') => void
 }
 
-export default function QuickAddModal({ email, initialName = '', calendarEventId, eventTitle, mode, onClose, onSaved }: Props) {
+export default function QuickAddModal({ email, initialName = '', eventTitle, mode, onClose, onSaved }: Props) {
   const queryClient = useQueryClient()
   const [name, setName] = useState(initialName)
   const [meetEmail, setMeetEmail] = useState(email)
@@ -34,32 +33,10 @@ export default function QuickAddModal({ email, initialName = '', calendarEventId
           parentEmail: '',
           parentPhone: '',
         })
-        if (calendarEventId) {
-          await upsertAttendance(
-            person.id,
-            'STUDENT',
-            calendarEventId,
-            'PRESENT',
-            undefined,
-            eventTitle,
-            true,
-          )
-        }
         queryClient.invalidateQueries({ queryKey: ['students'] })
         onSaved?.(person.id, 'STUDENT')
       } else {
         const person = await createTeacher({ name, meetEmail, meetDisplayName, phone: '', hourlyRate: null })
-        if (calendarEventId) {
-          await upsertAttendance(
-            person.id,
-            'TEACHER',
-            calendarEventId,
-            'PRESENT',
-            undefined,
-            eventTitle,
-            true,
-          )
-        }
         queryClient.invalidateQueries({ queryKey: ['teachers'] })
         onSaved?.(person.id, 'TEACHER')
       }
@@ -78,6 +55,7 @@ export default function QuickAddModal({ email, initialName = '', calendarEventId
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-lg p-5 w-80">
         <h2 className="text-base font-semibold text-gray-800 mb-1">Add as {label}</h2>
+        {eventTitle && <p className="text-xs text-blue-600 mb-1 truncate">{eventTitle}</p>}
         {email && <p className="text-xs text-gray-500 mb-4 truncate">{email}</p>}
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">

@@ -9,7 +9,8 @@ NEW FEATURES
 - [X] open meeting automatically
 - [X] Playwright: build a persistent long-lived runner that reuses one browser context/window across runs (new tab per run)
 - [X] package into manner than can be more portable (needs testing now)
-- [ ] create versioning and backups for database (online?)
+- [X] create versioning and backups for database (online?)
+- [ ] log how many minutes late a participant was when marked LATE
 - [ ] uptime checks
 - [ ] edit msg for guest but not matched
 - [ ] monitor how long teacher stayed there - when teacher leaves (also when arrived)
