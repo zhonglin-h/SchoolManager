@@ -12,7 +12,7 @@ interface Props {
   onSaved?: (id: number, personType: 'STUDENT' | 'TEACHER') => void
 }
 
-export default function QuickAddModal({ email, initialName = '', calendarEventId: _calendarEventId, eventTitle: _eventTitle, mode, onClose, onSaved }: Props) {
+export default function QuickAddModal({ email, initialName = '', mode, onClose, onSaved }: Props) {
   const queryClient = useQueryClient()
   const [name, setName] = useState(initialName)
   const [meetEmail, setMeetEmail] = useState(email)
