@@ -4,6 +4,16 @@ A local, single-user web application for managing students, classes, attendance,
 
 ---
 
+## Tech Stack
+
+- Frontend: React 18 + TypeScript (Vite), React Router, TanStack Query/Table, Tailwind CSS.
+- Backend: Java 21 + Spring Boot 3.
+- Database: PostgreSQL 16.
+
+The frontend includes an `index.html` entry file, but the UI is implemented in React components under `frontend/src` (`.tsx`), not as a static pure HTML/CSS site.
+
+---
+
 ## Prerequisites
 
 | Tool | Minimum version | Install |
