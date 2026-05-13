@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,7 @@ class MeetAttendanceHelper {
     ResolvedParticipants resolveAndAutoLearn(List<MeetParticipant> participants) {
         Set<Long> studentIds = new HashSet<>();
         Set<Long> teacherIds = new HashSet<>();
+        Map<Long, Instant> joinTimes = new HashMap<>();
 
         for (MeetParticipant participant : participants) {
             Optional<Person> student = resolvePersonFromDb(participant, PersonType.STUDENT);
@@ -50,6 +52,7 @@ class MeetAttendanceHelper {
                     personRepository.save(s);
                 }
                 studentIds.add(s.getId());
+                if (participant.earliestStartTime() != null) joinTimes.put(s.getId(), participant.earliestStartTime());
                 continue;
             }
 
@@ -63,9 +66,10 @@ class MeetAttendanceHelper {
                     personRepository.save(t);
                 }
                 teacherIds.add(t.getId());
+                if (participant.earliestStartTime() != null) joinTimes.put(t.getId(), participant.earliestStartTime());
             }
         }
-        return new ResolvedParticipants(studentIds, teacherIds);
+        return new ResolvedParticipants(studentIds, teacherIds, joinTimes);
     }
 
     private Optional<Person> resolvePersonFromDb(MeetParticipant participant, PersonType personType) {
@@ -187,5 +191,5 @@ class MeetAttendanceHelper {
     }
 }
 
-record ResolvedParticipants(Set<Long> studentIds, Set<Long> teacherIds) {}
+record ResolvedParticipants(Set<Long> studentIds, Set<Long> teacherIds, Map<Long, Instant> joinTimes) {}
 record ExpectedParticipants(List<Person> students, List<Person> teachers) {}

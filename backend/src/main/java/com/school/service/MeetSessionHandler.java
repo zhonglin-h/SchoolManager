@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
@@ -169,6 +170,7 @@ public class MeetSessionHandler {
             Instant lateThreshold, AtomicBoolean meetingActive) {
         int totalExpected = getTotalExpectedParticipants(event);
         AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
+        AtomicInteger unmatchedPollCount = new AtomicInteger(0);
 
         futureRef.set(taskScheduler.scheduleAtFixedRate(() -> {
             try {
@@ -186,7 +188,8 @@ public class MeetSessionHandler {
                 }
 
                 List<MeetParticipant> activeParticipants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-                processParticipants(event, activeParticipants, seenStudentIds, seenTeacherIds, lateThreshold);
+                boolean sendUnmatchedGuests = unmatchedPollCount.incrementAndGet() <= 10;
+                processParticipants(event, activeParticipants, seenStudentIds, seenTeacherIds, lateThreshold, sendUnmatchedGuests);
 
                 if (hasSeenAllExpectedParticipants(seenStudentIds, seenTeacherIds, totalExpected) && totalExpected > 0) {
                     notificationService.notify(NotificationType.ALL_PRESENT, event, null);
@@ -230,7 +233,7 @@ public class MeetSessionHandler {
             if (googleMeetClient.isMeetingActive(event.getSpaceCode())) {
                 context.meetingActive().set(true);
                 List<MeetParticipant> activeParticipants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-                processParticipants(event, activeParticipants, context.seenStudentIds(), context.seenTeacherIds(), context.lateThreshold());
+                processParticipants(event, activeParticipants, context.seenStudentIds(), context.seenTeacherIds(), context.lateThreshold(), true);
             } else {
                 sendMeetingStartReminder(event);
             }
@@ -266,10 +269,9 @@ public class MeetSessionHandler {
 
     private void processParticipants(CalendarEvent event, List<MeetParticipant> participants,
                                      Set<Long> seenStudentIds, Set<Long> seenTeacherIds,
-                                     Instant lateThreshold) {
+                                     Instant lateThreshold, boolean sendUnmatchedGuests) {
         ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
         ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
-        boolean isLate = Instant.now().isAfter(lateThreshold);
         LocalDate today = LocalDate.now();
 
         for (Person student : expected.students()) {
@@ -278,9 +280,10 @@ public class MeetSessionHandler {
                 if (attendanceRepository.findByPersonIdAndCalendarEventIdAndDate(student.getId(), event.getId(), today).isPresent()) {
                     continue;
                 }
-                AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+                Instant joinTime = resolved.joinTimes().getOrDefault(student.getId(), Instant.now());
+                AttendanceStatus status = joinTime.isAfter(lateThreshold) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 attendanceHelper.recordAttendance(student, event, status);
-                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL,
+                notificationService.notify(status == AttendanceStatus.LATE ? NotificationType.LATE : NotificationType.ARRIVAL,
                         event, new PersonSubject(student));
             }
         }
@@ -290,14 +293,17 @@ public class MeetSessionHandler {
                 if (attendanceRepository.findByPersonIdAndCalendarEventIdAndDate(teacher.getId(), event.getId(), today).isPresent()) {
                     continue;
                 }
-                AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+                Instant joinTime = resolved.joinTimes().getOrDefault(teacher.getId(), Instant.now());
+                AttendanceStatus status = joinTime.isAfter(lateThreshold) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
                 attendanceHelper.recordAttendance(teacher, event, status);
-                notificationService.notify(isLate ? NotificationType.LATE : NotificationType.ARRIVAL,
+                notificationService.notify(status == AttendanceStatus.LATE ? NotificationType.LATE : NotificationType.ARRIVAL,
                         event, new PersonSubject(teacher));
             }
         }
         notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
-        processUnmatchedGuests(event, expected, participants);
+        if (sendUnmatchedGuests) {
+            processUnmatchedGuests(event, expected, participants);
+        }
     }
 
     private void notifyMissing(CalendarEvent event, ExpectedParticipants expected,
