@@ -61,7 +61,8 @@ class MeetAttendanceMonitorTest {
         assertThat(checks).isNotEmpty();
         assertThat(checks).allMatch(c -> c.eventId().equals("evt-future"));
         assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
-                .contains("MEETING_NOT_STARTED_15", "PRE_CLASS_JOINS", "SESSION_START", "SESSION_FINALIZE");
+                .contains("MEETING_NOT_STARTED_15", "PRE_CLASS_JOINS", "SESSION_START",
+                        "NOT_YET_JOINED_5", "NOT_YET_JOINED_10", "SESSION_FINALIZE");
     }
 
     @Test
@@ -186,6 +187,64 @@ class MeetAttendanceMonitorTest {
         List<String> types = checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
         assertThat(types).doesNotContain("MEETING_NOT_STARTED_15");
         assertThat(types).contains("PRE_CLASS_JOINS", "SESSION_START", "SESSION_FINALIZE");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_schedulesNotYetJoined5And10ForFutureEvent() throws Exception {
+        CalendarEvent future = new CalendarEvent("evt-nyj", "NYJ Class",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of("alice@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(future));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.scheduleEventsForToday();
+
+        List<String> types = monitor.getUpcomingChecks().stream()
+                .map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
+        assertThat(types).contains("NOT_YET_JOINED_5", "NOT_YET_JOINED_10");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_skipsNotYetJoinedChecksForShortSession() throws Exception {
+        // Session is only 3 minutes long — T+5 and T+10 fall after the end time.
+        CalendarEvent shortSession = new CalendarEvent("evt-short", "Short Class",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(1), LocalDateTime.now().plusHours(1).plusMinutes(3),
+                List.of("alice@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(shortSession));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenReturn(mock(ScheduledFuture.class));
+
+        monitor.scheduleEventsForToday();
+
+        List<String> types = monitor.getUpcomingChecks().stream()
+                .map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
+        assertThat(types).doesNotContain("NOT_YET_JOINED_5", "NOT_YET_JOINED_10");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scheduleEventsForToday_notYetJoinedTaskCallsCheckNotYetJoined() throws Exception {
+        CalendarEvent future = new CalendarEvent("evt-nyj-fire", "NYJ Fire",
+                "https://meet.google.com/xyz", "xyz",
+                LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
+                List.of("alice@meet.com"));
+        when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(future));
+        when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
+                .thenAnswer(invocation -> {
+                    Runnable task = invocation.getArgument(0);
+                    task.run();
+                    return mock(ScheduledFuture.class);
+                });
+
+        monitor.scheduleEventsForToday();
+
+        // checkNotYetJoined must have been invoked at least twice (T+5 and T+10)
+        verify(sessionHandler, org.mockito.Mockito.atLeast(2)).checkNotYetJoined(future);
     }
 
     @Test

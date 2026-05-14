@@ -144,6 +144,8 @@ public class MeetAttendanceMonitor {
                     .atZone(ZoneId.systemDefault()).toInstant();
             Instant start = event.getStartTime()
                     .atZone(ZoneId.systemDefault()).toInstant();
+            Instant plus5  = start.plusSeconds(5  * 60);
+            Instant plus10 = start.plusSeconds(10 * 60);
             Instant end = event.getEndTime()
                     .atZone(ZoneId.systemDefault()).toInstant();
 
@@ -189,6 +191,21 @@ public class MeetAttendanceMonitor {
                 // Session already started but not yet ended: catch up on any missed polling
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_POLLING", end));
                 sessionHandler.resumeSessionPolling(event);
+            }
+
+            if (plus5.isAfter(now) && plus5.isBefore(end)) {
+                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "NOT_YET_JOINED_5", plus5));
+                futures.add(taskScheduler.schedule(() -> {
+                    upcomingChecksRegistry.remove(event.getId(), "NOT_YET_JOINED_5");
+                    sessionHandler.checkNotYetJoined(event);
+                }, plus5));
+            }
+            if (plus10.isAfter(now) && plus10.isBefore(end)) {
+                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "NOT_YET_JOINED_10", plus10));
+                futures.add(taskScheduler.schedule(() -> {
+                    upcomingChecksRegistry.remove(event.getId(), "NOT_YET_JOINED_10");
+                    sessionHandler.checkNotYetJoined(event);
+                }, plus10));
             }
 
             if (end.isAfter(now)) {
