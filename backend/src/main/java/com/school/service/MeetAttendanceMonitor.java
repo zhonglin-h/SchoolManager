@@ -177,7 +177,7 @@ public class MeetAttendanceMonitor {
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "PRE_CLASS_JOINS", minus3));
                 futures.add(taskScheduler.schedule(() -> {
                     upcomingChecksRegistry.remove(event.getId(), "PRE_CLASS_JOINS");
-                    sessionHandler.checkPreClassJoins(event, "T−3");
+                    sessionHandler.checkPreClassJoins(event, "3 min before start");
                 }, minus3));
             }
             if (start.isAfter(now)) {
@@ -186,7 +186,7 @@ public class MeetAttendanceMonitor {
                     upcomingChecksRegistry.remove(event.getId(), "SESSION_START");
                     upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_POLLING", end));
                     sessionHandler.startSessionPolling(event);
-                    sessionHandler.checkNotYetJoined(event, "T+0");
+                    sessionHandler.checkNotYetJoined(event, "class start");
                 }, start));
             } else if (end.isAfter(now)) {
                 // Session already started but not yet ended: catch up on any missed polling
@@ -198,14 +198,14 @@ public class MeetAttendanceMonitor {
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "NOT_YET_JOINED_5", plus5));
                 futures.add(taskScheduler.schedule(() -> {
                     upcomingChecksRegistry.remove(event.getId(), "NOT_YET_JOINED_5");
-                    sessionHandler.checkNotYetJoined(event, "T+5");
+                    sessionHandler.checkNotYetJoined(event, "5 min after start");
                 }, plus5));
             }
             if (plus10.isAfter(now) && plus10.isBefore(end)) {
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "NOT_YET_JOINED_10", plus10));
                 futures.add(taskScheduler.schedule(() -> {
                     upcomingChecksRegistry.remove(event.getId(), "NOT_YET_JOINED_10");
-                    sessionHandler.checkNotYetJoined(event, "T+10");
+                    sessionHandler.checkNotYetJoined(event, "10 min after start");
                 }, plus10));
             }
 

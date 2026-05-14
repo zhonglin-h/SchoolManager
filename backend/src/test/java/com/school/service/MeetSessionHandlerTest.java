@@ -151,12 +151,12 @@ class MeetSessionHandlerTest {
         when(personRepository.findByPersonTypeAndMeetDisplayNameIgnoreCaseAndActiveTrue(PersonType.TEACHER, "Victoria Yin"))
                 .thenReturn(Optional.of(victoria));
 
-        sessionHandler.checkPreClassJoins(event, "T−3");
+        sessionHandler.checkPreClassJoins(event, "3 min before start");
 
         ArgumentCaptor<NotificationSubject> subjectCaptor = ArgumentCaptor.forClass(NotificationSubject.class);
-        verify(notificationService).notify(eq(NotificationType.UNMATCHED_GUESTS), eq(event), subjectCaptor.capture());
-        GuestSubject guestSubject = (GuestSubject) subjectCaptor.getValue();
-        assertThat(guestSubject.unmatchedInvitees()).containsExactly("victoriasupereducation.com");
-        assertThat(guestSubject.unmatchedParticipants()).containsExactly("Victoria Yin");
+        verify(notificationService).notify(eq(NotificationType.ATTENDANCE_CHECKPOINT), eq(event), subjectCaptor.capture());
+        CheckpointSubject cs = (CheckpointSubject) subjectCaptor.getValue();
+        assertThat(cs.unmatchedInvitees()).containsExactly("victoriasupereducation.com");
+        assertThat(cs.unmatchedParticipants()).containsExactly("Victoria Yin");
     }
 }

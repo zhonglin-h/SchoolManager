@@ -44,7 +44,7 @@ public enum NotificationType {
             true, true, false
     ),
     ATTENDANCE_CHECKPOINT(
-            (e, r) -> "Attendance Check " + r.getName() + ": " + e.getTitle(),
+            (e, r) -> "Attendance — " + e.getTitle() + " (" + r.getName() + ")",
             (e, r) -> "",  // body built dynamically in NotificationService.resolveBody
             true, true, false
     ),

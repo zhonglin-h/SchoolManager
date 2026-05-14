@@ -99,7 +99,7 @@ public class MeetSessionHandler {
 
     /**
      * At T−3 min, sends one consolidated attendance checkpoint using the live participant list,
-     * then reports any unmatched guests.
+     * including any unmatched invitees or unrecognised participants.
      */
     public void checkPreClassJoins(CalendarEvent event, String checkLabel) {
         try {
@@ -117,8 +117,9 @@ public class MeetSessionHandler {
                 }
             });
             notificationService.notify(NotificationType.ATTENDANCE_CHECKPOINT, event,
-                    new CheckpointSubject(checkLabel, arrivedNames, notArrivedNames));
-            processUnmatchedGuests(event, expected, participants);
+                    new CheckpointSubject(checkLabel, arrivedNames, notArrivedNames,
+                            attendanceHelper.findUnmatchedInvitees(event),
+                            attendanceHelper.findUnmatchedParticipants(participants, expected)));
         } catch (Exception e) {
             log.warn("Failed pre-class join check for {}: {}", event.getId(), e.getMessage());
         }
@@ -126,7 +127,7 @@ public class MeetSessionHandler {
 
     /**
      * At T+0, T+5 and T+10 min, sends one consolidated attendance checkpoint using DB records
-     * (so someone who joined then left is correctly shown as arrived), then reports unmatched guests.
+     * (so someone who joined then left is correctly shown as arrived), including any unmatched guests.
      */
     public void checkNotYetJoined(CalendarEvent event, String checkLabel) {
         try {
@@ -145,8 +146,9 @@ public class MeetSessionHandler {
                 }
             });
             notificationService.notify(NotificationType.ATTENDANCE_CHECKPOINT, event,
-                    new CheckpointSubject(checkLabel, arrivedNames, notArrivedNames));
-            processUnmatchedGuests(event, expected, participants);
+                    new CheckpointSubject(checkLabel, arrivedNames, notArrivedNames,
+                            attendanceHelper.findUnmatchedInvitees(event),
+                            attendanceHelper.findUnmatchedParticipants(participants, expected)));
         } catch (Exception e) {
             log.warn("Failed attendance checkpoint {} for {}: {}", checkLabel, event.getId(), e.getMessage());
         }
@@ -273,19 +275,7 @@ public class MeetSessionHandler {
         }
     }
 
-    private void processUnmatchedGuests(CalendarEvent event, ExpectedParticipants expected,
-                                       List<MeetParticipant> participants) {
-        List<String> unmatchedInvitees = attendanceHelper.findUnmatchedInvitees(event);
-        List<String> unmatchedParticipants = attendanceHelper.findUnmatchedParticipants(participants, expected);
-        if (!unmatchedInvitees.isEmpty()) {
-            notificationService.notify(
-                    NotificationType.UNMATCHED_GUESTS,
-                    event,
-                    new GuestSubject(unmatchedInvitees, unmatchedParticipants));
-        }
-    }
-
-    /**
+/**
      * Returns the number of expected participants from calendar attendees.
      * Applies the same rule everywhere this count is used.
      */
