@@ -142,6 +142,8 @@ public class MeetAttendanceMonitor {
                     .atZone(ZoneId.systemDefault()).toInstant();
             Instant minus3 = event.getStartTime().minusMinutes(3)
                     .atZone(ZoneId.systemDefault()).toInstant();
+            Instant minus2 = event.getStartTime().minusMinutes(2)
+                    .atZone(ZoneId.systemDefault()).toInstant();
             Instant start = event.getStartTime()
                     .atZone(ZoneId.systemDefault()).toInstant();
             Instant plus5  = start.plusSeconds(5  * 60);
@@ -180,14 +182,13 @@ public class MeetAttendanceMonitor {
                     sessionHandler.checkPreClassJoins(event, "3 min before start");
                 }, minus3));
             }
-            if (start.isAfter(now)) {
-                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_START", start));
+            if (minus2.isAfter(now)) {
+                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_START", minus2));
                 futures.add(taskScheduler.schedule(() -> {
                     upcomingChecksRegistry.remove(event.getId(), "SESSION_START");
                     upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_POLLING", end));
                     sessionHandler.startSessionPolling(event);
-                    sessionHandler.checkNotYetJoined(event, "class start");
-                }, start));
+                }, minus2));
             } else if (end.isAfter(now)) {
                 // Session already started but not yet ended: catch up on any missed polling
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_POLLING", end));

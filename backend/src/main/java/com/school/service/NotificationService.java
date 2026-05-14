@@ -178,10 +178,10 @@ public class NotificationService {
                 lines.add("❌ Not yet joined: " + String.join(", ", cs.notArrivedNames()));
             }
             if (!cs.unmatchedInvitees().isEmpty()) {
-                lines.add("⚠ Unknown invitee (not in system): " + String.join(", ", cs.unmatchedInvitees()));
+                lines.add("❓ Unknown invitee (not in system): " + String.join(", ", cs.unmatchedInvitees()));
             }
             if (!cs.unmatchedParticipants().isEmpty()) {
-                lines.add("⚠ Unknown in room (not in system): " + String.join(", ", cs.unmatchedParticipants()));
+                lines.add("❓ Unknown in room (not in system): " + String.join(", ", cs.unmatchedParticipants()));
             }
             return String.join("\n", lines);
         }
