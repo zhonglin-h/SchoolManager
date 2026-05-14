@@ -61,8 +61,10 @@ class MeetAttendanceMonitorTest {
         assertThat(checks).isNotEmpty();
         assertThat(checks).allMatch(c -> c.eventId().equals("evt-future"));
         assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
-                .contains("MEETING_NOT_STARTED_15", "PRE_CLASS_JOINS", "SESSION_START",
+                .contains("MEETING_NOT_STARTED_15", "SESSION_START",
                         "NOT_YET_JOINED_5", "NOT_YET_JOINED_10", "SESSION_FINALIZE");
+        assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
+                .doesNotContain("PRE_CLASS_JOINS");
     }
 
     @Test
@@ -170,9 +172,9 @@ class MeetAttendanceMonitorTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void scheduleEventsForToday_skipsT15ButSchedulesT3WhenMeetingIsMinutesAway() throws Exception {
-        // Meeting 4 minutes away: T-15 is already past, T-3 is 1 minute in the future.
-        // Only PRE_CLASS_JOINS, SESSION_START, and SESSION_FINALIZE should appear in upcomingChecks.
+    void scheduleEventsForToday_skipsT15WhenMeetingIsMinutesAway() throws Exception {
+        // Meeting 4 minutes away: T-15 is already past, T-2 is still future.
+        // SESSION_START and SESSION_FINALIZE should appear; MEETING_NOT_STARTED_15 should not.
         CalendarEvent soon = new CalendarEvent("evt-soon", "Imminent Class",
                 "https://meet.google.com/abc", "abc",
                 LocalDateTime.now().plusMinutes(4), LocalDateTime.now().plusMinutes(64),
@@ -185,8 +187,8 @@ class MeetAttendanceMonitorTest {
 
         List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
         List<String> types = checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
-        assertThat(types).doesNotContain("MEETING_NOT_STARTED_15");
-        assertThat(types).contains("PRE_CLASS_JOINS", "SESSION_START", "SESSION_FINALIZE");
+        assertThat(types).doesNotContain("MEETING_NOT_STARTED_15", "PRE_CLASS_JOINS");
+        assertThat(types).contains("SESSION_START", "SESSION_FINALIZE");
     }
 
     @Test
@@ -250,10 +252,9 @@ class MeetAttendanceMonitorTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void scheduleEventsForToday_rescheduledToSoonStillGetsFreshT3Check() throws Exception {
-        // Simulate the "Refresh Live" bug: event initially far away (T-3 and T-15 both future),
-        // then rescheduled to 4 minutes from now (T-15 past, T-3 still future).
-        // After re-sync, a fresh PRE_CLASS_JOINS check must be registered.
+    void scheduleEventsForToday_rescheduledToSoonClearsLogsAndSchedulesSessionStart() throws Exception {
+        // Event initially far away, then rescheduled to 4 minutes from now (T-15 past, T-2 still future).
+        // After re-sync, notification logs are cleared and SESSION_START is registered.
         CalendarEvent original = new CalendarEvent("evt-moved", "Math Class",
                 "https://meet.google.com/abc", "abc",
                 LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
@@ -272,8 +273,8 @@ class MeetAttendanceMonitorTest {
 
         List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
         List<String> types = checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
-        assertThat(types).doesNotContain("MEETING_NOT_STARTED_15");
-        assertThat(types).contains("PRE_CLASS_JOINS");
+        assertThat(types).doesNotContain("MEETING_NOT_STARTED_15", "PRE_CLASS_JOINS");
+        assertThat(types).contains("SESSION_START");
         verify(notificationService).clearTodayLogsForEvent("evt-moved");
     }
 

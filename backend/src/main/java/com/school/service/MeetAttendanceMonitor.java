@@ -140,8 +140,6 @@ public class MeetAttendanceMonitor {
 
             Instant minus15 = event.getStartTime().minusMinutes(15)
                     .atZone(ZoneId.systemDefault()).toInstant();
-            Instant minus3 = event.getStartTime().minusMinutes(3)
-                    .atZone(ZoneId.systemDefault()).toInstant();
             Instant minus2 = event.getStartTime().minusMinutes(2)
                     .atZone(ZoneId.systemDefault()).toInstant();
             Instant start = event.getStartTime()
@@ -174,13 +172,6 @@ public class MeetAttendanceMonitor {
                         }
                     }
                 }, minus15));
-            }
-            if (minus3.isAfter(now)) {
-                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "PRE_CLASS_JOINS", minus3));
-                futures.add(taskScheduler.schedule(() -> {
-                    upcomingChecksRegistry.remove(event.getId(), "PRE_CLASS_JOINS");
-                    sessionHandler.checkPreClassJoins(event, "3 min before start");
-                }, minus3));
             }
             if (minus2.isAfter(now)) {
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_START", minus2));

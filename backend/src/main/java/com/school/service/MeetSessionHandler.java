@@ -97,35 +97,7 @@ public class MeetSessionHandler {
         }
     }
 
-    /**
-     * At T−3 min, sends one consolidated attendance checkpoint using the live participant list,
-     * including any unmatched invitees or unrecognised participants.
-     */
-    public void checkPreClassJoins(CalendarEvent event, String checkLabel) {
-        try {
-            List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-            ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
-            ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
-            List<String> arrivedNames = new ArrayList<>();
-            List<String> notArrivedNames = new ArrayList<>();
-            forEachExpectedPerson(expected, (person, personType) -> {
-                Set<Long> resolvedIds = personType == PersonType.STUDENT ? resolved.studentIds() : resolved.teacherIds();
-                if (resolvedIds.contains(person.getId())) {
-                    arrivedNames.add(person.getName());
-                } else {
-                    notArrivedNames.add(person.getName());
-                }
-            });
-            notificationService.notify(NotificationType.ATTENDANCE_CHECKPOINT, event,
-                    new CheckpointSubject(checkLabel, arrivedNames, notArrivedNames,
-                            attendanceHelper.findUnmatchedInvitees(event),
-                            attendanceHelper.findUnmatchedParticipants(participants, expected)));
-        } catch (Exception e) {
-            log.warn("Failed pre-class join check for {}: {}", event.getId(), e.getMessage());
-        }
-    }
-
-    /**
+/**
      * At T+0, T+5 and T+10 min, sends one consolidated attendance checkpoint using DB records
      * (so someone who joined then left is correctly shown as arrived), including any unmatched guests.
      */

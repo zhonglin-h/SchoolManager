@@ -67,43 +67,6 @@ class MeetSessionHandlerTest {
     }
 
     @Test
-    void checkPreClassJoins_notifiesMissingStudentAndTeacher() throws Exception {
-        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of());
-        when(personRepository.findByMeetEmailAndActiveTrue("alice@meet.com"))
-                .thenReturn(Optional.of(student));
-        when(personRepository.findByMeetEmailAndActiveTrue("carol@meet.com"))
-                .thenReturn(Optional.of(teacher));
-
-        sessionHandler.checkPreClassJoins(event, "T−3");
-
-        ArgumentCaptor<NotificationSubject> captor = ArgumentCaptor.forClass(NotificationSubject.class);
-        verify(notificationService).notify(eq(NotificationType.ATTENDANCE_CHECKPOINT), eq(event), captor.capture());
-        CheckpointSubject cs = (CheckpointSubject) captor.getValue();
-        assertThat(cs.checkLabel()).isEqualTo("T−3");
-        assertThat(cs.arrivedNames()).isEmpty();
-        assertThat(cs.notArrivedNames()).containsExactlyInAnyOrder("Alice", "Carol");
-    }
-
-    @Test
-    void checkPreClassJoins_skipsPresentStudentMatchedByGoogleUserId() throws Exception {
-        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(new MeetParticipant("uid-alice", "Alice", null)));
-        when(personRepository.findByMeetEmailAndActiveTrue("alice@meet.com"))
-                .thenReturn(Optional.of(student));
-        when(personRepository.findByMeetEmailAndActiveTrue("carol@meet.com"))
-                .thenReturn(Optional.of(teacher));
-        when(personRepository.findByPersonTypeAndGoogleUserIdAndActiveTrue(PersonType.STUDENT, "uid-alice"))
-                .thenReturn(Optional.of(student));
-
-        sessionHandler.checkPreClassJoins(event, "T−3");
-
-        ArgumentCaptor<NotificationSubject> captor = ArgumentCaptor.forClass(NotificationSubject.class);
-        verify(notificationService).notify(eq(NotificationType.ATTENDANCE_CHECKPOINT), eq(event), captor.capture());
-        CheckpointSubject cs = (CheckpointSubject) captor.getValue();
-        assertThat(cs.arrivedNames()).containsExactly("Alice");
-        assertThat(cs.notArrivedNames()).containsExactly("Carol");
-    }
-
-    @Test
     void finalizeSession_marksAbsentAndSendsTypeSpecificNotifications() throws Exception {
         when(meetClient.getAllParticipants("abc-def")).thenReturn(List.of());
         when(personRepository.findByMeetEmailAndActiveTrue("alice@meet.com"))
@@ -134,29 +97,4 @@ class MeetSessionHandlerTest {
         verify(notificationService).notify(NotificationType.MEETING_NOT_STARTED_15, event, null);
     }
 
-    @Test
-    void checkPreClassJoins_registeredTeacherStillFlaggedWhenNotExpectedAttendee() throws Exception {
-        event.setAttendeeEmails(List.of("victoriasupereducation.com"));
-        Person victoria = Person.builder().id(3L).personType(PersonType.TEACHER)
-                .name("Victoria Yin").meetEmail("victoria@supereducation.com").build();
-
-        when(meetClient.getActiveParticipants("abc-def"))
-                .thenReturn(List.of(new MeetParticipant(null, "Victoria Yin", null)));
-        when(personRepository.findByMeetEmailAndActiveTrue("victoriasupereducation.com"))
-                .thenReturn(Optional.empty());
-        when(personRepository.findByPersonTypeAndMeetDisplayNameIgnoreCaseAndActiveTrue(PersonType.STUDENT, "Victoria Yin"))
-                .thenReturn(Optional.empty());
-        when(personRepository.findByPersonTypeAndNameIgnoreCaseAndActiveTrue(PersonType.STUDENT, "Victoria Yin"))
-                .thenReturn(Optional.empty());
-        when(personRepository.findByPersonTypeAndMeetDisplayNameIgnoreCaseAndActiveTrue(PersonType.TEACHER, "Victoria Yin"))
-                .thenReturn(Optional.of(victoria));
-
-        sessionHandler.checkPreClassJoins(event, "3 min before start");
-
-        ArgumentCaptor<NotificationSubject> subjectCaptor = ArgumentCaptor.forClass(NotificationSubject.class);
-        verify(notificationService).notify(eq(NotificationType.ATTENDANCE_CHECKPOINT), eq(event), subjectCaptor.capture());
-        CheckpointSubject cs = (CheckpointSubject) subjectCaptor.getValue();
-        assertThat(cs.unmatchedInvitees()).containsExactly("victoriasupereducation.com");
-        assertThat(cs.unmatchedParticipants()).containsExactly("Victoria Yin");
-    }
 }
