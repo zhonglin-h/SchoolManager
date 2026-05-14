@@ -244,7 +244,8 @@ class MeetAttendanceMonitorTest {
         monitor.scheduleEventsForToday();
 
         // checkNotYetJoined must have been invoked at least three times (T+0, T+5, T+10)
-        verify(sessionHandler, org.mockito.Mockito.atLeast(3)).checkNotYetJoined(future);
+        verify(sessionHandler, org.mockito.Mockito.atLeast(3))
+                .checkNotYetJoined(org.mockito.ArgumentMatchers.eq(future), org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
