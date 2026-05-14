@@ -150,7 +150,8 @@ public class NotificationService {
     }
 
     private boolean shouldDedup(NotificationType type) {
-        return type != NotificationType.UNMATCHED_GUESTS;
+        return type != NotificationType.UNMATCHED_GUESTS
+                && type != NotificationType.ATTENDANCE_CHECKPOINT;
     }
 
     private String resolveBody(NotificationType type, CalendarEvent event, @Nullable NotificationSubject subject) {
@@ -166,6 +167,17 @@ public class NotificationService {
                         + String.join(", ", guestSubject.unmatchedParticipants()));
             }
             return String.join("\n", sections);
+        }
+        if (type == NotificationType.ATTENDANCE_CHECKPOINT && subject instanceof CheckpointSubject cs) {
+            List<String> lines = new ArrayList<>();
+            lines.add("Attendance check " + cs.checkLabel() + " — \"" + event.getTitle() + "\"");
+            if (!cs.arrivedNames().isEmpty()) {
+                lines.add("Arrived: " + String.join(", ", cs.arrivedNames()));
+            }
+            if (!cs.notArrivedNames().isEmpty()) {
+                lines.add("Not yet joined: " + String.join(", ", cs.notArrivedNames()));
+            }
+            return String.join("\n", lines);
         }
         return type.body(event, subject);
     }

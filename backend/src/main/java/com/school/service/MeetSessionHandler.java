@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -97,22 +98,26 @@ public class MeetSessionHandler {
     }
 
     /**
-     * At T−3 min, notifies every expected participant (student or teacher) who has not yet joined.
-     * Also sends an unmatched-guests notification for any invitee email that is not in the DB.
-     * Uses the live participant list, so anyone already in the room is silently skipped.
+     * At T−3 min, sends one consolidated attendance checkpoint using the live participant list,
+     * then reports any unmatched guests.
      */
-    public void checkPreClassJoins(CalendarEvent event) {
+    public void checkPreClassJoins(CalendarEvent event, String checkLabel) {
         try {
             List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
             ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
             ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
+            List<String> arrivedNames = new ArrayList<>();
+            List<String> notArrivedNames = new ArrayList<>();
             forEachExpectedPerson(expected, (person, personType) -> {
                 Set<Long> resolvedIds = personType == PersonType.STUDENT ? resolved.studentIds() : resolved.teacherIds();
-                NotificationSubject subject = new PersonSubject(person);
-                if (!resolvedIds.contains(person.getId())) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, subject);
+                if (resolvedIds.contains(person.getId())) {
+                    arrivedNames.add(person.getName());
+                } else {
+                    notArrivedNames.add(person.getName());
                 }
             });
+            notificationService.notify(NotificationType.ATTENDANCE_CHECKPOINT, event,
+                    new CheckpointSubject(checkLabel, arrivedNames, notArrivedNames));
             processUnmatchedGuests(event, expected, participants);
         } catch (Exception e) {
             log.warn("Failed pre-class join check for {}: {}", event.getId(), e.getMessage());
@@ -120,25 +125,30 @@ public class MeetSessionHandler {
     }
 
     /**
-     * At T+5 and T+10 min, notifies every expected participant who still has no attendance record,
-     * and reports any unmatched guests. Uses the DB record (not the live participant list) so that
-     * someone who joined then left is not incorrectly flagged as missing.
+     * At T+0, T+5 and T+10 min, sends one consolidated attendance checkpoint using DB records
+     * (so someone who joined then left is correctly shown as arrived), then reports unmatched guests.
      */
-    public void checkNotYetJoined(CalendarEvent event) {
+    public void checkNotYetJoined(CalendarEvent event, String checkLabel) {
         try {
             LocalDate today = LocalDate.now();
             List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
             attendanceHelper.resolveAndAutoLearn(participants);
             ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
+            List<String> arrivedNames = new ArrayList<>();
+            List<String> notArrivedNames = new ArrayList<>();
             forEachExpectedPerson(expected, (person, personType) -> {
                 if (attendanceRepository.findByPersonIdAndCalendarEventIdAndDate(
-                        person.getId(), event.getId(), today).isEmpty()) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(person));
+                        person.getId(), event.getId(), today).isPresent()) {
+                    arrivedNames.add(person.getName());
+                } else {
+                    notArrivedNames.add(person.getName());
                 }
             });
+            notificationService.notify(NotificationType.ATTENDANCE_CHECKPOINT, event,
+                    new CheckpointSubject(checkLabel, arrivedNames, notArrivedNames));
             processUnmatchedGuests(event, expected, participants);
         } catch (Exception e) {
-            log.warn("Failed not-yet-joined check for {}: {}", event.getId(), e.getMessage());
+            log.warn("Failed attendance checkpoint {} for {}: {}", checkLabel, event.getId(), e.getMessage());
         }
     }
 

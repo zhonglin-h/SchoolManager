@@ -43,6 +43,11 @@ public enum NotificationType {
             (e, r) -> "",
             true, true, false
     ),
+    ATTENDANCE_CHECKPOINT(
+            (e, r) -> "Attendance Check " + r.getName() + ": " + e.getTitle(),
+            (e, r) -> "",  // body built dynamically in NotificationService.resolveBody
+            true, true, false
+    ),
     AUTO_JOIN_FAILED(
             (e, r) -> "Auto-Join Failed: " + e.getTitle(),
             (e, r) -> "Auto-join attempt for \"" + e.getTitle() + "\" failed. Check join attempt logs for details.",

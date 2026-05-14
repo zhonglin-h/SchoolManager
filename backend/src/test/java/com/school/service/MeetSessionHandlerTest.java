@@ -74,10 +74,14 @@ class MeetSessionHandlerTest {
         when(personRepository.findByMeetEmailAndActiveTrue("carol@meet.com"))
                 .thenReturn(Optional.of(teacher));
 
-        sessionHandler.checkPreClassJoins(event);
+        sessionHandler.checkPreClassJoins(event, "T−3");
 
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(student));
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(teacher));
+        ArgumentCaptor<NotificationSubject> captor = ArgumentCaptor.forClass(NotificationSubject.class);
+        verify(notificationService).notify(eq(NotificationType.ATTENDANCE_CHECKPOINT), eq(event), captor.capture());
+        CheckpointSubject cs = (CheckpointSubject) captor.getValue();
+        assertThat(cs.checkLabel()).isEqualTo("T−3");
+        assertThat(cs.arrivedNames()).isEmpty();
+        assertThat(cs.notArrivedNames()).containsExactlyInAnyOrder("Alice", "Carol");
     }
 
     @Test
@@ -90,10 +94,13 @@ class MeetSessionHandlerTest {
         when(personRepository.findByPersonTypeAndGoogleUserIdAndActiveTrue(PersonType.STUDENT, "uid-alice"))
                 .thenReturn(Optional.of(student));
 
-        sessionHandler.checkPreClassJoins(event);
+        sessionHandler.checkPreClassJoins(event, "T−3");
 
-        verify(notificationService, never()).notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(student));
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(teacher));
+        ArgumentCaptor<NotificationSubject> captor = ArgumentCaptor.forClass(NotificationSubject.class);
+        verify(notificationService).notify(eq(NotificationType.ATTENDANCE_CHECKPOINT), eq(event), captor.capture());
+        CheckpointSubject cs = (CheckpointSubject) captor.getValue();
+        assertThat(cs.arrivedNames()).containsExactly("Alice");
+        assertThat(cs.notArrivedNames()).containsExactly("Carol");
     }
 
     @Test
@@ -144,7 +151,7 @@ class MeetSessionHandlerTest {
         when(personRepository.findByPersonTypeAndMeetDisplayNameIgnoreCaseAndActiveTrue(PersonType.TEACHER, "Victoria Yin"))
                 .thenReturn(Optional.of(victoria));
 
-        sessionHandler.checkPreClassJoins(event);
+        sessionHandler.checkPreClassJoins(event, "T−3");
 
         ArgumentCaptor<NotificationSubject> subjectCaptor = ArgumentCaptor.forClass(NotificationSubject.class);
         verify(notificationService).notify(eq(NotificationType.UNMATCHED_GUESTS), eq(event), subjectCaptor.capture());
