@@ -186,6 +186,7 @@ public class MeetAttendanceMonitor {
                     upcomingChecksRegistry.remove(event.getId(), "SESSION_START");
                     upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_POLLING", end));
                     sessionHandler.startSessionPolling(event);
+                    sessionHandler.checkNotYetJoined(event);
                 }, start));
             } else if (end.isAfter(now)) {
                 // Session already started but not yet ended: catch up on any missed polling
