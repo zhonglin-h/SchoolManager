@@ -62,7 +62,9 @@ class MeetAttendanceMonitorTest {
         assertThat(checks).allMatch(c -> c.eventId().equals("evt-future"));
         assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
                 .contains("MEETING_NOT_STARTED_15", "SESSION_START",
-                        "NOT_YET_JOINED_5", "NOT_YET_JOINED_10", "SESSION_FINALIZE");
+                        "NOT_YET_JOINED_5", "SESSION_FINALIZE");
+        assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
+                .doesNotContain("NOT_YET_JOINED_10");
         assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
                 .doesNotContain("PRE_CLASS_JOINS");
     }
@@ -206,7 +208,8 @@ class MeetAttendanceMonitorTest {
 
         List<String> types = monitor.getUpcomingChecks().stream()
                 .map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
-        assertThat(types).contains("NOT_YET_JOINED_5", "NOT_YET_JOINED_10");
+        assertThat(types).contains("NOT_YET_JOINED_5");
+        assertThat(types).doesNotContain("NOT_YET_JOINED_10");
     }
 
     @Test
@@ -225,7 +228,7 @@ class MeetAttendanceMonitorTest {
 
         List<String> types = monitor.getUpcomingChecks().stream()
                 .map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
-        assertThat(types).doesNotContain("NOT_YET_JOINED_5", "NOT_YET_JOINED_10");
+        assertThat(types).doesNotContain("NOT_YET_JOINED_5", "NOT_YET_JOINED_10");  // both past end
     }
 
     @Test
@@ -245,8 +248,8 @@ class MeetAttendanceMonitorTest {
 
         monitor.scheduleEventsForToday();
 
-        // checkNotYetJoined must have been invoked at least three times (T−2, T+5, T+10)
-        verify(sessionHandler, org.mockito.Mockito.atLeast(3))
+        // checkNotYetJoined must have been invoked at least twice (T−2 and T+5)
+        verify(sessionHandler, org.mockito.Mockito.atLeast(2))
                 .checkNotYetJoined(org.mockito.ArgumentMatchers.eq(future), org.mockito.ArgumentMatchers.anyString());
     }
 

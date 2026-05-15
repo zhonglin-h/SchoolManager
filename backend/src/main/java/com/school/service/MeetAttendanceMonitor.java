@@ -145,7 +145,6 @@ public class MeetAttendanceMonitor {
             Instant start = event.getStartTime()
                     .atZone(ZoneId.systemDefault()).toInstant();
             Instant plus5  = start.plusSeconds(5  * 60);
-            Instant plus10 = start.plusSeconds(10 * 60);
             Instant end = event.getEndTime()
                     .atZone(ZoneId.systemDefault()).toInstant();
 
@@ -194,14 +193,6 @@ public class MeetAttendanceMonitor {
                     sessionHandler.checkNotYetJoined(event, "5 min after start");
                 }, plus5));
             }
-            if (plus10.isAfter(now) && plus10.isBefore(end)) {
-                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "NOT_YET_JOINED_10", plus10));
-                futures.add(taskScheduler.schedule(() -> {
-                    upcomingChecksRegistry.remove(event.getId(), "NOT_YET_JOINED_10");
-                    sessionHandler.checkNotYetJoined(event, "10 min after start");
-                }, plus10));
-            }
-
             if (end.isAfter(now)) {
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_FINALIZE", end));
                 futures.add(taskScheduler.schedule(() -> {
