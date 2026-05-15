@@ -293,6 +293,47 @@ class NotificationServiceTest {
         verify(notificationLogRepository, times(4)).save(any(NotificationLog.class));
     }
 
+    @Test
+    void notifyPollingDelta_sendsTelegramOnlyWithoutDayDedup() {
+        PollingDeltaSubject subject = new PollingDeltaSubject(
+                List.of("Alice"),
+                List.of(),
+                List.of("Carol"),
+                List.of(),
+                List.of("Eve"),
+                List.of("Mystery"));
+
+        notificationService.notify(NotificationType.POLLING_DELTA, event, subject);
+        notificationService.notify(NotificationType.POLLING_DELTA, event, subject);
+
+        verify(emailClient, never()).send(anyString(), anyString(), anyString());
+        verify(telegramClient, times(2)).send(contains("Arrived now: Alice"));
+        verify(notificationLogRepository, never())
+                .existsByCalendarEventIdAndDateAndTypeAndChannelAndPersonIsNullAndSuccessTrue(
+                        anyString(), any(LocalDate.class), anyString(), any());
+        verify(notificationLogRepository, times(2)).save(any(NotificationLog.class));
+    }
+
+    @Test
+    void notifySessionFinalSummary_sendsTelegramOnlyAndDedups() {
+        when(notificationLogRepository.existsByCalendarEventIdAndDateAndTypeAndChannelAndPersonIsNullAndSuccessTrue(
+                anyString(), any(LocalDate.class), anyString(), eq(NotificationChannel.TELEGRAM)))
+                .thenReturn(false, true);
+        SessionFinalSummarySubject summary = new SessionFinalSummarySubject(
+                List.of("Alice"),
+                List.of(),
+                List.of("Carol"),
+                List.of("Eve"),
+                List.of("Mystery"));
+
+        notificationService.notify(NotificationType.SESSION_FINAL_SUMMARY, event, summary);
+        notificationService.notify(NotificationType.SESSION_FINAL_SUMMARY, event, summary);
+
+        verify(emailClient, never()).send(anyString(), anyString(), anyString());
+        verify(telegramClient, times(1)).send(contains("Absent: Carol"));
+        verify(notificationLogRepository, times(1)).save(any(NotificationLog.class));
+    }
+
     // --- Telegram failure: logged with success=false, does not prevent email ---
 
     @Test

@@ -1,4 +1,4 @@
-package com.school.service;
+package com.school.service.meet;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -21,25 +21,31 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.school.model.CalendarEvent;
+import com.school.service.CalendarSyncService;
+import com.school.service.JoinAttemptService;
+import com.school.service.NotificationService;
+import com.school.service.NotificationType;
+import com.school.service.UpcomingChecksRegistry;
 
 @ExtendWith(MockitoExtension.class)
-class MeetAttendanceMonitorTest {
+class MeetAttendanceSchedulerTest {
 
     @Mock CalendarSyncService calendarSyncService;
-    @Mock MeetSessionHandler sessionHandler;
+    @Mock MeetSessionPollingService pollingService;
+    @Mock MeetSessionFinalizer finalizer;
     @Mock NotificationService notificationService;
     @Mock ThreadPoolTaskScheduler taskScheduler;
     @Mock JoinAttemptService joinAttemptService;
 
     // Use a real registry so getUpcomingChecks() works correctly
     private final UpcomingChecksRegistry upcomingChecksRegistry = new UpcomingChecksRegistry();
-    private MeetAttendanceMonitor monitor;
+    private MeetAttendanceScheduler scheduler;
 
     @BeforeEach
     void setUp() {
-        monitor = new MeetAttendanceMonitor(calendarSyncService, sessionHandler,
+        scheduler = new MeetAttendanceScheduler(calendarSyncService, pollingService, finalizer,
                 notificationService, taskScheduler, upcomingChecksRegistry, joinAttemptService);
-        ReflectionTestUtils.setField(monitor, "autoJoinEnabled", false);
+        ReflectionTestUtils.setField(scheduler, "autoJoinEnabled", false);
     }
 
     // --- scheduleEventsForToday: upcoming checks ---
@@ -55,17 +61,17 @@ class MeetAttendanceMonitorTest {
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
 
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
-        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
+        List<MeetAttendanceScheduler.ScheduledCheck> checks = scheduler.getUpcomingChecks();
         assertThat(checks).isNotEmpty();
         assertThat(checks).allMatch(c -> c.eventId().equals("evt-future"));
-        assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
+        assertThat(checks.stream().map(MeetAttendanceScheduler.ScheduledCheck::checkType))
                 .contains("MEETING_NOT_STARTED_15", "SESSION_START",
                         "NOT_YET_JOINED_5", "SESSION_FINALIZE");
-        assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
+        assertThat(checks.stream().map(MeetAttendanceScheduler.ScheduledCheck::checkType))
                 .doesNotContain("NOT_YET_JOINED_10");
-        assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
+        assertThat(checks.stream().map(MeetAttendanceScheduler.ScheduledCheck::checkType))
                 .doesNotContain("PRE_CLASS_JOINS");
     }
 
@@ -80,14 +86,14 @@ class MeetAttendanceMonitorTest {
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
 
-        monitor.scheduleEventsForToday();
-        int firstCount = monitor.getUpcomingChecks().size();
+        scheduler.scheduleEventsForToday();
+        int firstCount = scheduler.getUpcomingChecks().size();
 
         when(calendarSyncService.getTodaysEvents()).thenReturn(List.of());
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         assertThat(firstCount).isGreaterThan(0);
-        assertThat(monitor.getUpcomingChecks()).isEmpty();
+        assertThat(scheduler.getUpcomingChecks()).isEmpty();
     }
 
     // --- scheduleEventsForToday: future cancellation and reschedule handling ---
@@ -103,11 +109,11 @@ class MeetAttendanceMonitorTest {
         when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(futureEvent));
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(firstFuture);
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         verify(firstFuture, atLeastOnce()).cancel(false);
     }
@@ -123,10 +129,10 @@ class MeetAttendanceMonitorTest {
         when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(futureEvent));
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(goneFuture);
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         when(calendarSyncService.getTodaysEvents()).thenReturn(List.of());
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         verify(goneFuture, atLeastOnce()).cancel(false);
     }
@@ -141,14 +147,14 @@ class MeetAttendanceMonitorTest {
         when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(original));
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         CalendarEvent rescheduled = new CalendarEvent("evt-rescheduled", "Math Class",
                 "https://meet.google.com/xyz", "xyz",
                 LocalDateTime.now().plusHours(3), LocalDateTime.now().plusHours(4),
                 List.of());
         when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(rescheduled));
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         verify(notificationService).clearTodayLogsForEvent("evt-rescheduled");
     }
@@ -164,8 +170,8 @@ class MeetAttendanceMonitorTest {
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
 
-        monitor.scheduleEventsForToday();
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         verify(notificationService, never()).clearTodayLogsForEvent(anyString());
     }
@@ -185,10 +191,10 @@ class MeetAttendanceMonitorTest {
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
 
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
-        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
-        List<String> types = checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
+        List<MeetAttendanceScheduler.ScheduledCheck> checks = scheduler.getUpcomingChecks();
+        List<String> types = checks.stream().map(MeetAttendanceScheduler.ScheduledCheck::checkType).toList();
         assertThat(types).doesNotContain("MEETING_NOT_STARTED_15", "PRE_CLASS_JOINS");
         assertThat(types).contains("SESSION_START", "SESSION_FINALIZE");
     }
@@ -204,10 +210,10 @@ class MeetAttendanceMonitorTest {
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
 
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
-        List<String> types = monitor.getUpcomingChecks().stream()
-                .map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
+        List<String> types = scheduler.getUpcomingChecks().stream()
+                .map(MeetAttendanceScheduler.ScheduledCheck::checkType).toList();
         assertThat(types).contains("NOT_YET_JOINED_5");
         assertThat(types).doesNotContain("NOT_YET_JOINED_10");
     }
@@ -224,10 +230,10 @@ class MeetAttendanceMonitorTest {
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
 
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
-        List<String> types = monitor.getUpcomingChecks().stream()
-                .map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
+        List<String> types = scheduler.getUpcomingChecks().stream()
+                .map(MeetAttendanceScheduler.ScheduledCheck::checkType).toList();
         assertThat(types).doesNotContain("NOT_YET_JOINED_5", "NOT_YET_JOINED_10");  // both past end
     }
 
@@ -246,10 +252,10 @@ class MeetAttendanceMonitorTest {
                     return mock(ScheduledFuture.class);
                 });
 
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         // checkNotYetJoined must have been invoked at least twice (T−2 and T+5)
-        verify(sessionHandler, org.mockito.Mockito.atLeast(2))
+        verify(pollingService, org.mockito.Mockito.atLeast(2))
                 .checkNotYetJoined(org.mockito.ArgumentMatchers.eq(future), org.mockito.ArgumentMatchers.anyString());
     }
 
@@ -265,17 +271,17 @@ class MeetAttendanceMonitorTest {
         when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(original));
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         CalendarEvent moved = new CalendarEvent("evt-moved", "Math Class",
                 "https://meet.google.com/abc", "abc",
                 LocalDateTime.now().plusMinutes(4), LocalDateTime.now().plusMinutes(64),
                 List.of());
         when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(moved));
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
-        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
-        List<String> types = checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType).toList();
+        List<MeetAttendanceScheduler.ScheduledCheck> checks = scheduler.getUpcomingChecks();
+        List<String> types = checks.stream().map(MeetAttendanceScheduler.ScheduledCheck::checkType).toList();
         assertThat(types).doesNotContain("MEETING_NOT_STARTED_15", "PRE_CLASS_JOINS");
         assertThat(types).contains("SESSION_START");
         verify(notificationService).clearTodayLogsForEvent("evt-moved");
@@ -294,10 +300,10 @@ class MeetAttendanceMonitorTest {
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
 
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
-        verify(sessionHandler).resumeSessionPolling(inProgress);
-        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
+        verify(pollingService).resumeSessionPolling(inProgress);
+        List<MeetAttendanceScheduler.ScheduledCheck> checks = scheduler.getUpcomingChecks();
         assertThat(checks).anyMatch(c -> c.eventId().equals("evt-inprogress") && c.checkType().equals("SESSION_FINALIZE"));
         assertThat(checks).anyMatch(c -> c.eventId().equals("evt-inprogress") && c.checkType().equals("SESSION_POLLING"));
         assertThat(checks).noneMatch(c -> c.eventId().equals("evt-inprogress") && c.checkType().equals("SESSION_START"));
@@ -311,9 +317,9 @@ class MeetAttendanceMonitorTest {
                 List.of("alice@meet.com"));
         when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(ended));
 
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
-        verify(sessionHandler, never()).resumeSessionPolling(ended);
+        verify(pollingService, never()).resumeSessionPolling(ended);
         verify(taskScheduler, never()).schedule(any(Runnable.class), any(java.time.Instant.class));
     }
 
@@ -331,13 +337,13 @@ class MeetAttendanceMonitorTest {
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
 
-        monitor.scheduleEventsForToday();
-        assertThat(monitor.getUpcomingChecks())
+        scheduler.scheduleEventsForToday();
+        assertThat(scheduler.getUpcomingChecks())
                 .anyMatch(c -> "SESSION_POLLING".equals(c.checkType()) && "evt-poll".equals(c.eventId()));
 
         // Resync removes and re-adds the entry
-        monitor.scheduleEventsForToday();
-        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
+        scheduler.scheduleEventsForToday();
+        List<MeetAttendanceScheduler.ScheduledCheck> checks = scheduler.getUpcomingChecks();
         long pollingEntries = checks.stream()
                 .filter(c -> "SESSION_POLLING".equals(c.checkType()) && "evt-poll".equals(c.eventId()))
                 .count();
@@ -354,13 +360,13 @@ class MeetAttendanceMonitorTest {
         when(calendarSyncService.getTodaysEvents()).thenReturn(List.of(inProgress));
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         // Event disappears from calendar
         when(calendarSyncService.getTodaysEvents()).thenReturn(List.of());
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
-        assertThat(monitor.getUpcomingChecks())
+        assertThat(scheduler.getUpcomingChecks())
                 .noneMatch(c -> "SESSION_POLLING".equals(c.checkType()));
     }
 
@@ -369,7 +375,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_addsAutoJoinCheckWhenEnabled() throws Exception {
-        ReflectionTestUtils.setField(monitor, "autoJoinEnabled", true);
+        ReflectionTestUtils.setField(scheduler, "autoJoinEnabled", true);
         CalendarEvent future = new CalendarEvent("evt-autojoin", "Auto Join Class",
                 "https://meet.google.com/xyz", "xyz",
                 LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
@@ -378,17 +384,17 @@ class MeetAttendanceMonitorTest {
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
 
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
-        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
-        assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
+        List<MeetAttendanceScheduler.ScheduledCheck> checks = scheduler.getUpcomingChecks();
+        assertThat(checks.stream().map(MeetAttendanceScheduler.ScheduledCheck::checkType))
                 .contains("AUTO_JOIN");
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_tMinus15AutoJoinAttemptsWhenMeetingNotActive() throws Exception {
-        ReflectionTestUtils.setField(monitor, "autoJoinEnabled", true);
+        ReflectionTestUtils.setField(scheduler, "autoJoinEnabled", true);
         CalendarEvent future = new CalendarEvent("evt-autojoin-fire", "Auto Join Fire",
                 "https://meet.google.com/xyz", "xyz",
                 LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
@@ -400,9 +406,9 @@ class MeetAttendanceMonitorTest {
                     task.run();
                     return mock(ScheduledFuture.class);
                 });
-        when(sessionHandler.isMeetingActive(future)).thenReturn(false);
+        when(pollingService.isMeetingActive(future)).thenReturn(false);
 
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         verify(joinAttemptService).attemptJoinIfEnabled(future, "AUTO");
     }
@@ -410,7 +416,7 @@ class MeetAttendanceMonitorTest {
     @Test
     @SuppressWarnings("unchecked")
     void scheduleEventsForToday_tMinus15AutoJoinSkipsWhenMeetingAlreadyActive() throws Exception {
-        ReflectionTestUtils.setField(monitor, "autoJoinEnabled", true);
+        ReflectionTestUtils.setField(scheduler, "autoJoinEnabled", true);
         CalendarEvent future = new CalendarEvent("evt-autojoin-skip", "Auto Join Skip",
                 "https://meet.google.com/xyz", "xyz",
                 LocalDateTime.now().plusHours(2), LocalDateTime.now().plusHours(3),
@@ -422,9 +428,9 @@ class MeetAttendanceMonitorTest {
                     task.run();
                     return mock(ScheduledFuture.class);
                 });
-        when(sessionHandler.isMeetingActive(future)).thenReturn(true);
+        when(pollingService.isMeetingActive(future)).thenReturn(true);
 
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
         verify(joinAttemptService, never()).attemptJoinIfEnabled(future, "AUTO");
     }
@@ -441,10 +447,11 @@ class MeetAttendanceMonitorTest {
         when(taskScheduler.schedule(any(Runnable.class), any(java.time.Instant.class)))
                 .thenReturn(mock(ScheduledFuture.class));
 
-        monitor.scheduleEventsForToday();
+        scheduler.scheduleEventsForToday();
 
-        List<MeetAttendanceMonitor.ScheduledCheck> checks = monitor.getUpcomingChecks();
-        assertThat(checks.stream().map(MeetAttendanceMonitor.ScheduledCheck::checkType))
+        List<MeetAttendanceScheduler.ScheduledCheck> checks = scheduler.getUpcomingChecks();
+        assertThat(checks.stream().map(MeetAttendanceScheduler.ScheduledCheck::checkType))
                 .doesNotContain("AUTO_JOIN");
     }
 }
+

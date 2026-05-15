@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Shared registry of upcoming and active scheduled monitoring checks.
- * Injected by both {@link MeetAttendanceMonitor} (adds one-time and polling entries)
- * and {@link MeetSessionHandler} (removes the polling entry when the loop stops).
+ * Injected by both {@link com.school.service.meet.MeetAttendanceScheduler} (adds one-time and polling entries)
+ * and {@link com.school.service.meet.MeetSessionPollingService} (removes the polling entry when the loop stops).
  */
 @Component
 public class UpcomingChecksRegistry {

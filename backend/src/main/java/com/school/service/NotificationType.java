@@ -48,6 +48,16 @@ public enum NotificationType {
             (e, r) -> "",  // body built dynamically in NotificationService.resolveBody
             true, true, false
     ),
+    POLLING_DELTA(
+            (e, r) -> "Live Attendance Delta: " + e.getTitle(),
+            (e, r) -> "",  // body built dynamically in NotificationService.resolveBody
+            false, true, false
+    ),
+    SESSION_FINAL_SUMMARY(
+            (e, r) -> "Final Attendance Summary: " + e.getTitle(),
+            (e, r) -> "",  // body built dynamically in NotificationService.resolveBody
+            false, true, false
+    ),
     AUTO_JOIN_FAILED(
             (e, r) -> "Auto-Join Failed: " + e.getTitle(),
             (e, r) -> "Auto-join attempt for \"" + e.getTitle() + "\" failed. Check join attempt logs for details.",

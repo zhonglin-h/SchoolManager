@@ -14,6 +14,7 @@ import com.school.integration.JoinAutomationClient;
 import com.school.integration.JoinResult;
 import com.school.model.CalendarEvent;
 import com.school.repository.JoinAttemptLogRepository;
+import com.school.service.meet.MeetAttendanceScheduler;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -47,7 +48,7 @@ public class JoinAttemptService {
     /**
      * Attempts to join the Meet session only when auto-join is enabled
      * ({@code app.autojoin.enabled=true}).  Used by the scheduled trigger in
-     * {@link MeetAttendanceMonitor}.
+     * {@link MeetAttendanceScheduler}.
      *
      * @param event       the calendar event whose Meet session should be joined
      * @param triggerType identifier for this trigger source (e.g. {@code "AUTO"})

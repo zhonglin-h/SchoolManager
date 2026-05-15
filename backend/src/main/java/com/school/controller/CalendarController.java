@@ -4,7 +4,7 @@ import com.school.entity.JoinAttemptLog;
 import com.school.model.CalendarEvent;
 import com.school.service.CalendarSyncService;
 import com.school.service.JoinAttemptService;
-import com.school.service.MeetAttendanceMonitor;
+import com.school.service.meet.MeetAttendanceScheduler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -21,37 +21,37 @@ import java.util.List;
 @RequestMapping("/calendar")
 public class CalendarController {
 
-    private final MeetAttendanceMonitor meetAttendanceMonitor;
+    private final MeetAttendanceScheduler meetAttendanceScheduler;
     private final CalendarSyncService calendarSyncService;
     private final JoinAttemptService joinAttemptService;
 
     @Value("${app.dashboard.upcoming-checks-limit}")
     private int upcomingChecksLimit;
 
-    public CalendarController(MeetAttendanceMonitor meetAttendanceMonitor,
+    public CalendarController(MeetAttendanceScheduler meetAttendanceScheduler,
                               CalendarSyncService calendarSyncService,
                               JoinAttemptService joinAttemptService) {
-        this.meetAttendanceMonitor = meetAttendanceMonitor;
+        this.meetAttendanceScheduler = meetAttendanceScheduler;
         this.calendarSyncService = calendarSyncService;
         this.joinAttemptService = joinAttemptService;
     }
 
     public record ScheduledChecksResponse(
-            List<MeetAttendanceMonitor.ScheduledCheck> checks,
+            List<MeetAttendanceScheduler.ScheduledCheck> checks,
             int total,
             int limit
     ) {}
 
     @PostMapping("/sync")
     public ResponseEntity<Void> sync() {
-        meetAttendanceMonitor.scheduleEventsForToday();
+        meetAttendanceScheduler.scheduleEventsForToday();
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/scheduled-checks")
     public ResponseEntity<ScheduledChecksResponse> getScheduledChecks() {
-        List<MeetAttendanceMonitor.ScheduledCheck> all = meetAttendanceMonitor.getUpcomingChecks();
-        List<MeetAttendanceMonitor.ScheduledCheck> limited = all.stream()
+        List<MeetAttendanceScheduler.ScheduledCheck> all = meetAttendanceScheduler.getUpcomingChecks();
+        List<MeetAttendanceScheduler.ScheduledCheck> limited = all.stream()
                 .limit(upcomingChecksLimit)
                 .toList();
         return ResponseEntity.ok(new ScheduledChecksResponse(limited, all.size(), upcomingChecksLimit));

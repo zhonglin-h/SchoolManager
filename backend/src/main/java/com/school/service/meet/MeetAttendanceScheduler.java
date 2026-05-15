@@ -1,4 +1,4 @@
-package com.school.service;
+package com.school.service.meet;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -18,11 +18,16 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Service;
 
 import com.school.model.CalendarEvent;
+import com.school.service.CalendarSyncService;
+import com.school.service.JoinAttemptService;
+import com.school.service.NotificationService;
+import com.school.service.NotificationType;
+import com.school.service.UpcomingChecksRegistry;
 
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Monitors Google Meet attendance for scheduled classes.
+ * Schedules Google Meet attendance checks for today's classes.
  *
  * <p>On startup and at midnight each day, schedules four one-shot tasks per calendar event:
  * <ol>
@@ -37,10 +42,11 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Service
-public class MeetAttendanceMonitor {
+public class MeetAttendanceScheduler {
 
     private final CalendarSyncService calendarSyncService;
-    private final MeetSessionHandler sessionHandler;
+    private final MeetSessionPollingService pollingService;
+    private final MeetSessionFinalizer finalizer;
     private final NotificationService notificationService;
     private final ThreadPoolTaskScheduler taskScheduler;
     private final UpcomingChecksRegistry upcomingChecksRegistry;
@@ -55,14 +61,16 @@ public class MeetAttendanceMonitor {
     /** @deprecated Use {@link com.school.service.ScheduledCheck} directly. Kept for API compatibility with {@link com.school.controller.CalendarController}. */
     public record ScheduledCheck(String eventId, String eventTitle, String checkType, Instant scheduledAt) {}
 
-    public MeetAttendanceMonitor(CalendarSyncService calendarSyncService,
-                                  MeetSessionHandler sessionHandler,
-                                  NotificationService notificationService,
-                                  ThreadPoolTaskScheduler taskScheduler,
-                                  UpcomingChecksRegistry upcomingChecksRegistry,
-                                  JoinAttemptService joinAttemptService) {
+    public MeetAttendanceScheduler(CalendarSyncService calendarSyncService,
+                                   MeetSessionPollingService pollingService,
+                                   MeetSessionFinalizer finalizer,
+                                   NotificationService notificationService,
+                                   ThreadPoolTaskScheduler taskScheduler,
+                                   UpcomingChecksRegistry upcomingChecksRegistry,
+                                   JoinAttemptService joinAttemptService) {
         this.calendarSyncService = calendarSyncService;
-        this.sessionHandler = sessionHandler;
+        this.pollingService = pollingService;
+        this.finalizer = finalizer;
         this.notificationService = notificationService;
         this.taskScheduler = taskScheduler;
         this.upcomingChecksRegistry = upcomingChecksRegistry;
@@ -70,9 +78,9 @@ public class MeetAttendanceMonitor {
     }
 
     /** Returns all checks whose scheduled time is still in the future, sorted ascending. */
-    public List<MeetAttendanceMonitor.ScheduledCheck> getUpcomingChecks() {
+    public List<MeetAttendanceScheduler.ScheduledCheck> getUpcomingChecks() {
         return upcomingChecksRegistry.getUpcoming().stream()
-                .map(c -> new MeetAttendanceMonitor.ScheduledCheck(c.eventId(), c.eventTitle(), c.checkType(), c.scheduledAt()))
+                .map(c -> new MeetAttendanceScheduler.ScheduledCheck(c.eventId(), c.eventTitle(), c.checkType(), c.scheduledAt()))
                 .toList();
     }
 
@@ -111,7 +119,7 @@ public class MeetAttendanceMonitor {
         for (String staleId : new ArrayList<>(oneTimeFutures.keySet())) {
             if (!freshEventIds.contains(staleId)) {
                 cancelOneTimeFutures(staleId);
-                sessionHandler.cancelPollingFor(staleId);
+                pollingService.cancelPollingFor(staleId);
                 lastScheduledStartTime.remove(staleId);
             }
         }
@@ -124,7 +132,7 @@ public class MeetAttendanceMonitor {
             cancelOneTimeFutures(event.getId());
 
             // Cancel active polling future — will be restarted by the new SESSION_START task
-            sessionHandler.cancelPollingFor(event.getId());
+            pollingService.cancelPollingFor(event.getId());
 
             // Detect reschedule: if the start time changed, clear today's notification logs
             // so notifications can re-fire at the correct new time
@@ -156,9 +164,9 @@ public class MeetAttendanceMonitor {
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "MEETING_NOT_STARTED_15", minus15));
                 futures.add(taskScheduler.schedule(() -> {
                     upcomingChecksRegistry.remove(event.getId(), "MEETING_NOT_STARTED_15");
-                    sessionHandler.checkMeetingStarted(event, NotificationType.MEETING_NOT_STARTED_15);
+                    pollingService.checkMeetingStarted(event, NotificationType.MEETING_NOT_STARTED_15);
                     if (autoJoinEnabled) {
-                        boolean activeAtTMinus15 = sessionHandler.isMeetingActive(event);
+                        boolean activeAtTMinus15 = pollingService.isMeetingActive(event);
                         log.info("AUTO_JOIN gate fired for event '{}' ({}): meetingActiveAtTMinus15={}",
                                 event.getTitle(), event.getId(), activeAtTMinus15);
                         if (!activeAtTMinus15) {
@@ -177,27 +185,28 @@ public class MeetAttendanceMonitor {
                 futures.add(taskScheduler.schedule(() -> {
                     upcomingChecksRegistry.remove(event.getId(), "SESSION_START");
                     upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_POLLING", end));
-                    sessionHandler.startSessionPolling(event);
-                    sessionHandler.checkNotYetJoined(event, "2 min before start");
+                    pollingService.startSessionPolling(event);
+                    pollingService.checkNotYetJoined(event, "2 min before start");
                 }, minus2));
             } else if (end.isAfter(now)) {
                 // Session already started but not yet ended: catch up on any missed polling
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_POLLING", end));
-                sessionHandler.resumeSessionPolling(event);
+                pollingService.resumeSessionPolling(event);
             }
 
             if (plus5.isAfter(now) && plus5.isBefore(end)) {
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "NOT_YET_JOINED_5", plus5));
                 futures.add(taskScheduler.schedule(() -> {
                     upcomingChecksRegistry.remove(event.getId(), "NOT_YET_JOINED_5");
-                    sessionHandler.checkNotYetJoined(event, "5 min after start");
+                    pollingService.checkNotYetJoined(event, "5 min after start");
                 }, plus5));
             }
             if (end.isAfter(now)) {
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_FINALIZE", end));
                 futures.add(taskScheduler.schedule(() -> {
                     upcomingChecksRegistry.remove(event.getId(), "SESSION_FINALIZE");
-                    sessionHandler.finalizeSession(event);
+                    pollingService.cancelPollingFor(event.getId());
+                    finalizer.finalizeSession(event);
                 }, end));
             }
 

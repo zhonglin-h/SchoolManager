@@ -151,7 +151,8 @@ public class NotificationService {
 
     private boolean shouldDedup(NotificationType type) {
         return type != NotificationType.UNMATCHED_GUESTS
-                && type != NotificationType.ATTENDANCE_CHECKPOINT;
+                && type != NotificationType.ATTENDANCE_CHECKPOINT
+                && type != NotificationType.POLLING_DELTA;
     }
 
     private String resolveBody(NotificationType type, CalendarEvent event, @Nullable NotificationSubject subject) {
@@ -182,6 +183,53 @@ public class NotificationService {
             }
             if (!cs.unmatchedParticipants().isEmpty()) {
                 lines.add("❓ Unknown in room (not in system): " + String.join(", ", cs.unmatchedParticipants()));
+            }
+            return String.join("\n", lines);
+        }
+        if (type == NotificationType.POLLING_DELTA && subject instanceof PollingDeltaSubject delta) {
+            List<String> lines = new ArrayList<>();
+            lines.add("Attendance update - \"" + event.getTitle() + "\" (live delta)");
+            if (!delta.arrivedNames().isEmpty()) {
+                lines.add("Arrived now: " + String.join(", ", delta.arrivedNames()));
+            }
+            if (!delta.lateArrivedNames().isEmpty()) {
+                lines.add("Arrived late now: " + String.join(", ", delta.lateArrivedNames()));
+            }
+            if (!delta.newlyMissingNames().isEmpty()) {
+                lines.add("Now marked not there: " + String.join(", ", delta.newlyMissingNames()));
+            }
+            if (!delta.noLongerMissingNames().isEmpty()) {
+                lines.add("No longer marked not there: " + String.join(", ", delta.noLongerMissingNames()));
+            }
+            if (!delta.knownButUnexpectedNames().isEmpty()) {
+                lines.add("Unknown #1 (known but unexpected): "
+                        + String.join(", ", delta.knownButUnexpectedNames()));
+            }
+            if (!delta.notInSystemNames().isEmpty()) {
+                lines.add("Unknown #2 (not in system): "
+                        + String.join(", ", delta.notInSystemNames()));
+            }
+            return String.join("\n", lines);
+        }
+        if (type == NotificationType.SESSION_FINAL_SUMMARY && subject instanceof SessionFinalSummarySubject summary) {
+            List<String> lines = new ArrayList<>();
+            lines.add("Attendance summary - \"" + event.getTitle() + "\" (final)");
+            if (!summary.presentNames().isEmpty()) {
+                lines.add("Present: " + String.join(", ", summary.presentNames()));
+            }
+            if (!summary.lateNames().isEmpty()) {
+                lines.add("Late: " + String.join(", ", summary.lateNames()));
+            }
+            if (!summary.absentNames().isEmpty()) {
+                lines.add("Absent: " + String.join(", ", summary.absentNames()));
+            }
+            if (!summary.knownButUnexpectedNames().isEmpty()) {
+                lines.add("Unknown #1 (known but unexpected): "
+                        + String.join(", ", summary.knownButUnexpectedNames()));
+            }
+            if (!summary.notInSystemNames().isEmpty()) {
+                lines.add("Unknown #2 (not in system): "
+                        + String.join(", ", summary.notInSystemNames()));
             }
             return String.join("\n", lines);
         }
