@@ -1,5 +1,15 @@
 package com.school.service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.lang.Nullable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.school.entity.NotificationChannel;
 import com.school.entity.NotificationLog;
 import com.school.entity.Person;
@@ -7,17 +17,8 @@ import com.school.integration.EmailClient;
 import com.school.integration.TelegramClient;
 import com.school.model.CalendarEvent;
 import com.school.repository.NotificationLogRepository;
+
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.lang.Nullable;
-import org.springframework.stereotype.Service;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-
-import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -196,17 +197,17 @@ public class NotificationService {
                 lines.add("Arrived late now: " + String.join(", ", delta.lateArrivedNames()));
             }
             if (!delta.newlyMissingNames().isEmpty()) {
-                lines.add("Now marked not there: " + String.join(", ", delta.newlyMissingNames()));
+                lines.add("Newly missing: " + String.join(", ", delta.newlyMissingNames()));
             }
             if (!delta.noLongerMissingNames().isEmpty()) {
-                lines.add("No longer marked not there: " + String.join(", ", delta.noLongerMissingNames()));
+                lines.add("✅ Arrived now: " + String.join(", ", delta.noLongerMissingNames()));
             }
             if (!delta.knownButUnexpectedNames().isEmpty()) {
-                lines.add("Unknown #1 (known but unexpected): "
+                lines.add("Unknown (known but unexpected) arrived: "
                         + String.join(", ", delta.knownButUnexpectedNames()));
             }
             if (!delta.notInSystemNames().isEmpty()) {
-                lines.add("Unknown #2 (not in system): "
+                lines.add("Unknown (not in system) arrived: "
                         + String.join(", ", delta.notInSystemNames()));
             }
             return String.join("\n", lines);
