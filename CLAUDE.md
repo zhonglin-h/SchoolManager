@@ -138,6 +138,14 @@ Serena is available as an MCP server and provides semantic coding tools for code
 - Serena tools are **deferred** — load their schemas first with `ToolSearch` (e.g., `select:mcp__serena__find_symbol`) before calling them.
 - Open the Serena dashboard at http://127.0.0.1:24283/dashboard/index.html or via `mcp__serena__open_dashboard`.
 
+## Code Organization
+
+- Prefer top-down method ordering for readability, especially in Java service classes.
+- Put public entry points first, ordered by lifecycle/usage flow.
+- Place private helpers directly after the public method (or helper) they primarily support.
+- Keep cross-cutting shared utilities near the bottom of the class.
+- Keep lightweight records/value carriers at the bottom of the class.
+
 ## Plans
 
 Feature plans are stored in `./Plans/`. When asked to plan a feature or enhancement, save the plan as a Markdown file there.
