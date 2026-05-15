@@ -106,6 +106,7 @@ class MeetSessionServicesTest {
         assertThat(delta.newlyMissingNames()).isEmpty();
 
         verify(notificationService).notify(NotificationType.ALL_PRESENT, event, null);
+        verify(upcomingChecksRegistry).cancel("evt-1", "NOT_YET_JOINED_5");
         verify(notificationService, never()).notify(eq(NotificationType.ARRIVAL), eq(event), any());
         verify(notificationService, never()).notify(eq(NotificationType.LATE), eq(event), any());
         verify(taskScheduler, never()).scheduleAtFixedRate(any(Runnable.class), any(Duration.class));
@@ -160,6 +161,7 @@ class MeetSessionServicesTest {
         InOrder inOrder = inOrder(notificationService);
         inOrder.verify(notificationService).notify(eq(NotificationType.POLLING_DELTA), eq(event), any());
         inOrder.verify(notificationService).notify(NotificationType.ALL_PRESENT, event, null);
+        verify(upcomingChecksRegistry).cancel("evt-1", "NOT_YET_JOINED_5");
         verify(future).cancel(false);
     }
 

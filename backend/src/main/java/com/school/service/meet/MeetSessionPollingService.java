@@ -376,6 +376,7 @@ class MeetSessionPollingService {
             return false;
         }
         notificationService.notify(NotificationType.ALL_PRESENT, event, null);
+        upcomingChecksRegistry.cancel(event.getId(), "NOT_YET_JOINED_5");
         if (cancelPollingFuture) {
             cancelPollingFor(event.getId());
         } else {

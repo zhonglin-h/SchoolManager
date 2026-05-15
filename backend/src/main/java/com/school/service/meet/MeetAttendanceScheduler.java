@@ -196,10 +196,12 @@ public class MeetAttendanceScheduler {
 
             if (plus5.isAfter(now) && plus5.isBefore(end)) {
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "NOT_YET_JOINED_5", plus5));
-                futures.add(taskScheduler.schedule(() -> {
+                ScheduledFuture<?> notYetJoinedFuture = taskScheduler.schedule(() -> {
                     upcomingChecksRegistry.remove(event.getId(), "NOT_YET_JOINED_5");
                     pollingService.checkNotYetJoined(event, "5 min after start");
-                }, plus5));
+                }, plus5);
+                futures.add(notYetJoinedFuture);
+                upcomingChecksRegistry.trackFuture(event.getId(), "NOT_YET_JOINED_5", notYetJoinedFuture);
             }
             if (end.isAfter(now)) {
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_FINALIZE", end));

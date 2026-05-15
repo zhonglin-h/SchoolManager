@@ -3,7 +3,10 @@ package com.school.service;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ScheduledFuture;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
@@ -17,6 +20,7 @@ import org.springframework.stereotype.Component;
 public class UpcomingChecksRegistry {
 
     private final CopyOnWriteArrayList<ScheduledCheck> checks = new CopyOnWriteArrayList<>();
+    private final Map<String, ScheduledFuture<?>> scheduledFutures = new ConcurrentHashMap<>();
 
     public void add(ScheduledCheck check) {
         checks.add(check);
@@ -24,6 +28,24 @@ public class UpcomingChecksRegistry {
 
     /** Removes the entry for the given event and check type. */
     public void remove(String eventId, String checkType) {
+        scheduledFutures.remove(key(eventId, checkType));
+        checks.removeIf(c -> c.eventId().equals(eventId) && c.checkType().equals(checkType));
+    }
+
+    /** Associates a scheduled future with a check so it can be cancelled later if needed. */
+    public void trackFuture(String eventId, String checkType, ScheduledFuture<?> future) {
+        if (future == null) {
+            return;
+        }
+        scheduledFutures.put(key(eventId, checkType), future);
+    }
+
+    /** Cancels and removes the given scheduled check, if present. */
+    public void cancel(String eventId, String checkType) {
+        ScheduledFuture<?> future = scheduledFutures.remove(key(eventId, checkType));
+        if (future != null) {
+            future.cancel(false);
+        }
         checks.removeIf(c -> c.eventId().equals(eventId) && c.checkType().equals(checkType));
     }
 
@@ -35,6 +57,7 @@ public class UpcomingChecksRegistry {
     /** Clears all entries. */
     public void clear() {
         checks.clear();
+        scheduledFutures.clear();
     }
 
     /** Returns all entries whose scheduled time is still in the future, sorted ascending. */
@@ -44,5 +67,9 @@ public class UpcomingChecksRegistry {
                 .filter(c -> c.scheduledAt().isAfter(now))
                 .sorted(Comparator.comparing(ScheduledCheck::scheduledAt))
                 .collect(Collectors.toList());
+    }
+
+    private String key(String eventId, String checkType) {
+        return eventId + "::" + checkType;
     }
 }
