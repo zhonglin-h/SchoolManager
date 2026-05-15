@@ -67,36 +67,6 @@ class MeetSessionHandlerTest {
     }
 
     @Test
-    void checkPreClassJoins_notifiesMissingStudentAndTeacher() throws Exception {
-        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of());
-        when(personRepository.findByMeetEmailAndActiveTrue("alice@meet.com"))
-                .thenReturn(Optional.of(student));
-        when(personRepository.findByMeetEmailAndActiveTrue("carol@meet.com"))
-                .thenReturn(Optional.of(teacher));
-
-        sessionHandler.checkPreClassJoins(event);
-
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(student));
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(teacher));
-    }
-
-    @Test
-    void checkPreClassJoins_skipsPresentStudentMatchedByGoogleUserId() throws Exception {
-        when(meetClient.getActiveParticipants("abc-def")).thenReturn(List.of(new MeetParticipant("uid-alice", "Alice", null)));
-        when(personRepository.findByMeetEmailAndActiveTrue("alice@meet.com"))
-                .thenReturn(Optional.of(student));
-        when(personRepository.findByMeetEmailAndActiveTrue("carol@meet.com"))
-                .thenReturn(Optional.of(teacher));
-        when(personRepository.findByPersonTypeAndGoogleUserIdAndActiveTrue(PersonType.STUDENT, "uid-alice"))
-                .thenReturn(Optional.of(student));
-
-        sessionHandler.checkPreClassJoins(event);
-
-        verify(notificationService, never()).notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(student));
-        verify(notificationService).notify(NotificationType.NOT_YET_JOINED, event, new PersonSubject(teacher));
-    }
-
-    @Test
     void finalizeSession_marksAbsentAndSendsTypeSpecificNotifications() throws Exception {
         when(meetClient.getAllParticipants("abc-def")).thenReturn(List.of());
         when(personRepository.findByMeetEmailAndActiveTrue("alice@meet.com"))
@@ -127,29 +97,4 @@ class MeetSessionHandlerTest {
         verify(notificationService).notify(NotificationType.MEETING_NOT_STARTED_15, event, null);
     }
 
-    @Test
-    void checkPreClassJoins_registeredTeacherStillFlaggedWhenNotExpectedAttendee() throws Exception {
-        event.setAttendeeEmails(List.of("victoriasupereducation.com"));
-        Person victoria = Person.builder().id(3L).personType(PersonType.TEACHER)
-                .name("Victoria Yin").meetEmail("victoria@supereducation.com").build();
-
-        when(meetClient.getActiveParticipants("abc-def"))
-                .thenReturn(List.of(new MeetParticipant(null, "Victoria Yin", null)));
-        when(personRepository.findByMeetEmailAndActiveTrue("victoriasupereducation.com"))
-                .thenReturn(Optional.empty());
-        when(personRepository.findByPersonTypeAndMeetDisplayNameIgnoreCaseAndActiveTrue(PersonType.STUDENT, "Victoria Yin"))
-                .thenReturn(Optional.empty());
-        when(personRepository.findByPersonTypeAndNameIgnoreCaseAndActiveTrue(PersonType.STUDENT, "Victoria Yin"))
-                .thenReturn(Optional.empty());
-        when(personRepository.findByPersonTypeAndMeetDisplayNameIgnoreCaseAndActiveTrue(PersonType.TEACHER, "Victoria Yin"))
-                .thenReturn(Optional.of(victoria));
-
-        sessionHandler.checkPreClassJoins(event);
-
-        ArgumentCaptor<NotificationSubject> subjectCaptor = ArgumentCaptor.forClass(NotificationSubject.class);
-        verify(notificationService).notify(eq(NotificationType.UNMATCHED_GUESTS), eq(event), subjectCaptor.capture());
-        GuestSubject guestSubject = (GuestSubject) subjectCaptor.getValue();
-        assertThat(guestSubject.unmatchedInvitees()).containsExactly("victoriasupereducation.com");
-        assertThat(guestSubject.unmatchedParticipants()).containsExactly("Victoria Yin");
-    }
 }

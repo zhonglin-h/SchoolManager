@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -96,26 +97,32 @@ public class MeetSessionHandler {
         }
     }
 
-    /**
-     * At T−3 min, notifies every expected participant (student or teacher) who has not yet joined.
-     * Also sends an unmatched-guests notification for any invitee email that is not in the DB.
-     * Uses the live participant list, so anyone already in the room is silently skipped.
+/**
+     * At T+0, T+5 and T+10 min, sends one consolidated attendance checkpoint using DB records
+     * (so someone who joined then left is correctly shown as arrived), including any unmatched guests.
      */
-    public void checkPreClassJoins(CalendarEvent event) {
+    public void checkNotYetJoined(CalendarEvent event, String checkLabel) {
         try {
+            LocalDate today = LocalDate.now();
             List<MeetParticipant> participants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-            ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
+            attendanceHelper.resolveAndAutoLearn(participants);
             ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
+            List<String> arrivedNames = new ArrayList<>();
+            List<String> notArrivedNames = new ArrayList<>();
             forEachExpectedPerson(expected, (person, personType) -> {
-                Set<Long> resolvedIds = personType == PersonType.STUDENT ? resolved.studentIds() : resolved.teacherIds();
-                NotificationSubject subject = new PersonSubject(person);
-                if (!resolvedIds.contains(person.getId())) {
-                    notificationService.notify(NotificationType.NOT_YET_JOINED, event, subject);
+                if (attendanceRepository.findByPersonIdAndCalendarEventIdAndDate(
+                        person.getId(), event.getId(), today).isPresent()) {
+                    arrivedNames.add(person.getName());
+                } else {
+                    notArrivedNames.add(person.getName());
                 }
             });
-            processUnmatchedGuests(event, expected, participants);
+            notificationService.notify(NotificationType.ATTENDANCE_CHECKPOINT, event,
+                    new CheckpointSubject(checkLabel, arrivedNames, notArrivedNames,
+                            attendanceHelper.findUnmatchedInvitees(event),
+                            attendanceHelper.findUnmatchedParticipants(participants, expected)));
         } catch (Exception e) {
-            log.warn("Failed pre-class join check for {}: {}", event.getId(), e.getMessage());
+            log.warn("Failed attendance checkpoint {} for {}: {}", checkLabel, event.getId(), e.getMessage());
         }
     }
 
@@ -170,7 +177,6 @@ public class MeetSessionHandler {
             Instant lateThreshold, AtomicBoolean meetingActive) {
         int totalExpected = getTotalExpectedParticipants(event);
         AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
-        AtomicInteger unmatchedPollCount = new AtomicInteger(0);
 
         futureRef.set(taskScheduler.scheduleAtFixedRate(() -> {
             try {
@@ -188,8 +194,7 @@ public class MeetSessionHandler {
                 }
 
                 List<MeetParticipant> activeParticipants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-                boolean sendUnmatchedGuests = unmatchedPollCount.incrementAndGet() <= 10;
-                processParticipants(event, activeParticipants, seenStudentIds, seenTeacherIds, lateThreshold, sendUnmatchedGuests);
+                processParticipants(event, activeParticipants, seenStudentIds, seenTeacherIds, lateThreshold);
 
                 if (hasSeenAllExpectedParticipants(seenStudentIds, seenTeacherIds, totalExpected) && totalExpected > 0) {
                     notificationService.notify(NotificationType.ALL_PRESENT, event, null);
@@ -233,7 +238,7 @@ public class MeetSessionHandler {
             if (googleMeetClient.isMeetingActive(event.getSpaceCode())) {
                 context.meetingActive().set(true);
                 List<MeetParticipant> activeParticipants = googleMeetClient.getActiveParticipants(event.getSpaceCode());
-                processParticipants(event, activeParticipants, context.seenStudentIds(), context.seenTeacherIds(), context.lateThreshold(), true);
+                processParticipants(event, activeParticipants, context.seenStudentIds(), context.seenTeacherIds(), context.lateThreshold());
             } else {
                 sendMeetingStartReminder(event);
             }
@@ -242,19 +247,7 @@ public class MeetSessionHandler {
         }
     }
 
-    private void processUnmatchedGuests(CalendarEvent event, ExpectedParticipants expected,
-                                       List<MeetParticipant> participants) {
-        List<String> unmatchedInvitees = attendanceHelper.findUnmatchedInvitees(event);
-        List<String> unmatchedParticipants = attendanceHelper.findUnmatchedParticipants(participants, expected);
-        if (!unmatchedInvitees.isEmpty()) {
-            notificationService.notify(
-                    NotificationType.UNMATCHED_GUESTS,
-                    event,
-                    new GuestSubject(unmatchedInvitees, unmatchedParticipants));
-        }
-    }
-
-    /**
+/**
      * Returns the number of expected participants from calendar attendees.
      * Applies the same rule everywhere this count is used.
      */
@@ -269,7 +262,7 @@ public class MeetSessionHandler {
 
     private void processParticipants(CalendarEvent event, List<MeetParticipant> participants,
                                      Set<Long> seenStudentIds, Set<Long> seenTeacherIds,
-                                     Instant lateThreshold, boolean sendUnmatchedGuests) {
+                                     Instant lateThreshold) {
         ResolvedParticipants resolved = attendanceHelper.resolveAndAutoLearn(participants);
         ExpectedParticipants expected = attendanceHelper.getExpectedParticipants(event);
         LocalDate today = LocalDate.now();
@@ -300,21 +293,6 @@ public class MeetSessionHandler {
                         event, new PersonSubject(teacher));
             }
         }
-        notifyMissing(event, expected, seenStudentIds, seenTeacherIds);
-        if (sendUnmatchedGuests) {
-            processUnmatchedGuests(event, expected, participants);
-        }
-    }
-
-    private void notifyMissing(CalendarEvent event, ExpectedParticipants expected,
-                               Set<Long> seenStudentIds, Set<Long> seenTeacherIds) {
-        forEachExpectedPerson(expected, (person, personType) -> {
-            Set<Long> seenIds = personType == PersonType.STUDENT ? seenStudentIds : seenTeacherIds;
-            NotificationSubject subject = new PersonSubject(person);
-            if (!seenIds.contains(person.getId())) {
-                notificationService.notify(NotificationType.NOT_YET_JOINED, event, subject);
-            }
-        });
     }
 
     /** Fires a MEETING_NOT_STARTED_15 notification without a specific recipient (broadcast). */

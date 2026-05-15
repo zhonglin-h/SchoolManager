@@ -140,10 +140,11 @@ public class MeetAttendanceMonitor {
 
             Instant minus15 = event.getStartTime().minusMinutes(15)
                     .atZone(ZoneId.systemDefault()).toInstant();
-            Instant minus3 = event.getStartTime().minusMinutes(3)
+            Instant minus2 = event.getStartTime().minusMinutes(2)
                     .atZone(ZoneId.systemDefault()).toInstant();
             Instant start = event.getStartTime()
                     .atZone(ZoneId.systemDefault()).toInstant();
+            Instant plus5  = start.plusSeconds(5  * 60);
             Instant end = event.getEndTime()
                     .atZone(ZoneId.systemDefault()).toInstant();
 
@@ -171,26 +172,27 @@ public class MeetAttendanceMonitor {
                     }
                 }, minus15));
             }
-            if (minus3.isAfter(now)) {
-                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "PRE_CLASS_JOINS", minus3));
-                futures.add(taskScheduler.schedule(() -> {
-                    upcomingChecksRegistry.remove(event.getId(), "PRE_CLASS_JOINS");
-                    sessionHandler.checkPreClassJoins(event);
-                }, minus3));
-            }
-            if (start.isAfter(now)) {
-                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_START", start));
+            if (minus2.isAfter(now)) {
+                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_START", minus2));
                 futures.add(taskScheduler.schedule(() -> {
                     upcomingChecksRegistry.remove(event.getId(), "SESSION_START");
                     upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_POLLING", end));
                     sessionHandler.startSessionPolling(event);
-                }, start));
+                    sessionHandler.checkNotYetJoined(event, "2 min before start");
+                }, minus2));
             } else if (end.isAfter(now)) {
                 // Session already started but not yet ended: catch up on any missed polling
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_POLLING", end));
                 sessionHandler.resumeSessionPolling(event);
             }
 
+            if (plus5.isAfter(now) && plus5.isBefore(end)) {
+                upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "NOT_YET_JOINED_5", plus5));
+                futures.add(taskScheduler.schedule(() -> {
+                    upcomingChecksRegistry.remove(event.getId(), "NOT_YET_JOINED_5");
+                    sessionHandler.checkNotYetJoined(event, "5 min after start");
+                }, plus5));
+            }
             if (end.isAfter(now)) {
                 upcomingChecksRegistry.add(new com.school.service.ScheduledCheck(event.getId(), event.getTitle(), "SESSION_FINALIZE", end));
                 futures.add(taskScheduler.schedule(() -> {
