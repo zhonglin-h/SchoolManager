@@ -314,6 +314,57 @@ class PlaywrightJoinAutomationClientTest {
                 .thenReturn(ctx);
     }
 
+    @Test
+    void attemptJoin_serializesConcurrentPlaywrightUsageForSharedContext() throws Exception {
+        Playwright pw = mock(Playwright.class);
+        BrowserContext ctx = mock(BrowserContext.class);
+        when(ctx.pages()).thenReturn(List.of()); // always alive
+        configureContextLaunch(pw, ctx);
+        client.setPlaywrightFactory(() -> pw);
+
+        // Prime the shared context so concurrent attempts race inside attemptOnce/newPage.
+        client.getOrCreateContext();
+
+        AtomicInteger inNewPage = new AtomicInteger();
+        AtomicInteger maxInNewPage = new AtomicInteger();
+        CountDownLatch overlapLatch = new CountDownLatch(2);
+        when(ctx.newPage()).thenAnswer(invocation -> {
+            int concurrent = inNewPage.incrementAndGet();
+            maxInNewPage.updateAndGet(prev -> Math.max(prev, concurrent));
+            overlapLatch.countDown();
+            // If concurrent calls are not serialized, both threads overlap here.
+            overlapLatch.await(200, TimeUnit.MILLISECONDS);
+            inNewPage.decrementAndGet();
+            throw new RuntimeException("simulated newPage failure");
+        });
+
+        CalendarEvent eventA = meetingEvent("evt-A2", "https://meet.google.com/aaa-bbbb-ccc");
+        CalendarEvent eventB = meetingEvent("evt-B2", "https://meet.google.com/ddd-eeee-fff");
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        Future<JoinResult> futureA = executor.submit(() -> {
+            startLatch.await();
+            return client.attemptJoin(eventA);
+        });
+        Future<JoinResult> futureB = executor.submit(() -> {
+            startLatch.await();
+            return client.attemptJoin(eventB);
+        });
+
+        startLatch.countDown();
+
+        JoinResult resultA = futureA.get(15, TimeUnit.SECONDS);
+        JoinResult resultB = futureB.get(15, TimeUnit.SECONDS);
+        executor.shutdown();
+
+        assertThat(resultA.status()).isEqualTo(JoinAttemptStatus.FAILED_UNKNOWN);
+        assertThat(resultB.status()).isEqualTo(JoinAttemptStatus.FAILED_UNKNOWN);
+        assertThat(maxInNewPage.get())
+                .as("shared BrowserContext.newPage() must never be used concurrently")
+                .isEqualTo(1);
+    }
+
     private CalendarEvent meetingEvent(String id, String meetLink) {
         return new CalendarEvent(
                 id,

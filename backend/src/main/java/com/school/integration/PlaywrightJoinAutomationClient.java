@@ -74,6 +74,12 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     private Supplier<Playwright> playwrightFactory = Playwright::create;
 
     // --- persistent browser state ---
+    /**
+     * Playwright Java APIs are not thread-safe. Serialize join attempts so only one
+     * thread touches shared Playwright objects at a time.
+     */
+    private final ReentrantLock joinAttemptLock = new ReentrantLock(true);
+
     /** Guards creation and teardown of the shared browser context. */
     private final ReentrantLock contextLock = new ReentrantLock();
     private volatile Playwright sharedPlaywright;
@@ -126,25 +132,30 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             return preconditionFailure;
         }
 
-        int attempts = Math.max(1, maxAttempts);
-        boolean selfHealRetryUsed = false;
-        JoinResult lastResult = new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN, "Auto-join attempt did not run");
-        for (int attempt = 1; attempt <= attempts; attempt++) {
-            lastResult = attemptOnce(event);
-            if (!isRetryable(lastResult.status()) || attempt == attempts) {
-                if (attempt == attempts && !selfHealRetryUsed && isLikelyDeadContextFailure(lastResult)) {
-                    selfHealRetryUsed = true;
-                    log.warn("Detected likely dead browser context on final configured attempt; "
-                                    + "performing one self-heal retry immediately");
-                    lastResult = attemptOnce(event);
+        joinAttemptLock.lock();
+        try {
+            int attempts = Math.max(1, maxAttempts);
+            boolean selfHealRetryUsed = false;
+            JoinResult lastResult = new JoinResult(JoinAttemptStatus.FAILED_UNKNOWN, "Auto-join attempt did not run");
+            for (int attempt = 1; attempt <= attempts; attempt++) {
+                lastResult = attemptOnce(event);
+                if (!isRetryable(lastResult.status()) || attempt == attempts) {
+                    if (attempt == attempts && !selfHealRetryUsed && isLikelyDeadContextFailure(lastResult)) {
+                        selfHealRetryUsed = true;
+                        log.warn("Detected likely dead browser context on final configured attempt; "
+                                        + "performing one self-heal retry immediately");
+                        lastResult = attemptOnce(event);
+                    }
+                    return lastResult;
                 }
-                return lastResult;
+                log.warn("Auto-join attempt {}/{} failed for '{}' with {}; retrying in {} ms",
+                        attempt, attempts, event.getTitle(), lastResult.status(), backoffMs);
+                sleepQuietly(backoffMs);
             }
-            log.warn("Auto-join attempt {}/{} failed for '{}' with {}; retrying in {} ms",
-                    attempt, attempts, event.getTitle(), lastResult.status(), backoffMs);
-            sleepQuietly(backoffMs);
+            return lastResult;
+        } finally {
+            joinAttemptLock.unlock();
         }
-        return lastResult;
     }
 
     JoinResult validatePreconditions(CalendarEvent event) {
