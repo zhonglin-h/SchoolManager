@@ -10,6 +10,8 @@ NEW FEATURES
 - [X] Playwright: build a persistent long-lived runner that reuses one browser context/window across runs (new tab per run)
 - [X] package into manner than can be more portable (needs testing now)
 - [X] create versioning and backups for database (online?)
+- [ ] **[HIGHEST PRIORITY]** add fail if unable to turn off camera/mic when auto opening meeting
+- [ ] homework reminder for teachers/students, research cheapest text option
 - [ ] log how many minutes late a participant was when marked LATE
 - [ ] uptime checks
 - [ ] edit msg for guest but not matched
