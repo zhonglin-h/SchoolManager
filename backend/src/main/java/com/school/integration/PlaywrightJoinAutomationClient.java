@@ -71,6 +71,12 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     @Value("${app.autojoin.require-principal-profile-signed-in:true}")
     private boolean requireProfileSignedIn;
 
+    @Value("${app.autojoin.window-width:1280}")
+    private int windowWidth;
+
+    @Value("${app.autojoin.window-height:720}")
+    private int windowHeight;
+
     private Supplier<Playwright> playwrightFactory = Playwright::create;
 
     // --- persistent browser state ---
@@ -378,7 +384,8 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         List<String> launchArgs = new ArrayList<>(List.of(
                 "--disable-blink-features=AutomationControlled",
                 "--use-fake-ui-for-media-stream",
-                "--disable-infobars"
+                "--disable-infobars",
+                "--window-size=" + windowWidth + "," + windowHeight
         ));
         if (target.profileDirectoryName() != null) {
             launchArgs.add("--profile-directory=" + target.profileDirectoryName());
@@ -386,7 +393,8 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
 
         BrowserType.LaunchPersistentContextOptions options = new BrowserType.LaunchPersistentContextOptions()
                 .setHeadless(false)
-                .setArgs(launchArgs);
+                .setArgs(launchArgs)
+                .setViewportSize(windowWidth, windowHeight);
         String normalizedChromePath = normalizeConfiguredPath(chromePath);
         if (!isBlank(normalizedChromePath)) {
             options.setExecutablePath(toPathOrThrow("app.autojoin.chrome-path", normalizedChromePath));
