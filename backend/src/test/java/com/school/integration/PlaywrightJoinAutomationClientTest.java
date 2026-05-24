@@ -1,6 +1,8 @@
 package com.school.integration;
 
 import com.microsoft.playwright.BrowserContext;
+import com.microsoft.playwright.Locator;
+import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.school.entity.JoinAttemptStatus;
 import com.school.model.CalendarEvent;
@@ -20,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -287,6 +290,69 @@ class PlaywrightJoinAutomationClientTest {
         assertThat(ReflectionTestUtils.getField(client, "sharedPlaywright"))
                 .as("sharedPlaywright must be null after concurrent failures")
                 .isNull();
+    }
+
+    // ── disableMediaIfEnabled ───────────────────────────────────────────────
+
+    @Test
+    void disableMediaIfEnabled_returnsNullWhenNeitherButtonVisible() {
+        Page page = mock(Page.class);
+        Locator locator = mock(Locator.class);
+        when(page.getByRole(any(), any())).thenReturn(locator);
+        when(locator.first()).thenReturn(locator);
+        when(locator.isVisible(any())).thenReturn(false);
+
+        assertThat(client.disableMediaIfEnabled(page)).isNull();
+    }
+
+    @Test
+    void disableMediaIfEnabled_returnsFailedMediaDisableWhenMicRemainsOnAfterClick() {
+        Page page = mock(Page.class);
+        Locator locator = mock(Locator.class);
+        when(page.getByRole(any(), any())).thenReturn(locator);
+        when(locator.first()).thenReturn(locator);
+        // mic click: visible; camera click: visible; mic re-check: still visible → fail
+        when(locator.isVisible(any())).thenReturn(true);
+
+        JoinResult result = client.disableMediaIfEnabled(page);
+
+        assertThat(result).isNotNull();
+        assertThat(result.status()).isEqualTo(JoinAttemptStatus.FAILED_MEDIA_DISABLE);
+        assertThat(result.detailMessage()).containsIgnoringCase("microphone");
+    }
+
+    @Test
+    void disableMediaIfEnabled_returnsNullWhenMicTurnsOffAfterClick() {
+        Page page = mock(Page.class);
+        Locator micLocator = mock(Locator.class);
+        Locator camLocator = mock(Locator.class);
+        // mic call, camera call, mic re-check call
+        when(page.getByRole(any(), any())).thenReturn(micLocator, camLocator, micLocator);
+        when(micLocator.first()).thenReturn(micLocator);
+        when(camLocator.first()).thenReturn(camLocator);
+        when(micLocator.isVisible(any())).thenReturn(true, false); // on → click → off
+        when(camLocator.isVisible(any())).thenReturn(false);        // already off
+
+        assertThat(client.disableMediaIfEnabled(page)).isNull();
+    }
+
+    @Test
+    void disableMediaIfEnabled_returnsFailedMediaDisableWhenCameraRemainsOnAfterClick() {
+        Page page = mock(Page.class);
+        Locator micLocator = mock(Locator.class);
+        Locator camLocator = mock(Locator.class);
+        // mic call, camera call, camera re-check call (mic re-check skipped since micWasOn=false)
+        when(page.getByRole(any(), any())).thenReturn(micLocator, camLocator, camLocator);
+        when(micLocator.first()).thenReturn(micLocator);
+        when(camLocator.first()).thenReturn(camLocator);
+        when(micLocator.isVisible(any())).thenReturn(false);  // already off
+        when(camLocator.isVisible(any())).thenReturn(true);   // on → click → still on → fail
+
+        JoinResult result = client.disableMediaIfEnabled(page);
+
+        assertThat(result).isNotNull();
+        assertThat(result.status()).isEqualTo(JoinAttemptStatus.FAILED_MEDIA_DISABLE);
+        assertThat(result.detailMessage()).containsIgnoringCase("camera");
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

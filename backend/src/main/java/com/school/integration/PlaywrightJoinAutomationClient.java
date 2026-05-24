@@ -100,6 +100,10 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             Pattern.compile("switch here", Pattern.CASE_INSENSITIVE);
     private static final Pattern CONTINUE_WITHOUT_MEDIA_PATTERN =
             Pattern.compile("continue without microphone and camera", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MIC_OFF_PATTERN =
+            Pattern.compile("turn off microphone", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CAMERA_OFF_PATTERN =
+            Pattern.compile("turn off camera", Pattern.CASE_INSENSITIVE);
 
     private static final List<String> IN_CALL_SELECTORS = List.of(
             "button[aria-label*='Leave call']",
@@ -213,7 +217,11 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
                                 + "Use a dedicated non-default user-data profile for automation.");
             }
             clickIfVisible(page, CONTINUE_WITHOUT_MEDIA_PATTERN, 2_000);
-            disableMediaIfEnabled(page);
+            JoinResult mediaResult = disableMediaIfEnabled(page);
+            if (mediaResult != null) {
+                result = mediaResult;
+                return result;
+            }
 
             JoinResult alreadyOpen = detectAlreadyOpenElsewhere(page);
             if (alreadyOpen != null) {
@@ -408,9 +416,26 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         return JoinAction.NONE;
     }
 
-    private void disableMediaIfEnabled(Page page) {
-        clickIfVisible(page, Pattern.compile("turn off microphone", Pattern.CASE_INSENSITIVE), 1_500);
-        clickIfVisible(page, Pattern.compile("turn off camera", Pattern.CASE_INSENSITIVE), 1_500);
+    JoinResult disableMediaIfEnabled(Page page) {
+        boolean micWasOn = clickIfVisible(page, MIC_OFF_PATTERN, 1_500);
+        boolean cameraWasOn = clickIfVisible(page, CAMERA_OFF_PATTERN, 1_500);
+        if (micWasOn) {
+            sleepQuietly(500);
+            if (clickTargetVisible(page, MIC_OFF_PATTERN, 1_500)) {
+                log.warn("Microphone button still visible after click; aborting join to avoid joining with mic on");
+                return new JoinResult(JoinAttemptStatus.FAILED_MEDIA_DISABLE,
+                        "Unable to mute microphone before joining; refusing to join with microphone on");
+            }
+        }
+        if (cameraWasOn) {
+            sleepQuietly(500);
+            if (clickTargetVisible(page, CAMERA_OFF_PATTERN, 1_500)) {
+                log.warn("Camera button still visible after click; aborting join to avoid joining with camera on");
+                return new JoinResult(JoinAttemptStatus.FAILED_MEDIA_DISABLE,
+                        "Unable to turn off camera before joining; refusing to join with camera on");
+            }
+        }
+        return null;
     }
 
     private JoinResult detectBlockingState(Page page) {
