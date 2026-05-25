@@ -160,6 +160,8 @@ app.autojoin.require-principal-profile-signed-in=true
 app.autojoin.join-timeout-seconds=45
 app.autojoin.retry.max-attempts=1
 app.autojoin.retry.backoff-ms=1000
+app.autojoin.fixed-viewport.enabled=false
+app.autojoin.meet-zoom-percent=85
 ```
 
 Use forward slashes in Windows paths inside `.properties` files. Auto-join fires at T-15 min if the meeting is not yet active; it is skipped if already active.
