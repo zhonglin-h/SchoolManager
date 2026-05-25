@@ -5,6 +5,7 @@ import com.microsoft.playwright.BrowserContext;
 import com.school.entity.JoinAttemptStatus;
 import com.school.model.CalendarEvent;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,6 +66,7 @@ class PlaywrightJoinAutomationClientManualSmokeTest {
     }
 
     @Test
+    @Disabled("Covered by attemptJoin_recoversAfterManualWindowClose; avoids duplicate same-meeting join in same run")
     void attemptJoin_realBrowserSmokeTest() {
         String meetLink = firstNonBlank(normalize(environment.getProperty("smoke.meet.link")),
                 normalize(System.getenv("SMOKE_MEET_LINK")));
