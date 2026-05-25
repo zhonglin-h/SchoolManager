@@ -58,5 +58,3 @@ app.autojoin.retry.backoff-ms=1000
 app.autojoin.require-principal-profile-signed-in=true
 # Keep false for small-screen stability. True can clip bottom controls in headed mode.
 app.autojoin.fixed-viewport.enabled=false
-# Scales Meet page content inside the browser window (50-150). Use <100 on small screens.
-app.autojoin.meet-zoom-percent=100

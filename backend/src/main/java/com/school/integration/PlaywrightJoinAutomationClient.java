@@ -74,11 +74,8 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     @Value("${app.autojoin.window-width:1280}")
     private int windowWidth;
 
-    @Value("${app.autojoin.window-height:600}")
+    @Value("${app.autojoin.window-height:720}")
     private int windowHeight;
-
-    @Value("${app.autojoin.meet-zoom-percent:100}")
-    private int meetZoomPercent;
 
     @Value("${app.autojoin.fixed-viewport.enabled:false}")
     private boolean fixedViewportEnabled;
@@ -201,7 +198,6 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             log.info("Playwright navigating to Meet link: {}", meetLink);
             page.navigate(meetLink, new Page.NavigateOptions().setTimeout((double) timeoutMs));
             waitForPageReady(page, timeoutMs);
-            applyMeetZoom(page);
             log.info("Playwright page after navigate: {}", page.url());
             if (isBlankPage(page.url())) {
                 log.warn("Navigation remained on blank page; retrying once with a new tab");
@@ -214,7 +210,6 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
                 waitForPageReady(page, timeoutMs);
                 page.navigate(meetLink, new Page.NavigateOptions().setTimeout((double) timeoutMs));
                 waitForPageReady(page, timeoutMs);
-                applyMeetZoom(page);
                 log.info("Playwright page after retry navigate: {}", page.url());
             }
             if (isBlankPage(page.url())) {
@@ -660,29 +655,6 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     private static boolean isBlankPage(String url) {
         String normalized = nullToEmpty(url).trim().toLowerCase(Locale.ROOT);
         return normalized.isEmpty() || normalized.equals("about:blank");
-    }
-
-    private void applyMeetZoom(Page page) {
-        int clampedZoomPercent = clampMeetZoomPercent(meetZoomPercent);
-        if (clampedZoomPercent == 100) {
-            return;
-        }
-        try {
-            page.evaluate(
-                    "zoom => {"
-                            + "const value = `${zoom}%`;"
-                            + "document.documentElement.style.zoom = value;"
-                            + "if (document.body) document.body.style.zoom = value;"
-                            + "}",
-                    clampedZoomPercent);
-            log.info("Applied Meet page zoom: {}%", clampedZoomPercent);
-        } catch (Exception e) {
-            log.warn("Failed to apply Meet page zoom ({}%): {}", clampedZoomPercent, e.getMessage());
-        }
-    }
-
-    private static int clampMeetZoomPercent(int requestedPercent) {
-        return Math.max(50, Math.min(150, requestedPercent));
     }
 
     private void waitForPageReady(Page page, long timeoutMs) {
