@@ -22,6 +22,7 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.options.LoadState;
 import com.microsoft.playwright.options.ViewportSize;
+import com.microsoft.playwright.options.WaitForSelectorState;
 import com.school.entity.JoinAttemptStatus;
 import com.school.model.CalendarEvent;
 
@@ -428,7 +429,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         boolean micWasOn = clickIfVisible(page, MIC_OFF_PATTERN, 1_500);
         boolean cameraWasOn = clickIfVisible(page, CAMERA_OFF_PATTERN, 1_500);
         if (micWasOn) {
-            sleepQuietly(500);
+            sleepQuietly(1000);
             if (clickTargetVisible(page, MIC_OFF_PATTERN, 1_500)) {
                 log.warn("Microphone button still visible after click; aborting join to avoid joining with mic on");
                 return new JoinResult(JoinAttemptStatus.FAILED_MEDIA_DISABLE,
@@ -436,7 +437,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
             }
         }
         if (cameraWasOn) {
-            sleepQuietly(500);
+            sleepQuietly(1000);
             if (clickTargetVisible(page, CAMERA_OFF_PATTERN, 1_500)) {
                 log.warn("Camera button still visible after click; aborting join to avoid joining with camera on");
                 return new JoinResult(JoinAttemptStatus.FAILED_MEDIA_DISABLE,
@@ -495,11 +496,18 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         return false;
     }
 
+    /**
+     * Waits up to {@code timeoutMs} for the first button matching {@code buttonNamePattern}
+     * to become visible, then clicks it.
+     *
+     * @return {@code true} if the button became visible and the click was executed; {@code false}
+     * otherwise (including timeout or Playwright errors).
+     */
     private boolean clickIfVisible(Page page, Pattern buttonNamePattern, long timeoutMs) {
         try {
             Locator locator = page.getByRole(com.microsoft.playwright.options.AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName(buttonNamePattern)).first();
-            if (locator.isVisible(new Locator.IsVisibleOptions().setTimeout((double) timeoutMs))) {
+            if (waitUntilVisible(locator, timeoutMs)) {
                 locator.click(new Locator.ClickOptions().setTimeout((double) timeoutMs));
                 return true;
             }
@@ -509,11 +517,18 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
         return false;
     }
 
+    /**
+     * Waits up to {@code timeoutMs} for the first button matching {@code buttonNamePattern}
+     * to become visible, without clicking.
+     *
+     * @return {@code true} if the button became visible within the timeout; {@code false}
+     * otherwise (including timeout or Playwright errors).
+     */
     private boolean clickTargetVisible(Page page, Pattern buttonNamePattern, long timeoutMs) {
         try {
             Locator locator = page.getByRole(com.microsoft.playwright.options.AriaRole.BUTTON,
                     new Page.GetByRoleOptions().setName(buttonNamePattern)).first();
-            return locator.isVisible(new Locator.IsVisibleOptions().setTimeout((double) timeoutMs));
+            return waitUntilVisible(locator, timeoutMs);
         } catch (Exception ignored) {
             return false;
         }
@@ -547,8 +562,18 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
 
     private boolean isVisible(Page page, String selector, long timeoutMs) {
         try {
-            return page.locator(selector).first()
-                    .isVisible(new Locator.IsVisibleOptions().setTimeout((double) timeoutMs));
+            return waitUntilVisible(page.locator(selector).first(), timeoutMs);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private boolean waitUntilVisible(Locator locator, long timeoutMs) {
+        try {
+            locator.waitFor(new Locator.WaitForOptions()
+                    .setState(WaitForSelectorState.VISIBLE)
+                    .setTimeout((double) timeoutMs));
+            return true;
         } catch (Exception ignored) {
             return false;
         }
