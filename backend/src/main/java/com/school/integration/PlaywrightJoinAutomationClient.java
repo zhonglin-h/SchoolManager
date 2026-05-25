@@ -11,8 +11,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
-import jakarta.annotation.PreDestroy;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -26,6 +24,7 @@ import com.microsoft.playwright.options.LoadState;
 import com.school.entity.JoinAttemptStatus;
 import com.school.model.CalendarEvent;
 
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -74,7 +73,7 @@ public class PlaywrightJoinAutomationClient implements JoinAutomationClient {
     @Value("${app.autojoin.window-width:1280}")
     private int windowWidth;
 
-    @Value("${app.autojoin.window-height:720}")
+    @Value("${app.autojoin.window-height:600}")
     private int windowHeight;
 
     private Supplier<Playwright> playwrightFactory = Playwright::create;
